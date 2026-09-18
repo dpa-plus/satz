@@ -4,10 +4,16 @@ import SatzKit
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
-    private let setup = Setup.current()
-    private let preferences = Preferences()
+    private let preferences: Preferences
+    private let setup: Setup
     private let history = History()
     private let probe = Probe()
+
+    override init() {
+        preferences = Preferences()
+        setup = Setup(preferences: preferences)
+        super.init()
+    }
 
     private var pill: PillController?
     private var dictation: Dictation?
@@ -44,7 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         installHotKey(shortcut)
 
-        Log.note("setup: key=\(setup.hasKey) microphone=\(setup.microphone) paste=\(setup.canPaste)")
+        Log.note("setup: provider=\(preferences.provider.rawValue) key=\(setup.hasKey) microphone=\(setup.microphone) paste=\(setup.canPaste)")
 
         // Nothing works until setup is done, and a menu bar icon alone gives a
         // new user no hint of that. Show them what is missing.

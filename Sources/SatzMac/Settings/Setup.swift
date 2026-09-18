@@ -18,30 +18,40 @@ final class Setup {
         case notAsked
     }
 
+    /// Whether the selected provider has a key.
     private(set) var hasKey: Bool
     private(set) var microphone: Microphone
     private(set) var canPaste: Bool
 
-    var isComplete: Bool { hasKey && microphone == .allowed && canPaste }
+    var isComplete: Bool {
+        hasKey && microphone == .allowed && canPaste && !(preferences?.isEndpointMissing ?? false)
+    }
+
+    /// nil for a fixture, whose values never change.
+    private let preferences: Preferences?
 
     /// Fixed values, for rendering the settings window without touching the system.
     init(hasKey: Bool, microphone: Microphone, canPaste: Bool) {
         self.hasKey = hasKey
         self.microphone = microphone
         self.canPaste = canPaste
+        preferences = nil
     }
 
-    /// The state of this Mac right now.
-    static func current() -> Setup {
-        let setup = Setup(hasKey: false, microphone: .notAsked, canPaste: false)
-        setup.refresh()
-        return setup
+    /// The state of this Mac right now, for the provider `preferences` selects.
+    init(preferences: Preferences) {
+        self.preferences = preferences
+        hasKey = false
+        microphone = .notAsked
+        canPaste = false
+        refresh()
     }
 
     /// Cheap enough to call every second while the window is open. None of these
     /// reads can raise a prompt: the key is checked by its attributes only.
     func refresh() {
-        hasKey = Secrets.exists()
+        guard let preferences else { return }
+        hasKey = Secrets.exists(for: preferences.provider)
         microphone = Self.microphoneStatus()
         canPaste = AXIsProcessTrusted()
     }
@@ -49,12 +59,14 @@ final class Setup {
     // MARK: - Fixing things
 
     func store(key: String) throws {
-        try Secrets.store(key)
+        guard let preferences else { return }
+        try Secrets.store(key, for: preferences.provider)
         refresh()
     }
 
     func removeKey() {
-        Secrets.remove()
+        guard let preferences else { return }
+        Secrets.remove(for: preferences.provider)
         refresh()
     }
 

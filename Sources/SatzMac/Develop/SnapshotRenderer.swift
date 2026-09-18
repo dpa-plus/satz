@@ -82,7 +82,7 @@ enum SnapshotRenderer {
     private static var failed: Recording {
         let recording = Recording()
         recording.listening()
-        recording.fail("Keine Verbindung zu OpenAI.")
+        recording.fail("Keine Verbindung zum Anbieter.")
         return recording
     }
 
@@ -97,7 +97,9 @@ enum SnapshotRenderer {
         history.add("Termin mit ACON auf Donnerstag 14 Uhr verschieben.",
                     at: Date(timeIntervalSince1970: 1_789_303_600))
 
-        let preferences = Preferences(defaults: UserDefaults(suiteName: "satz.snapshot") ?? .standard)
+        // In memory: a snapshot must never write to the user's preferences.
+        let preferences = Preferences(defaults: nil)
+        preferences.provider = .openRouter
         preferences.vocabulary = "ACON, Immofanten, Prozesshub, DPA Plus"
 
         return SettingsContent(

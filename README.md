@@ -15,9 +15,9 @@ screen until you have configured a second language model to rewrite what you
 said. Both download gigabytes before they will type a word.
 
 satz does the one thing. Press Option+Space anywhere, talk, press it again. The
-recording goes to OpenAI's `gpt-transcribe`, and the text appears where your
-cursor already was. Nothing is downloaded, nothing runs locally, and no second
-model gets to reword you.
+recording goes to a transcription API of your choice, and the text appears
+where your cursor already was. Nothing is downloaded, nothing runs locally, and
+no second model gets to reword you.
 
 ---
 
@@ -29,7 +29,7 @@ model gets to reword you.
 The settings window opens by itself until satz is set up. It shows the three
 things it needs, each with the button that fixes it:
 
-1. your OpenAI key, which goes to the Keychain,
+1. an API key for your provider, which goes to the Keychain,
 2. the microphone,
 3. permission to paste into other applications.
 
@@ -41,10 +41,25 @@ away. The settings window is always one click away in the menu bar.
 
 ## How it works
 
-    microphone ──▶ 16 kHz mono WAV ──▶ gpt-transcribe ──▶ Command+V
+    microphone ──▶ 16 kHz mono WAV ──▶ transcription API ──▶ Command+V
 
 That is the whole pipeline. One network request per dictation, bounded by a
 timeout, with no second model in the path.
+
+## Providers
+
+Anything that speaks OpenAI's transcription API works, because they all take the
+same request: `POST {base}/audio/transcriptions` with a multipart upload.
+
+| Provider | Default model |
+|---|---|
+| OpenAI | `gpt-transcribe` |
+| OpenRouter | `openai/gpt-transcribe` |
+| Groq | `whisper-large-v3-turbo` |
+| Eigener (custom) | your base URL and model |
+
+Each provider keeps its own key and model, so switching loses nothing. The model
+is editable, because provider model lists move faster than app releases.
 
 ## What it does not do
 
@@ -99,7 +114,8 @@ The live tests talk to a real endpoint and are skipped unless you supply a key:
 
 ## Requirements
 
-macOS 14 or newer, and an OpenAI API key. Xcode's Swift 6 toolchain to build.
+macOS 14 or newer, and an API key from one of the providers above. Xcode's
+Swift 6 toolchain to build.
 
 ## Licence
 

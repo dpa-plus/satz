@@ -1,4 +1,5 @@
 import AppKit
+import SatzKit
 import SwiftUI
 
 /// The settings window: what is missing, how to use it, and what was said.
@@ -23,6 +24,9 @@ struct SettingsView: View {
         .frame(minHeight: 420, idealHeight: 720)
         .background(Palette.petrol)
         .environment(\.colorScheme, .dark)
+        // A different provider has a different key. Show that at once rather
+        // than on the next poll.
+        .onChange(of: preferences.provider) { setup.refresh() }
         .task(id: live) {
             guard live else { return }
             // Permissions are granted in System Settings, which gives the app
@@ -45,15 +49,20 @@ struct SettingsContent: View {
     let history: History
     let probe: Probe
 
-    @Environment(\.isSnapshot) private var isSnapshot
-
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             header
 
+            SettingsSection(
+                title: "Anbieter",
+                note: "Jeder Dienst mit OpenAIs Schnittstelle für Transkription. Jeder Anbieter behält seinen eigenen Schlüssel und sein Modell."
+            ) {
+                Card { ProviderRows(preferences: preferences) }
+            }
+
             SettingsSection(title: "Einrichtung") {
                 Card {
-                    KeyRow(setup: setup)
+                    KeyRow(setup: setup, provider: preferences.provider)
                     RowDivider()
                     MicrophoneRow(setup: setup)
                     RowDivider()
@@ -74,26 +83,11 @@ struct SettingsContent: View {
                 note: "Namen, Fachbegriffe und Schreibweisen, die satz treffen soll. Wird bei jeder Übertragung mitgeschickt und ändert nichts am Gesagten."
             ) {
                 Card {
-                    Group {
-                        if isSnapshot {
-                            // ImageRenderer cannot draw AppKit-backed controls
-                            // and paints a yellow placeholder instead.
-                            Text(preferences.vocabulary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        } else {
-                            TextField(
-                                "",
-                                text: $preferences.vocabulary,
-                                prompt: Text("zum Beispiel: ACON, Immofanten, Prozesshub")
-                                    .foregroundStyle(Palette.textTertiary),
-                                axis: .vertical
-                            )
-                            .textFieldStyle(.plain)
-                            .lineLimit(2...5)
-                        }
-                    }
-                    .font(.system(size: 13))
-                    .foregroundStyle(Palette.text)
+                    EditableText(
+                        text: $preferences.vocabulary,
+                        prompt: "zum Beispiel: ACON, Immofanten, Prozesshub",
+                        multiline: true
+                    )
                     .padding(14)
                 }
             }
@@ -102,7 +96,7 @@ struct SettingsContent: View {
                 title: "Probe",
                 note: "Vier Sekunden sprechen. Prüft Mikrofon, Schlüssel und Verbindung, ohne etwas einzufügen."
             ) {
-                Card { ProbeRow(probe: probe, vocabulary: preferences.vocabulary) }
+                Card { ProbeRow(probe: probe, preferences: preferences) }
             }
 
             SettingsSection(
@@ -151,6 +145,134 @@ private struct ReadinessLabel: View {
     }
 }
 
+// MARK: - Provider
+
+private struct ProviderRows: View {
+    @Bindable var preferences: Preferences
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ProviderPicker(selection: $preferences.provider)
+                .padding(10)
+
+            RowDivider()
+            LabeledField(label: "Modell") {
+                EditableText(
+                    text: $preferences.model,
+                    prompt: preferences.provider.defaultModel.isEmpty
+                        ? "Modellname"
+                        : preferences.provider.defaultModel,
+                    monospaced: true
+                )
+            }
+
+            if preferences.provider == .custom {
+                RowDivider()
+                LabeledField(
+                    label: "Adresse",
+                    problem: preferences.isEndpointMissing ? "Ohne Adresse weiß satz nicht, wohin." : nil
+                ) {
+                    EditableText(
+                        text: $preferences.customBaseURL,
+                        prompt: "https://…/v1",
+                        monospaced: true
+                    )
+                }
+            }
+        }
+    }
+}
+
+/// Choosing between a few providers is a view choice, so a segmented control
+/// rather than a menu: every option is visible at once.
+private struct ProviderPicker: View {
+    @Binding var selection: Provider
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(Provider.allCases) { provider in
+                let chosen = selection == provider
+                Button { selection = provider } label: {
+                    Text(provider.name)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(chosen ? Palette.text : Palette.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(chosen ? Color.white.opacity(0.13) : .clear)
+                        )
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(3)
+        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color.black.opacity(0.18)))
+    }
+}
+
+/// A label on the left, a field on the right, and a line explaining what is
+/// wrong with it when something is.
+private struct LabeledField<Field: View>: View {
+    let label: String
+    var problem: String?
+    @ViewBuilder var field: Field
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 12) {
+                Text(label)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Palette.textSecondary)
+                    .frame(width: 64, alignment: .leading)
+                field
+            }
+            if let problem {
+                Text(problem)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Palette.orangeOnPetrol)
+                    .padding(.leading, 76)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+    }
+}
+
+/// A plain text field, or its text when rendered to an image: ImageRenderer
+/// cannot draw AppKit-backed controls and paints a yellow placeholder instead.
+private struct EditableText: View {
+    @Binding var text: String
+    let prompt: String
+    var monospaced = false
+    var multiline = false
+
+    @Environment(\.isSnapshot) private var isSnapshot
+
+    var body: some View {
+        Group {
+            if isSnapshot {
+                Text(text.isEmpty ? prompt : text)
+                    .foregroundStyle(text.isEmpty ? Palette.textTertiary : Palette.text)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if multiline {
+                TextField("", text: $text, prompt: placeholder, axis: .vertical)
+                    .lineLimit(2...5)
+            } else {
+                TextField("", text: $text, prompt: placeholder)
+            }
+        }
+        .textFieldStyle(.plain)
+        .font(.system(size: 13, design: monospaced ? .monospaced : .default))
+        .foregroundStyle(Palette.text)
+    }
+
+    private var placeholder: Text {
+        Text(prompt).foregroundStyle(Palette.textTertiary)
+    }
+}
+
 // MARK: - Setup rows
 
 /// One requirement: whether it is met, what it is for, and the way to fix it.
@@ -185,6 +307,7 @@ private struct SetupRow<Action: View>: View {
 
 private struct KeyRow: View {
     let setup: Setup
+    let provider: Provider
 
     @State private var editing = false
     @State private var input = ""
@@ -194,8 +317,10 @@ private struct KeyRow: View {
         VStack(alignment: .leading, spacing: 0) {
             SetupRow(
                 done: setup.hasKey,
-                title: "OpenAI-Schlüssel",
-                detail: setup.hasKey ? "Im Schlüsselbund gespeichert." : "Für die Übertragung an OpenAI."
+                title: "API-Schlüssel",
+                detail: setup.hasKey
+                    ? "Für \(owner), im Schlüsselbund gespeichert."
+                    : "Für \(owner)."
             ) {
                 if setup.hasKey && !editing {
                     Button("Ändern") { editing = true }.buttonStyle(.quiet)
@@ -209,6 +334,12 @@ private struct KeyRow: View {
                     .padding(.leading, 30)
             }
         }
+        // A half-typed key belongs to the provider it was typed for.
+        .onChange(of: provider) { close() }
+    }
+
+    private var owner: String {
+        provider == .custom ? "den eigenen Anbieter" : provider.name
     }
 
     private var entry: some View {
@@ -219,7 +350,7 @@ private struct KeyRow: View {
                 SecureField(
                     "",
                     text: $input,
-                    prompt: Text("sk-…").foregroundStyle(Palette.textTertiary)
+                    prompt: Text(provider.keyPlaceholder).foregroundStyle(Palette.textTertiary)
                 )
                 .textFieldStyle(.plain)
                 .font(.system(size: 13, design: .monospaced))
@@ -363,12 +494,12 @@ private struct ShortcutRow: View {
 
 private struct ProbeRow: View {
     let probe: Probe
-    let vocabulary: String
+    let preferences: Preferences
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
-                Button(action: { Task { await probe.run(vocabulary: vocabulary) } }) {
+                Button(action: { Task { await probe.run(with: preferences) } }) {
                     HStack(spacing: 6) {
                         Image(systemName: probe.isRunning ? "waveform" : "mic.fill")
                         Text(label)

@@ -34,12 +34,18 @@ final class Probe {
         self.state = state
     }
 
-    func run(vocabulary: String) async {
+    func run(with preferences: Preferences) async {
         guard !isRunning else { return }
-        guard let key = Secrets.read(), !key.isEmpty else {
+        guard !preferences.isEndpointMissing else {
+            state = .failed("Beim eigenen Anbieter fehlt die Adresse.")
+            return
+        }
+        guard let key = Secrets.read(for: preferences.provider), !key.isEmpty else {
             state = .failed(Transcriber.Failure.noKey.message)
             return
         }
+        // Captured now, so the result belongs to the settings the probe started with.
+        let settings = preferences.transcriberSettings
 
         let recorder = AudioRecorder()
         do {
@@ -60,10 +66,8 @@ final class Probe {
             return
         }
 
-        var transcriber = Transcriber()
-        transcriber.settings.vocabulary = vocabulary
         do {
-            let text = try await transcriber.transcribe(wav: audio, apiKey: key)
+            let text = try await Transcriber(settings: settings).transcribe(wav: audio, apiKey: key)
             state = text.isEmpty ? .failed("Nichts gehört.") : .heard(text)
         } catch {
             state = .failed(error.localizedDescription)

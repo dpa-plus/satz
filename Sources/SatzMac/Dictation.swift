@@ -24,7 +24,6 @@ final class Dictation {
     private let pill: PillController
     private let preferences: Preferences
     private let history: History
-    private var transcriber = Transcriber()
     private var state: State = .idle
     /// Bumped by every start and every cancel. Work resumed after an `await`
     /// compares it and gives up if the world moved on.
@@ -77,8 +76,12 @@ final class Dictation {
         // key only once you have finished speaking loses the whole message.
         // Presence only: reading the secret itself can raise a Keychain prompt,
         // and the moment the user presses the shortcut is the worst time for one.
-        guard Secrets.exists() else {
+        guard Secrets.exists(for: preferences.provider) else {
             report(Transcriber.Failure.noKey.message)
+            return
+        }
+        guard !preferences.isEndpointMissing else {
+            report("Beim eigenen Anbieter fehlt die Adresse.")
             return
         }
 
@@ -138,7 +141,8 @@ final class Dictation {
             settle()
             return
         }
-        guard let key = Secrets.read(), !key.isEmpty else {
+        let provider = preferences.provider
+        guard let key = Secrets.read(for: provider), !key.isEmpty else {
             settle()
             report(Transcriber.Failure.noKey.message)
             return
@@ -147,7 +151,7 @@ final class Dictation {
         do {
             // Read at send time, so an edit in the settings window applies to
             // the very next dictation.
-            transcriber.settings.vocabulary = preferences.vocabulary
+            let transcriber = Transcriber(settings: preferences.transcriberSettings)
             let text = try await transcriber.transcribe(wav: audio, apiKey: key)
             guard mine == generation, !Task.isCancelled else { return }
             settle()

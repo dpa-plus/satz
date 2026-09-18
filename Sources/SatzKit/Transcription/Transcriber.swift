@@ -1,14 +1,15 @@
 import Foundation
 
-/// Turns recorded audio into text using OpenAI's transcription endpoint.
+/// Turns recorded audio into text, using any provider that speaks OpenAI's
+/// transcription API.
 ///
 /// One request, one timeout, one result. There is deliberately no second model
 /// rewriting the transcript: what you said is what you get.
 public struct Transcriber: Sendable {
 
     public struct Settings: Sendable {
-        public var model: String = "gpt-transcribe"
-        public var baseURL: URL = URL(string: "https://api.openai.com/v1")!
+        public var model: String = Provider.openAI.defaultModel
+        public var baseURL: URL = Provider.openAI.baseURL!
         /// Every request is bounded. A dictation tool that can hang is worse
         /// than one that fails, because you cannot tell hung from slow.
         public var timeout: TimeInterval = 30
@@ -20,6 +21,16 @@ public struct Transcriber: Sendable {
         public var language: String?
 
         public init() {}
+
+        /// Settings for `provider`. `customBaseURL` is used only by `.custom`,
+        /// and an empty `model` falls back to the provider's default.
+        public init(provider: Provider, model: String = "", customBaseURL: URL? = nil) {
+            if let url = provider.baseURL ?? customBaseURL {
+                baseURL = url
+            }
+            let chosen = model.trimmingCharacters(in: .whitespaces)
+            self.model = chosen.isEmpty ? provider.defaultModel : chosen
+        }
     }
 
     public enum Failure: Error, LocalizedError, Equatable {
@@ -34,13 +45,13 @@ public struct Transcriber: Sendable {
         /// Non-optional, so callers never have to invent a fallback string.
         public var message: String {
             switch self {
-            case .noKey: "Kein OpenAI-Schlüssel hinterlegt."
-            case .unauthorized: "Der OpenAI-Schlüssel wird abgelehnt."
-            case .rateLimited: "OpenAI drosselt gerade. Kurz warten."
-            case .offline: "Keine Verbindung zu OpenAI."
-            case .timedOut: "OpenAI hat nicht rechtzeitig geantwortet."
-            case .server(let status, let message): message ?? "OpenAI antwortete mit \(status)."
-            case .unreadableResponse: "Antwort von OpenAI nicht lesbar."
+            case .noKey: "Kein API-Schlüssel hinterlegt."
+            case .unauthorized: "Der API-Schlüssel wird abgelehnt."
+            case .rateLimited: "Der Anbieter drosselt gerade. Kurz warten."
+            case .offline: "Keine Verbindung zum Anbieter."
+            case .timedOut: "Der Anbieter hat nicht rechtzeitig geantwortet."
+            case .server(let status, let message): message ?? "Der Anbieter antwortete mit \(status)."
+            case .unreadableResponse: "Antwort des Anbieters nicht lesbar."
             }
         }
 
