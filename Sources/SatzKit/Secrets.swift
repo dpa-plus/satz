@@ -34,8 +34,10 @@ public enum Secrets {
 
         var insert = query
         insert[kSecValueData as String] = Data(secret.utf8)
-        // Available once the machine has been unlocked, and never synced to
-        // other devices: this key belongs to this Mac.
+        // Honoured by the data-protection keychain (iOS). The file-based macOS
+        // login keychain accepts the attribute and silently ignores it, so on
+        // the Mac this is not what protects the key: the login keychain being
+        // locked with the user's password is.
         insert[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
 
         let status = SecItemAdd(insert as CFDictionary, nil)
@@ -54,6 +56,22 @@ public enum Secrets {
         guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
               let data = item as? Data else { return nil }
         return String(decoding: data, as: UTF8.self)
+    }
+
+    /// Whether a key is stored, without reading it.
+    ///
+    /// Asks for the item's attributes only. Reading the secret itself can make
+    /// macOS show an access prompt, and a settings window that checks status
+    /// repeatedly must never cause one.
+    public static func exists(account: String = openAIAccount) -> Bool {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        return SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess
     }
 
     public static func remove(account: String = openAIAccount) {
