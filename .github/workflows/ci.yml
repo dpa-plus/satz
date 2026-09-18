@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test
+        run: swift test
+      - name: Build the app bundle
+        run: make app
+      - name: Pill still renders
+        # Catches a view that compiles but crashes or lays out to nothing.
+        run: |
+          ./dist/satz.app/Contents/MacOS/satz --snapshot /tmp/pill.png
+          test -s /tmp/pill.png

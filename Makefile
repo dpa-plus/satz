@@ -4,7 +4,7 @@ SCRATCH ?= $(HOME)/Library/Caches/satz-build
 APP     := dist/satz.app
 BIN     := $(SCRATCH)/release/SatzMac
 
-.PHONY: app run test clean
+.PHONY: app run test hero clean
 
 app:
 	swift build -c release --scratch-path "$(SCRATCH)"
@@ -20,6 +20,10 @@ run: app
 
 test:
 	swift test --scratch-path "$(SCRATCH)"
+
+hero: app
+	"$(APP)/Contents/MacOS/satz" --hero assets/hero.png
+	@echo "rendered assets/hero.png"
 
 clean:
 	rm -rf "$(SCRATCH)" dist

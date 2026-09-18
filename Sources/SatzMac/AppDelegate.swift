@@ -16,6 +16,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        if let path = argument(after: "--hero") {
+            try? HeroRenderer.write(to: path)
+            NSApp.terminate(nil)
+            return
+        }
+
         let pill = PillController(onCancel: { [weak self] in self?.dictation?.cancel() })
         let dictation = Dictation(pill: pill)
         self.pill = pill
