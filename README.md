@@ -53,4 +53,14 @@ because the customers are.
 
     make app      build satz.app into dist/
     make run      build and launch it
-    swift test    run the tests
+    make test     run the tests
+
+## Looking at the pill
+
+    satz --snapshot out.png   render every pill state to a PNG and exit
+    satz --demo               show the pill driven by synthetic loudness
+
+`--snapshot` is the one to reach for. It never puts a window on screen, needs
+no microphone and no screen recording permission, and it captures all three
+states in one sheet instead of only whichever one happens to be live. It is
+also where a visual check in CI would hook in.
