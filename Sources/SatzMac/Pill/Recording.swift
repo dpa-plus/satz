@@ -2,14 +2,17 @@ import Foundation
 import Observation
 
 /// What the pill is currently showing.
-public enum Phase: Equatable, Sendable {
+enum Phase: Equatable, Sendable {
     case idle
     /// Microphone is being opened. Possibly behind a permission dialog, so this
     /// can last a while and must not look like it is already recording.
     case starting
     case listening
     case transcribing
-    case failed(String)
+    /// The text is on the clipboard but could not be pasted.
+    case clipboard
+    /// Something went wrong. `canRetry` when the recording was kept.
+    case failed(String, canRetry: Bool)
 }
 
 /// The state the pill draws itself from. Lives on the main actor because it is
@@ -18,15 +21,13 @@ public enum Phase: Equatable, Sendable {
 @Observable
 final class Recording {
     /// Number of bars in the waveform. Levels scroll in from the right.
-    static let barCount = 14
+    static let barCount = 12
 
     private(set) var phase: Phase = .idle
     private(set) var levels: [Float] = Array(repeating: 0, count: barCount)
 
     var isVisible: Bool { phase != .idle }
 
-    /// The microphone is not live yet. Possibly behind a permission dialog,
-    /// so this must not look like it is already recording.
     func starting() {
         levels = Array(repeating: 0, count: Self.barCount)
         phase = .starting
@@ -48,8 +49,12 @@ final class Recording {
         phase = .transcribing
     }
 
-    func fail(_ message: String) {
-        phase = .failed(message)
+    func clipboard() {
+        phase = .clipboard
+    }
+
+    func fail(_ message: String, canRetry: Bool = false) {
+        phase = .failed(message, canRetry: canRetry)
     }
 
     func reset() {

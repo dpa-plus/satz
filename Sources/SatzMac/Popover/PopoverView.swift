@@ -1,0 +1,363 @@
+import AppKit
+import SatzKit
+import SwiftUI
+
+/// What opens under the menu bar icon.
+///
+/// Ordered by how often each thing is needed: the last text is why anyone
+/// opens it, so it leads. Status says nothing while everything works; when
+/// something breaks, the problem takes the top and the rest steps back.
+struct PopoverView: View {
+    let history: History
+    let outbox: Outbox
+    let setup: Setup
+    let shortcut: Shortcut
+    let preferences: Preferences
+    let actions: PopoverActions
+
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            problem
+
+            Group {
+                if let latest = history.entries.first {
+                    LatestCard(entry: latest)
+                    EarlierRows(entries: Array(history.entries.dropFirst()))
+                } else {
+                    EmptyHint(trigger: preferences.trigger, mode: preferences.triggerMode)
+                }
+            }
+            .opacity(outbox.pending == nil ? 1 : 0.45)
+
+            Rule()
+
+            Footer(preferences: preferences, actions: actions)
+        }
+        .padding(12)
+        .frame(width: 340)
+        .background(theme.ground)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(theme.cardBorder, lineWidth: 1.5))
+    }
+
+    /// At most one thing is wrong at a time, in order of how much it blocks.
+    @ViewBuilder
+    private var problem: some View {
+        if let pending = outbox.pending {
+            ProblemCard(
+                title: pending.reason,
+                detail: Self.duration(pending.duration),
+                primary: ("Nochmal senden", actions.retry),
+                secondary: ("Verwerfen", actions.discard)
+            )
+        } else if !setup.isComplete {
+            ProblemCard(title: "Einrichtung fehlt", primary: ("Einrichten", actions.openSetup))
+        } else if shortcut.status == .taken {
+            ProblemCard(title: "Tasten belegt", primary: ("Ändern", actions.openSettings))
+        }
+    }
+
+    private static func duration(_ seconds: TimeInterval) -> String {
+        let total = Int(seconds.rounded())
+        return String(format: "%d:%02d", total / 60, total % 60)
+    }
+}
+
+/// What the popover can ask the app to do.
+struct PopoverActions {
+    var retry: () -> Void = {}
+    var discard: () -> Void = {}
+    var openSetup: () -> Void = {}
+    var openSettings: () -> Void = {}
+    var quit: () -> Void = {}
+}
+
+// MARK: - Pieces
+
+private struct ProblemCard: View {
+    let title: String
+    var detail: String?
+    let primary: (String, () -> Void)
+    var secondary: (String, () -> Void)?
+
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 15, weight: .medium))
+                Text(title)
+                    .font(Typography.display(18))
+                Spacer()
+                if let detail {
+                    Text(detail)
+                        .font(Typography.mono(12))
+                        .foregroundStyle(theme.inkOnCard)
+                }
+            }
+            .foregroundStyle(theme.ink)
+
+            HStack(spacing: 8) {
+                Button(primary.0, action: primary.1).buttonStyle(.accent)
+                if let secondary {
+                    Button(secondary.0, action: secondary.1).buttonStyle(.outline)
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .surface()
+    }
+}
+
+private struct LatestCard: View {
+    let entry: History.Entry
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(entry.text)
+                .font(Typography.text(16))
+                .lineSpacing(3)
+                .lineLimit(4)
+                .foregroundStyle(theme.ink)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: 8) {
+                Image(systemName: entry.pasted ? "checkmark" : "doc.on.clipboard")
+                    .font(.system(size: 11, weight: .semibold))
+                Text(meta)
+                    .font(Typography.text(13))
+                Spacer()
+                CopyButton(text: entry.text)
+            }
+            .foregroundStyle(theme.inkOnCard)
+        }
+        .padding(14)
+        .surface()
+    }
+
+    private var meta: String {
+        let time = entry.date.formatted(date: .omitted, time: .shortened)
+        return "\(entry.pasted ? (entry.app ?? "Eingefügt") : "Zwischenablage") · \(time)"
+    }
+}
+
+private struct EarlierRows: View {
+    let entries: [History.Entry]
+
+    var body: some View {
+        if !entries.isEmpty {
+            VStack(spacing: 0) {
+                ForEach(entries) { EarlierRow(entry: $0) }
+            }
+        }
+    }
+}
+
+/// One line per older text. The whole row copies; the pointer shows how.
+private struct EarlierRow: View {
+    let entry: History.Entry
+    @Environment(\.theme) private var theme
+    @State private var hovering = false
+    @State private var copied = false
+
+    var body: some View {
+        Button(action: copy) {
+            HStack(spacing: 10) {
+                Text(entry.text)
+                    .font(Typography.text(14.5))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .foregroundStyle(theme.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if hovering || copied {
+                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(theme.ink)
+                } else {
+                    Text(entry.date.formatted(date: .omitted, time: .shortened))
+                        .font(Typography.mono(12))
+                        .foregroundStyle(theme.inkSecondary)
+                }
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 34)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(hovering ? theme.hover : .clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help("Kopieren")
+    }
+
+    private func copy() {
+        Clipboard.put(entry.text)
+        copied = true
+        Task {
+            try? await Task.sleep(for: .seconds(1.2))
+            copied = false
+        }
+    }
+}
+
+private struct CopyButton: View {
+    let text: String
+    @State private var copied = false
+
+    var body: some View {
+        Button {
+            Clipboard.put(text)
+            copied = true
+            Task {
+                try? await Task.sleep(for: .seconds(1.2))
+                copied = false
+            }
+        } label: {
+            Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                .font(.system(size: 14, weight: .semibold))
+                .frame(width: 18)
+        }
+        .buttonStyle(AccentButtonStyle(height: 34, square: true))
+        .help("Kopieren")
+    }
+}
+
+/// Shown until the first dictation: the one thing a new user needs, which is
+/// how to start. It goes away for good once there is history.
+private struct EmptyHint: View {
+    let trigger: Trigger
+    let mode: TriggerMode
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 6) {
+                ForEach(Array(keys.enumerated()), id: \.offset) { _, key in
+                    KeyLabel(glyph: key.glyph, name: key.name)
+                }
+            }
+            Text(words)
+                .font(Typography.text(14))
+                .foregroundStyle(theme.inkSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.vertical, 22)
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity)
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(theme.control, style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+        )
+    }
+
+    private var keys: [(glyph: String, name: String?)] {
+        let shown = trigger.display.keys
+        // Two caps say "twice" faster than the word does.
+        return trigger == .doubleRightCommand ? shown + shown : shown
+    }
+
+    private var words: String {
+        let act = mode == .hold ? "halten und sprechen" : "sprechen"
+        switch trigger {
+        case .doubleRightCommand:
+            return mode == .hold ? "Rechts zweimal tippen, beim zweiten Mal halten und sprechen" : "Rechts zweimal tippen und sprechen"
+        case .keys:
+            return mode == .hold ? "Halten und sprechen" : "Drücken und sprechen"
+        case .mouseButton:
+            return "\(trigger.display.words ?? "Maustaste") drücken, \(act)"
+        }
+    }
+}
+
+private struct Footer: View {
+    let preferences: Preferences
+    let actions: PopoverActions
+    @Environment(\.theme) private var theme
+    @State private var devices: [InputDevice] = []
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Menu {
+                Choice(title: "Wie in macOS", selected: preferences.inputDeviceUID == nil) {
+                    preferences.inputDeviceUID = nil
+                }
+                Divider()
+                ForEach(devices) { device in
+                    Choice(title: device.name, selected: preferences.inputDeviceUID == device.uid) {
+                        preferences.inputDeviceUID = device.uid
+                    }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "mic")
+                        .font(.system(size: 12, weight: .medium))
+                    Text(currentName)
+                        .font(Typography.text(14))
+                        .lineLimit(1)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .bold))
+                }
+                .foregroundStyle(theme.inkSecondary)
+                .padding(.horizontal, 8)
+                .frame(height: 32)
+                .contentShape(Rectangle())
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .onAppear { devices = InputDevices.all() }
+
+            Spacer()
+
+            Button(action: actions.openSettings) {
+                Image(systemName: "gearshape")
+            }
+            .buttonStyle(.icon)
+            .help("Einstellungen")
+
+            Button(action: actions.quit) {
+                Image(systemName: "power")
+            }
+            .buttonStyle(.icon)
+            .help("satz beenden")
+        }
+    }
+
+    private var currentName: String {
+        if let uid = preferences.inputDeviceUID, let device = devices.first(where: { $0.uid == uid }) {
+            return device.name
+        }
+        return InputDevices.systemDefault()?.name ?? "Mikrofon"
+    }
+}
+
+/// A menu item with a checkmark when it is the current choice.
+private struct Choice: View {
+    let title: String
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            if selected {
+                Label(title, systemImage: "checkmark")
+            } else {
+                Text(title)
+            }
+        }
+    }
+}
+
+/// Puts text on the general pasteboard.
+enum Clipboard {
+    static func put(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+}

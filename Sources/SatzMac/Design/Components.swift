@@ -81,14 +81,17 @@ struct KeyLabel: View {
 /// The one action that matters on a surface. Orange with an ink label.
 struct AccentButtonStyle: ButtonStyle {
     var height: CGFloat = 34
+    /// For an icon on its own: as wide as it is tall.
+    var square = false
 
     func makeBody(configuration: Configuration) -> some View {
-        AccentButton(configuration: configuration, height: height)
+        AccentButton(configuration: configuration, height: height, square: square)
     }
 
     private struct AccentButton: View {
         let configuration: ButtonStyleConfiguration
         let height: CGFloat
+        let square: Bool
         @Environment(\.theme) private var theme
         @Environment(\.isEnabled) private var isEnabled
 
@@ -96,8 +99,9 @@ struct AccentButtonStyle: ButtonStyle {
             configuration.label
                 .font(Typography.text(15, .semibold))
                 .foregroundStyle(theme.accentLabel)
-                .padding(.horizontal, 16)
+                .padding(.horizontal, square ? 0 : 16)
                 .frame(minWidth: height, minHeight: height)
+                .frame(width: square ? height : nil)
                 .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(theme.accent))
                 .shadow(color: theme.accentShadow, radius: 0, y: configuration.isPressed ? 1 : 3)
                 .offset(y: configuration.isPressed ? 2 : 0)

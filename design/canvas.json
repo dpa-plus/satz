@@ -1,0 +1,49 @@
+{
+  "pages": [
+    { "id": "page-1", "name": "satz" },
+    { "id": "page-2", "name": "Frühere Richtungen" }
+  ],
+  "artboards": [
+    { "file": "Main.dc.html", "title": "Menüleiste", "page": "page-1", "x": 0, "y": 0, "w": 420, "h": 440 },
+    { "file": "MenuEmpty.dc.html", "title": "Menüleiste · leer", "page": "page-1", "x": 520, "y": 0, "w": 420, "h": 300 },
+    { "file": "MenuProblem.dc.html", "title": "Menüleiste · Problem", "page": "page-1", "x": 1040, "y": 0, "w": 420, "h": 420 },
+    { "file": "MenuDark.dc.html", "title": "Menüleiste · dunkel", "page": "page-1", "x": 1560, "y": 0, "w": 420, "h": 440 },
+    { "file": "SetupKey.dc.html", "title": "Einrichten · 1", "page": "page-1", "x": 0, "y": 580, "w": 460, "h": 420 },
+    { "file": "SetupProbe.dc.html", "title": "Einrichten · 5", "page": "page-1", "x": 560, "y": 580, "w": 460, "h": 440 },
+    { "file": "Settings.dc.html", "title": "Einstellungen", "page": "page-1", "x": 1120, "y": 580, "w": 520, "h": 1060 },
+    { "file": "Pill.dc.html", "title": "Pille", "page": "page-1", "x": 1740, "y": 580, "w": 360, "h": 360 },
+
+    { "file": "StickerSetup.dc.html", "title": "A · Sticker · Einrichten", "page": "page-2", "x": 0, "y": 0, "w": 480, "h": 700 },
+    { "file": "PetrolSetup.dc.html", "title": "B · Petrol · Einrichten", "page": "page-2", "x": 600, "y": 0, "w": 480, "h": 580 },
+    { "file": "MenuSetup.dc.html", "title": "C · Menüleiste · Einrichten (v1)", "page": "page-2", "x": 1200, "y": 0, "w": 420, "h": 580 },
+    { "file": "StickerReady.dc.html", "title": "A · Sticker · Bereit", "page": "page-2", "x": 0, "y": 840, "w": 480, "h": 780 },
+    { "file": "PetrolReady.dc.html", "title": "B · Petrol · Bereit", "page": "page-2", "x": 600, "y": 840, "w": 480, "h": 700 }
+  ],
+  "annotations": [
+    {
+      "id": "idea",
+      "page": "page-1",
+      "x": 0, "y": 1100, "w": 460,
+      "text": "Last text first. Status only when something breaks. Everything rare in Einstellungen. Default shortcut: right ⌘ twice."
+    },
+    {
+      "id": "direction-a",
+      "page": "page-2",
+      "x": 0, "y": 1700, "w": 480,
+      "text": "A · Sticker: checklist setup, website look."
+    },
+    {
+      "id": "direction-b",
+      "page": "page-2",
+      "x": 600, "y": 1640, "w": 480,
+      "text": "B · Petrol: one step per screen, dark."
+    },
+    {
+      "id": "direction-c",
+      "page": "page-2",
+      "x": 1200, "y": 700, "w": 420,
+      "text": "C · Menüleiste v1: carried forward on the satz page."
+    }
+  ],
+  "launch": { "view": "canvas", "page": "page-1" }
+}

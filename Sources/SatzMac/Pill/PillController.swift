@@ -8,9 +8,11 @@ final class PillController {
 
     private var panel: PillPanel?
     private let onCancel: () -> Void
+    private let onRetry: () -> Void
 
-    init(onCancel: @escaping () -> Void) {
+    init(onCancel: @escaping () -> Void, onRetry: @escaping () -> Void) {
         self.onCancel = onCancel
+        self.onRetry = onRetry
     }
 
     func show() {
@@ -30,7 +32,7 @@ final class PillController {
     }
 
     private func make() -> PillPanel {
-        let view = PillView(recording: recording, onCancel: onCancel)
+        let view = PillView(recording: recording, onCancel: onCancel, onRetry: onRetry)
         let hosting = NSHostingView(rootView: view)
         hosting.frame = NSRect(origin: .zero, size: hosting.fittingSize)
         return PillPanel(content: hosting)

@@ -37,6 +37,9 @@ public final class AudioRecorder: @unchecked Sendable {
         public var tail: Duration = .milliseconds(400)
         /// Quietest level the waveform should show. Below this reads as silence.
         public var noiseFloorDecibels: Float = -55
+        /// A Core Audio device ID to record from. nil uses the system's input.
+        /// A plain UInt32 rather than AudioDeviceID, which does not exist on iOS.
+        public var inputDeviceID: UInt32?
 
         public init() {}
     }
@@ -75,6 +78,16 @@ public final class AudioRecorder: @unchecked Sendable {
         }
 
         let input = engine.inputNode
+        #if os(macOS)
+        // Must happen before the format is read: the format is the device's.
+        if let deviceID = settings.inputDeviceID, let unit = input.audioUnit {
+            var device = deviceID
+            AudioUnitSetProperty(
+                unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0,
+                &device, UInt32(MemoryLayout<UInt32>.size)
+            )
+        }
+        #endif
         let inputFormat = input.inputFormat(forBus: 0)
         guard
             let target = AVAudioFormat(
@@ -87,7 +100,7 @@ public final class AudioRecorder: @unchecked Sendable {
         else {
             throw Failure.couldNotConvertAudio
         }
-        self.converter = converter
+        lock.withLock { self.converter = converter }
 
         input.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
             self?.consume(buffer, into: target)
@@ -125,13 +138,21 @@ public final class AudioRecorder: @unchecked Sendable {
     /// Tears the engine down and hands back the captured samples, or nil if the
     /// recording was cancelled.
     private func teardown() -> [Float]? {
-        guard lock.withLock({ isRunning }) else { return nil }
+        // Claimed in one step, so a cancel racing a finish cannot both remove
+        // the tap and stop the engine.
+        let claimed = lock.withLock { () -> Bool in
+            guard isRunning else { return false }
+            isRunning = false
+            return true
+        }
+        guard claimed else { return nil }
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
-        converter = nil
 
         return lock.withLock {
-            isRunning = false
+            // Under the lock: the audio thread reads it under the same lock and
+            // keeps its own strong reference for the buffer it is converting.
+            converter = nil
             defer { samples.removeAll(keepingCapacity: false) }
             return isCancelled ? nil : samples
         }

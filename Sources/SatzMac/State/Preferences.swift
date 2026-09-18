@@ -28,8 +28,23 @@ final class Preferences {
     /// Names, jargon and spellings sent with every transcription to bias
     /// recognition. Not a second model and not a rewrite: the endpoint's own
     /// `prompt` parameter.
-    var vocabulary: String {
-        didSet { defaults?.set(vocabulary, forKey: Key.vocabulary) }
+    var words: [String] {
+        didSet { defaults?.set(words, forKey: Key.words) }
+    }
+
+    var trigger: Trigger {
+        didSet { defaults?.set(try? JSONEncoder().encode(trigger), forKey: Key.trigger) }
+    }
+
+    var triggerMode: TriggerMode {
+        didSet { defaults?.set(triggerMode.rawValue, forKey: Key.triggerMode) }
+    }
+
+    /// The microphone to record from, by Core Audio UID. nil follows whatever
+    /// macOS has selected, which is what most people want: it switches with the
+    /// AirPods or headset they just connected.
+    var inputDeviceUID: String? {
+        didSet { defaults?.set(inputDeviceUID, forKey: Key.inputDeviceUID) }
     }
 
     /// Everything the transcriber needs, read fresh at send time so an edit in
@@ -40,13 +55,23 @@ final class Preferences {
             model: model,
             customBaseURL: URL(string: customBaseURL.trimmingCharacters(in: .whitespaces))
         )
-        settings.vocabulary = vocabulary
+        settings.vocabulary = words.joined(separator: ", ")
         return settings
     }
 
     /// A custom provider without a usable URL has nowhere to send the audio.
     var isEndpointMissing: Bool {
         provider == .custom && URL(string: customBaseURL.trimmingCharacters(in: .whitespaces))?.host == nil
+    }
+
+    func addWord(_ word: String) {
+        let clean = word.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty, !words.contains(where: { $0.caseInsensitiveCompare(clean) == .orderedSame }) else { return }
+        words.append(clean)
+    }
+
+    func removeWord(_ word: String) {
+        words.removeAll { $0 == word }
     }
 
     private var models: [String: String] {
@@ -60,7 +85,12 @@ final class Preferences {
         static let provider = "provider"
         static let models = "models"
         static let customBaseURL = "customBaseURL"
+        static let words = "words"
+        /// The free-text field vocabulary used to be. Read once, then left alone.
         static let vocabulary = "vocabulary"
+        static let trigger = "trigger"
+        static let triggerMode = "triggerMode"
+        static let inputDeviceUID = "inputDeviceUID"
     }
 
     init(defaults: UserDefaults? = .standard) {
@@ -68,38 +98,19 @@ final class Preferences {
         provider = defaults?.string(forKey: Key.provider).flatMap(Provider.init(rawValue:)) ?? .openAI
         models = defaults?.dictionary(forKey: Key.models) as? [String: String] ?? [:]
         customBaseURL = defaults?.string(forKey: Key.customBaseURL) ?? ""
-        vocabulary = defaults?.string(forKey: Key.vocabulary) ?? ""
-    }
-}
-
-/// The last few transcripts, so a paste that went somewhere unexpected is not a
-/// lost paragraph.
-///
-/// Held in memory only and gone when satz quits. This is somebody's speech; it
-/// is not written to disk.
-@MainActor
-@Observable
-final class History {
-
-    struct Entry: Identifiable, Equatable {
-        let id = UUID()
-        let text: String
-        let date: Date
+        words = defaults?.stringArray(forKey: Key.words)
+            ?? Self.migratedWords(defaults?.string(forKey: Key.vocabulary))
+        trigger = defaults?.data(forKey: Key.trigger).flatMap { try? JSONDecoder().decode(Trigger.self, from: $0) }
+            ?? .standard
+        triggerMode = defaults?.string(forKey: Key.triggerMode).flatMap(TriggerMode.init(rawValue:)) ?? .tap
+        inputDeviceUID = defaults?.string(forKey: Key.inputDeviceUID)
     }
 
-    static let limit = 5
-
-    private(set) var entries: [Entry] = []
-
-    init(entries: [Entry] = []) {
-        self.entries = entries
-    }
-
-    func add(_ text: String, at date: Date = .now) {
-        guard !text.isEmpty else { return }
-        entries.insert(Entry(text: text, date: date), at: 0)
-        if entries.count > Self.limit {
-            entries.removeLast(entries.count - Self.limit)
-        }
+    /// The vocabulary used to be one comma-separated field.
+    private static func migratedWords(_ old: String?) -> [String] {
+        (old ?? "")
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
     }
 }

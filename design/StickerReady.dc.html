@@ -1,0 +1,87 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=Source+Sans+3:wght@400;500;600;700&amp;display=swap">
+  <style>
+    body { margin: 0; background: #ffeade; }
+    a { color: #16303c; text-decoration: underline; text-underline-offset: 3px; }
+    a:hover { color: #ff6100; }
+  </style>
+</helmet>
+<div style="width: 480px; min-height: 780px; box-sizing: border-box; background: #ffeade; color: #16303c; font-family: 'Source Sans 3', -apple-system, 'Helvetica Neue', Arial, sans-serif; display: flex; flex-direction: column;">
+
+  <div style="height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 14px;">
+    <div style="width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid rgba(22,48,60,0.3); box-sizing: border-box;"></div>
+    <div style="width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid rgba(22,48,60,0.3); box-sizing: border-box;"></div>
+    <div style="width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid rgba(22,48,60,0.3); box-sizing: border-box;"></div>
+  </div>
+
+  <div style="padding: 14px 32px 32px; display: flex; flex-direction: column; gap: 28px;">
+
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <svg width="40" height="22" viewBox="0 0 40 22"><g fill="#ff6100"><rect x="0" y="5.8" width="3.4" height="10.4" rx="1.7"></rect><rect x="6" y="3.7" width="3.4" height="14.6" rx="1.7"></rect><rect x="12" y="1.6" width="3.4" height="18.8" rx="1.7"></rect><rect x="18" y="0" width="3.4" height="22" rx="1.7"></rect><rect x="24" y="1.6" width="3.4" height="18.8" rx="1.7"></rect><rect x="30" y="3.7" width="3.4" height="14.6" rx="1.7"></rect><rect x="36" y="5.8" width="3.4" height="10.4" rx="1.7"></rect></g></svg>
+      <div style="font-family: 'Bitter', Georgia, serif; font-size: 22px; letter-spacing: -0.02em;">satz</div>
+      <div style="margin-left: auto; display: flex; align-items: center; gap: 8px; background: #ffffff; border: 1.5px solid #16303c; border-radius: 999px; padding: 5px 12px; box-shadow: 0 4px 0 rgba(22,48,60,0.09); font-size: 14px; font-weight: 600;">
+        <div style="width: 8px; height: 8px; border-radius: 50%; background: #ff6100;"></div>
+        Bereit
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <h1 style="margin: 0; font-family: 'Bitter', Georgia, serif; font-weight: 400; font-size: 28px; line-height: 1.3; letter-spacing: -0.03em;">Drück <span style="display: inline-flex; gap: 4px; vertical-align: 3px;"><span style="font-family: 'Source Sans 3', -apple-system, Arial, sans-serif; font-size: 17px; font-weight: 600; letter-spacing: 0; background: #ffffff; border: 1.5px solid #16303c; border-radius: 8px; padding: 1px 8px; box-shadow: 0 3px 0 rgba(22,48,60,0.14);">⌥</span><span style="font-family: 'Source Sans 3', -apple-system, Arial, sans-serif; font-size: 17px; font-weight: 600; letter-spacing: 0; background: #ffffff; border: 1.5px solid #16303c; border-radius: 8px; padding: 1px 8px; box-shadow: 0 3px 0 rgba(22,48,60,0.14);">Space</span></span>, sprich, drück nochmal.</h1>
+      <p style="margin: 0; font-size: 16px; line-height: 1.5; color: #40545c;">Der Text landet, wo dein Cursor steht. Esc bricht ab.</p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <div style="font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: #5d7078;">Zuletzt</div>
+      <div style="background: #ffffff; border: 1.5px solid #16303c; border-radius: 20px; box-shadow: 0 4px 0 rgba(22,48,60,0.09); display: flex; flex-direction: column;">
+
+        <div style="display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px;">
+          <div style="flex: 1; font-size: 16px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">Termin mit ACON auf Donnerstag 14 Uhr verschieben.</div>
+          <div style="font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 12px; color: #5d7078; padding-top: 3px;">15:12</div>
+          <div style="width: 30px; height: 30px; flex-shrink: 0; border-radius: 10px; border: 1.5px solid rgba(22,48,60,0.2); display: flex; align-items: center; justify-content: center;"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#16303c" stroke-width="1.5"><rect x="5" y="5" width="8.5" height="8.5" rx="2"></rect><path d="M11 5V4a1.5 1.5 0 00-1.5-1.5h-5A1.5 1.5 0 003 4v5a1.5 1.5 0 001.5 1.5H5"></path></svg></div>
+        </div>
+        <div style="height: 1.5px; background: rgba(22,48,60,0.1);"></div>
+
+        <div style="display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px;">
+          <div style="flex: 1; font-size: 16px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">Bitte schick mir die Unterlagen bis Freitag, dann schaue ich sie mir am Wochenende an.</div>
+          <div style="font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 12px; color: #5d7078; padding-top: 3px;">14:47</div>
+          <div style="width: 30px; height: 30px; flex-shrink: 0; border-radius: 10px; border: 1.5px solid rgba(22,48,60,0.2); display: flex; align-items: center; justify-content: center;"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#16303c" stroke-width="1.5"><rect x="5" y="5" width="8.5" height="8.5" rx="2"></rect><path d="M11 5V4a1.5 1.5 0 00-1.5-1.5h-5A1.5 1.5 0 003 4v5a1.5 1.5 0 001.5 1.5H5"></path></svg></div>
+        </div>
+        <div style="height: 1.5px; background: rgba(22,48,60,0.1);"></div>
+
+        <div style="display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px;">
+          <div style="flex: 1; font-size: 16px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">Der Fehler im Export ist behoben, magst du es nochmal testen?</div>
+          <div style="font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 12px; color: #5d7078; padding-top: 3px;">14:03</div>
+          <div style="width: 30px; height: 30px; flex-shrink: 0; border-radius: 10px; border: 1.5px solid rgba(22,48,60,0.2); display: flex; align-items: center; justify-content: center;"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#16303c" stroke-width="1.5"><rect x="5" y="5" width="8.5" height="8.5" rx="2"></rect><path d="M11 5V4a1.5 1.5 0 00-1.5-1.5h-5A1.5 1.5 0 003 4v5a1.5 1.5 0 001.5 1.5H5"></path></svg></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <div style="font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: #5d7078;">Wortschatz</div>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+        <div style="background: #ffffff; border: 1.5px solid #16303c; border-radius: 999px; padding: 5px 13px; box-shadow: 0 4px 0 rgba(22,48,60,0.09); font-size: 15px;">ACON</div>
+        <div style="background: #ffffff; border: 1.5px solid #16303c; border-radius: 999px; padding: 5px 13px; box-shadow: 0 4px 0 rgba(22,48,60,0.09); font-size: 15px;">Immofanten</div>
+        <div style="background: #ffffff; border: 1.5px solid #16303c; border-radius: 999px; padding: 5px 13px; box-shadow: 0 4px 0 rgba(22,48,60,0.09); font-size: 15px;">Prozesshub</div>
+        <div style="background: #ffffff; border: 1.5px solid #16303c; border-radius: 999px; padding: 5px 13px; box-shadow: 0 4px 0 rgba(22,48,60,0.09); font-size: 15px;">DPA Plus</div>
+        <div style="border: 1.5px dashed rgba(22,48,60,0.4); border-radius: 999px; padding: 5px 13px; font-size: 15px; color: #5d7078;">+ Wort</div>
+      </div>
+      <div style="font-size: 14px; color: #5d7078;">Namen und Fachwörter, die satz richtig schreiben soll.</div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 12px; padding-top: 4px; font-size: 14px;">
+      <div style="font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: #5d7078;">Über OpenRouter</div>
+      <a href="#" style="margin-left: auto;">Anbieter ändern</a>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -1,15 +1,13 @@
 import AppKit
 import Carbon.HIToolbox
 
-/// A system-wide keyboard shortcut.
+/// A system-wide key combination, through Carbon's `RegisterEventHotKey`.
 ///
-/// Carbon's `RegisterEventHotKey` rather than a `CGEventTap`, for two reasons.
-/// It needs no Accessibility permission to fire, so the shortcut works on first
-/// launch before the user has granted anything. And it keeps working while
-/// macOS Secure Input is held by some other application, which silently kills
-/// event taps.
-///
-/// The cost is that Carbon cannot tell the left modifier key from the right one.
+/// Used for key combinations, where it beats an event tap on two counts: it
+/// needs no permission at all, and it swallows the keystroke, so a combination
+/// like ⌥ Space does not also type a non-breaking space into the focused app.
+/// It cannot tell the left modifier key from the right one, and it cannot see a
+/// modifier on its own; those triggers go through `TriggerMonitor`.
 final class HotKey {
 
     struct Combination: Equatable {
@@ -21,35 +19,16 @@ final class HotKey {
         /// Escape, held only while recording so it is not stolen the rest of
         /// the time.
         static let escape = Combination(keyCode: UInt32(kVK_Escape), modifiers: 0)
-
-        /// Option + Space. The shortcut this app is meant to be used with.
-        static let optionSpace = Combination(
-            keyCode: UInt32(kVK_Space),
-            modifiers: UInt32(optionKey)
-        )
-
-        var display: String {
-            var parts: [String] = []
-            if modifiers & UInt32(controlKey) != 0 { parts.append("⌃") }
-            if modifiers & UInt32(optionKey) != 0 { parts.append("⌥") }
-            if modifiers & UInt32(shiftKey) != 0 { parts.append("⇧") }
-            if modifiers & UInt32(cmdKey) != 0 { parts.append("⌘") }
-            switch Int(keyCode) {
-            case kVK_Space: parts.append("Space")
-            case kVK_Escape: parts.append("Esc")
-            default: parts.append("Key \(keyCode)")
-            }
-            return parts.joined()
-        }
     }
 
     enum Failure: Error, LocalizedError {
-        case alreadyTaken(Combination)
+        case alreadyTaken
+        case noHandler
 
         var errorDescription: String? {
             switch self {
-            case .alreadyTaken(let combination):
-                "\(combination.display) ist schon von einem anderen Programm belegt."
+            case .alreadyTaken: "Diese Tasten sind schon von einem anderen Programm belegt."
+            case .noHandler: "Tastenkürzel konnten nicht eingerichtet werden."
             }
         }
     }
@@ -57,16 +36,22 @@ final class HotKey {
     private var reference: EventHotKeyRef?
     private let id: UInt32
 
-    /// Registers `combination` system-wide. `action` runs on the main actor.
-    init(_ combination: Combination, action: @escaping @MainActor () -> Void) throws {
-        id = Dispatcher.shared.install(action: action)
+    /// Registers `combination` system-wide. Both closures run on the main actor.
+    init(
+        _ combination: Combination,
+        onPress: @escaping @MainActor () -> Void,
+        onRelease: (@MainActor () -> Void)? = nil
+    ) throws {
+        guard let id = Dispatcher.shared.install(onPress: onPress, onRelease: onRelease) else {
+            throw Failure.noHandler
+        }
+        self.id = id
 
-        let hotKeyID = EventHotKeyID(signature: Dispatcher.signature, id: id)
         var reference: EventHotKeyRef?
         let status = RegisterEventHotKey(
             combination.keyCode,
             combination.modifiers,
-            hotKeyID,
+            EventHotKeyID(signature: Dispatcher.signature, id: id),
             GetEventDispatcherTarget(),
             0,
             &reference
@@ -74,7 +59,7 @@ final class HotKey {
         guard status == noErr, let reference else {
             Dispatcher.shared.remove(id: id)
             // The only realistic failure is another application holding it.
-            throw Failure.alreadyTaken(combination)
+            throw Failure.alreadyTaken
         }
         self.reference = reference
     }
@@ -93,17 +78,27 @@ private final class Dispatcher: @unchecked Sendable {
     static let shared = Dispatcher()
     static let signature: OSType = 0x7361747A  // 'satz'
 
+    private struct Actions {
+        let onPress: @MainActor () -> Void
+        let onRelease: (@MainActor () -> Void)?
+    }
+
     private let lock = NSLock()
-    private var actions: [UInt32: @MainActor () -> Void] = [:]
+    private var actions: [UInt32: Actions] = [:]
     private var nextID: UInt32 = 1
     private var handler: EventHandlerRef?
 
-    func install(action: @escaping @MainActor () -> Void) -> UInt32 {
+    /// nil if the Carbon handler could not be installed, in which case no
+    /// hotkey would ever fire and registering one would be a lie.
+    func install(
+        onPress: @escaping @MainActor () -> Void,
+        onRelease: (@MainActor () -> Void)?
+    ) -> UInt32? {
         lock.withLock {
-            installHandlerIfNeeded()
+            guard installHandlerIfNeeded() else { return nil }
             let id = nextID
             nextID += 1
-            actions[id] = action
+            actions[id] = Actions(onPress: onPress, onRelease: onRelease)
             return id
         }
     }
@@ -112,19 +107,21 @@ private final class Dispatcher: @unchecked Sendable {
         lock.withLock { actions[id] = nil }
     }
 
-    func fire(id: UInt32) {
-        guard let action = lock.withLock({ actions[id] }) else { return }
-        Task { @MainActor in action() }
+    func fire(id: UInt32, pressed: Bool) {
+        guard let entry = lock.withLock({ actions[id] }) else { return }
+        Task { @MainActor in
+            if pressed { entry.onPress() } else { entry.onRelease?() }
+        }
     }
 
     /// Caller holds the lock.
-    private func installHandlerIfNeeded() {
-        guard handler == nil else { return }
-        var spec = EventTypeSpec(
-            eventClass: OSType(kEventClassKeyboard),
-            eventKind: UInt32(kEventHotKeyPressed)
-        )
-        InstallEventHandler(
+    private func installHandlerIfNeeded() -> Bool {
+        guard handler == nil else { return true }
+        var specs = [
+            EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed)),
+            EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyReleased)),
+        ]
+        let status = InstallEventHandler(
             GetEventDispatcherTarget(),
             { _, event, _ -> OSStatus in
                 var id = EventHotKeyID()
@@ -140,13 +137,15 @@ private final class Dispatcher: @unchecked Sendable {
                 guard status == noErr, id.signature == Dispatcher.signature else {
                     return OSStatus(eventNotHandledErr)
                 }
-                Dispatcher.shared.fire(id: id.id)
+                let pressed = GetEventKind(event) == UInt32(kEventHotKeyPressed)
+                Dispatcher.shared.fire(id: id.id, pressed: pressed)
                 return noErr
             },
-            1,
-            &spec,
+            specs.count,
+            &specs,
             nil,
             &handler
         )
+        return status == noErr
     }
 }

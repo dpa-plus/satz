@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=Source+Sans+3:wght@400;500;600;700&amp;display=swap">
+  <style>
+    body { margin: 0; background: #16303c; }
+    a { color: #eef4f6; text-decoration: underline; text-underline-offset: 3px; }
+    a:hover { color: #ffb27a; }
+  </style>
+</helmet>
+<div style="width: 480px; min-height: 580px; box-sizing: border-box; background: #16303c; color: #eef4f6; font-family: 'Source Sans 3', -apple-system, 'Helvetica Neue', Arial, sans-serif; display: flex; flex-direction: column;">
+
+  <div style="height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 14px;">
+    <div style="width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid rgba(238,244,246,0.28); box-sizing: border-box;"></div>
+    <div style="width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid rgba(238,244,246,0.28); box-sizing: border-box;"></div>
+    <div style="width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid rgba(238,244,246,0.28); box-sizing: border-box;"></div>
+  </div>
+
+  <div style="flex: 1; padding: 28px 44px 44px; display: flex; flex-direction: column; align-items: center; gap: 28px; text-align: center;">
+
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
+      <div style="display: flex; align-items: flex-end; gap: 6px; height: 22px;">
+        <div style="width: 7px; height: 12px; border-radius: 4px; background: #ffb27a;"></div>
+        <div style="width: 7px; height: 22px; border-radius: 4px; background: #eef4f6;"></div>
+        <div style="width: 7px; height: 16px; border-radius: 4px; background: rgba(238,244,246,0.18);"></div>
+        <div style="width: 7px; height: 10px; border-radius: 4px; background: rgba(238,244,246,0.18);"></div>
+      </div>
+      <div style="font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: #8fa9b2;">Schritt 2 von 4</div>
+    </div>
+
+    <div style="width: 96px; height: 88px; background: #f6e2d3; border-radius: 48% 52% 44% 56% / 62% 58% 42% 38%; display: flex; align-items: center; justify-content: center;">
+      <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="#16303c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="14" y="5" width="12" height="20" rx="6"></rect><path d="M8 19a12 12 0 0024 0"></path><path d="M20 31v5"></path><path d="M14 36h12"></path></svg>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 12px; align-items: center;">
+      <h1 style="margin: 0; font-family: 'Bitter', Georgia, serif; font-weight: 400; font-size: 36px; line-height: 1.1; letter-spacing: -0.03em;">Darf satz <b style="font-weight: 600;">zuhören</b>?</h1>
+      <p style="margin: 0; max-width: 320px; font-size: 17px; line-height: 1.55; color: #a9c0c8; text-wrap: pretty;">Nur solange du ⌥ Space drückst. satz speichert keine Aufnahme.</p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 18px;">
+      <button style="font-family: 'Source Sans 3', -apple-system, Arial, sans-serif; font-size: 17px; font-weight: 600; color: #16303c; background: #ffb27a; border: none; border-radius: 14px; padding: 12px 24px; box-shadow: 0 5px 0 rgba(0,0,0,0.28);">Mikrofon erlauben</button>
+      <a href="#" style="font-size: 15px; color: #a9c0c8;">Zurück</a>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=Source+Sans+3:wght@400;500;600;700&amp;display=swap">
+  <style>
+    body { margin: 0; background: #ffeade; }
+    a { color: #16303c; text-decoration: underline; text-underline-offset: 3px; }
+    a:hover { color: #ff6100; }
+  </style>
+</helmet>
+<div style="width: 480px; min-height: 700px; box-sizing: border-box; background: #ffeade; color: #16303c; font-family: 'Source Sans 3', -apple-system, 'Helvetica Neue', Arial, sans-serif; display: flex; flex-direction: column;">
+
+  <div style="height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 14px;">
+    <div style="width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid rgba(22,48,60,0.3); box-sizing: border-box;"></div>
+    <div style="width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid rgba(22,48,60,0.3); box-sizing: border-box;"></div>
+    <div style="width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid rgba(22,48,60,0.3); box-sizing: border-box;"></div>
+  </div>
+
+  <div style="padding: 14px 32px 32px; display: flex; flex-direction: column; gap: 24px;">
+
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <svg width="40" height="22" viewBox="0 0 40 22"><g fill="#ff6100"><rect x="0" y="5.8" width="3.4" height="10.4" rx="1.7"></rect><rect x="6" y="3.7" width="3.4" height="14.6" rx="1.7"></rect><rect x="12" y="1.6" width="3.4" height="18.8" rx="1.7"></rect><rect x="18" y="0" width="3.4" height="22" rx="1.7"></rect><rect x="24" y="1.6" width="3.4" height="18.8" rx="1.7"></rect><rect x="30" y="3.7" width="3.4" height="14.6" rx="1.7"></rect><rect x="36" y="5.8" width="3.4" height="10.4" rx="1.7"></rect></g></svg>
+      <div style="font-family: 'Bitter', Georgia, serif; font-size: 22px; letter-spacing: -0.02em;">satz</div>
+      <div style="margin-left: auto; font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: #5d7078;">Einrichten · 1 von 4</div>
+    </div>
+
+    <h1 style="margin: 0; font-family: 'Bitter', Georgia, serif; font-weight: 400; font-size: 30px; line-height: 1.15; letter-spacing: -0.03em; text-wrap: balance;">Drei Schritte, dann <b style="font-weight: 600;">diktierst du überall</b>.</h1>
+
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+
+      <div style="display: flex; align-items: center; gap: 12px; background: #ffffff; border: 1.5px solid #16303c; border-radius: 16px; box-shadow: 0 4px 0 rgba(22,48,60,0.09); padding: 12px 16px;">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#ff6100" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5l3.6 3.6L16 5.8"></path></svg>
+        <div style="font-size: 16px; font-weight: 600;">Schlüssel</div>
+        <div style="margin-left: auto; font-size: 15px; color: #40545c;">OpenRouter</div>
+      </div>
+
+      <div style="background: #ffffff; border: 1.5px solid #16303c; border-radius: 20px; box-shadow: 0 4px 0 rgba(22,48,60,0.09); padding: 20px; display: flex; flex-direction: column; gap: 14px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="width: 20px; height: 20px; border-radius: 50%; border: 2px solid #ff6100; box-sizing: border-box; display: flex; align-items: center; justify-content: center;"><div style="width: 8px; height: 8px; border-radius: 50%; background: #ff6100;"></div></div>
+          <div style="font-family: 'Bitter', Georgia, serif; font-size: 20px; letter-spacing: -0.02em;">Mikrofon</div>
+        </div>
+        <p style="margin: 0; font-size: 16px; line-height: 1.5; color: #40545c; text-wrap: pretty;">Darf satz zuhören? Nur solange du <span style="display: inline-flex; gap: 3px; vertical-align: 1px;"><span style="font-size: 13px; font-weight: 600; color: #16303c; background: #ffffff; border: 1.5px solid #16303c; border-radius: 7px; padding: 0 6px; box-shadow: 0 2px 0 rgba(22,48,60,0.12);">⌥</span><span style="font-size: 13px; font-weight: 600; color: #16303c; background: #ffffff; border: 1.5px solid #16303c; border-radius: 7px; padding: 0 6px; box-shadow: 0 2px 0 rgba(22,48,60,0.12);">Space</span></span> drückst. satz speichert keine Aufnahme.</p>
+        <div style="display: flex;">
+          <button style="font-family: 'Source Sans 3', -apple-system, Arial, sans-serif; font-size: 16px; font-weight: 600; color: #ffffff; background: #ff6100; border: none; border-radius: 14px; padding: 11px 20px; box-shadow: 0 5px 0 rgba(180,66,0,0.28);">Mikrofon erlauben</button>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 12px; border: 1.5px dashed rgba(22,48,60,0.35); border-radius: 16px; padding: 12px 16px; color: #5d7078;">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#5d7078" stroke-width="1.8"><circle cx="10" cy="10" r="7"></circle></svg>
+        <div style="font-size: 16px;">In andere Apps einfügen</div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 12px; border: 1.5px dashed rgba(22,48,60,0.35); border-radius: 16px; padding: 12px 16px; color: #5d7078;">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#5d7078" stroke-width="1.8"><circle cx="10" cy="10" r="7"></circle></svg>
+        <div style="font-size: 16px;">Probe: einen Satz sagen</div>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: #5d7078;">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#5d7078" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="7" width="10" height="7" rx="2"></rect><path d="M5.5 7V5a2.5 2.5 0 015 0v2"></path></svg>
+      Dein Schlüssel liegt im Schlüsselbund dieses Macs.
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
