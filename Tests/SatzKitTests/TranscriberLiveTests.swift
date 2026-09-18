@@ -32,3 +32,26 @@ func aRealServerAcceptsTheRequestWeBuild() async throws {
 
     #expect(text.isEmpty || !text.isEmpty)  // reaching here at all is the assertion
 }
+
+/// Sends a real recording rather than silence, to prove that speech actually
+/// comes back as words. Point SATZ_TEST_WAV at any 16-bit PCM WAV.
+///
+/// The transcript is never printed: it is somebody's speech.
+@Test(.enabled(if: liveKey != nil && ProcessInfo.processInfo.environment["SATZ_TEST_WAV"] != nil))
+func realSpeechComesBackAsWords() async throws {
+    let environment = ProcessInfo.processInfo.environment
+    var settings = Transcriber.Settings()
+    if let base = environment["SATZ_TEST_BASE_URL"], let url = URL(string: base) {
+        settings.baseURL = url
+    }
+    if let model = environment["SATZ_TEST_MODEL"] {
+        settings.model = model
+    }
+
+    let wav = try Data(contentsOf: URL(fileURLWithPath: try #require(environment["SATZ_TEST_WAV"])))
+    let text = try await Transcriber(settings: settings)
+        .transcribe(wav: wav, apiKey: try #require(liveKey))
+
+    #expect(!text.isEmpty)
+    #expect(text.count > 10)
+}
