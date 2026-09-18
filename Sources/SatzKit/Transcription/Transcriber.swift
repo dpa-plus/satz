@@ -31,7 +31,8 @@ public struct Transcriber: Sendable {
         case server(status: Int, message: String?)
         case unreadableResponse
 
-        public var errorDescription: String? {
+        /// Non-optional, so callers never have to invent a fallback string.
+        public var message: String {
             switch self {
             case .noKey: "Kein OpenAI-Schlüssel hinterlegt."
             case .unauthorized: "Der OpenAI-Schlüssel wird abgelehnt."
@@ -42,6 +43,8 @@ public struct Transcriber: Sendable {
             case .unreadableResponse: "Antwort von OpenAI nicht lesbar."
             }
         }
+
+        public var errorDescription: String? { message }
     }
 
     public var settings: Settings

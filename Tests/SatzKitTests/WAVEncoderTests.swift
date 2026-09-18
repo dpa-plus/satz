@@ -10,6 +10,10 @@ private func uint32(_ data: Data, at offset: Int) -> UInt32 {
     data[offset ..< offset + 4].reversed().reduce(UInt32(0)) { $0 << 8 | UInt32($1) }
 }
 
+private func uint16(_ data: Data, at offset: Int) -> UInt16 {
+    UInt16(data[offset + 1]) << 8 | UInt16(data[offset])
+}
+
 private func int16(_ data: Data, at offset: Int) -> Int16 {
     let low = UInt16(data[offset])
     let high = UInt16(data[offset + 1])
@@ -29,6 +33,13 @@ private func int16(_ data: Data, at offset: Int) -> Int16 {
     #expect(uint32(data, at: 24) == 16_000)  // sample rate
     #expect(uint32(data, at: 28) == 32_000)  // byte rate: 16k * 1 channel * 2 bytes
     #expect(uint32(data, at: 40) == 8)       // data size
+
+    // Without these a wrong bit depth or channel count still passes, and the
+    // server decodes the audio as noise.
+    #expect(uint16(data, at: 20) == 1)       // format tag: uncompressed PCM
+    #expect(uint16(data, at: 22) == 1)       // channels: mono
+    #expect(uint16(data, at: 32) == 2)       // block align: 1 channel * 2 bytes
+    #expect(uint16(data, at: 34) == 16)      // bits per sample
 }
 
 @Test func fullScaleSamplesSurviveTheConversion() {

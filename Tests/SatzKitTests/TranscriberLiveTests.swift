@@ -30,7 +30,9 @@ func aRealServerAcceptsTheRequestWeBuild() async throws {
     let text = try await Transcriber(settings: settings)
         .transcribe(wav: silence, apiKey: try #require(liveKey))
 
-    #expect(text.isEmpty || !text.isEmpty)  // reaching here at all is the assertion
+    // Silence should come back as nothing. A model that invents words here is
+    // one to stop using: hallucination on silence is a known failure mode.
+    #expect(text.count < 40)
 }
 
 /// Sends a real recording rather than silence, to prove that speech actually

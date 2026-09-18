@@ -18,6 +18,10 @@ final class HotKey {
         /// Carbon modifier mask: `optionKey`, `controlKey`, `cmdKey`, `shiftKey`.
         var modifiers: UInt32
 
+        /// Escape, held only while recording so it is not stolen the rest of
+        /// the time.
+        static let escape = Combination(keyCode: UInt32(kVK_Escape), modifiers: 0)
+
         /// Option + Space. The shortcut this app is meant to be used with.
         static let optionSpace = Combination(
             keyCode: UInt32(kVK_Space),
@@ -30,7 +34,11 @@ final class HotKey {
             if modifiers & UInt32(optionKey) != 0 { parts.append("⌥") }
             if modifiers & UInt32(shiftKey) != 0 { parts.append("⇧") }
             if modifiers & UInt32(cmdKey) != 0 { parts.append("⌘") }
-            parts.append(keyCode == UInt32(kVK_Space) ? "Space" : "Key \(keyCode)")
+            switch Int(keyCode) {
+            case kVK_Space: parts.append("Space")
+            case kVK_Escape: parts.append("Esc")
+            default: parts.append("Key \(keyCode)")
+            }
             return parts.joined()
         }
     }

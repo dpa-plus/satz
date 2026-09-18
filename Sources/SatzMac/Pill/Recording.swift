@@ -4,6 +4,9 @@ import Observation
 /// What the pill is currently showing.
 public enum Phase: Equatable, Sendable {
     case idle
+    /// Microphone is being opened. Possibly behind a permission dialog, so this
+    /// can last a while and must not look like it is already recording.
+    case starting
     case listening
     case transcribing
     case failed(String)
@@ -22,7 +25,15 @@ final class Recording {
 
     var isVisible: Bool { phase != .idle }
 
-    func begin() {
+    /// The microphone is not live yet. Possibly behind a permission dialog,
+    /// so this must not look like it is already recording.
+    func starting() {
+        levels = Array(repeating: 0, count: Self.barCount)
+        phase = .starting
+    }
+
+    /// The microphone is live and the bars mean something.
+    func listening() {
         levels = Array(repeating: 0, count: Self.barCount)
         phase = .listening
     }

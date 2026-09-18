@@ -46,7 +46,7 @@ enum SnapshotRenderer {
 
     private static var listening: Recording {
         let recording = Recording()
-        recording.begin()
+        recording.listening()
         // A plausible speech envelope rather than a flat line, so the snapshot
         // shows what the bars actually look like mid-sentence.
         for level in [0.1, 0.3, 0.55, 0.8, 0.62, 0.35, 0.5, 0.75, 0.9, 0.6, 0.3, 0.45, 0.7, 0.4] {
@@ -57,14 +57,14 @@ enum SnapshotRenderer {
 
     private static var transcribing: Recording {
         let recording = Recording()
-        recording.begin()
+        recording.listening()
         recording.transcribing()
         return recording
     }
 
     private static var failed: Recording {
         let recording = Recording()
-        recording.begin()
+        recording.listening()
         recording.fail("Keine Verbindung zu OpenAI.")
         return recording
     }

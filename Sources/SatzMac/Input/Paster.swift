@@ -22,17 +22,26 @@ enum Paster {
         case clipboardOnly(String)
     }
 
-    static func deliver(_ text: String) -> Outcome {
+    /// - Parameter origin: the application the user was typing in when they
+    ///   started speaking. An upload takes seconds, and people switch windows
+    ///   while they wait, so the transcript is sent back where it was meant to
+    ///   go rather than wherever happens to be frontmost now.
+    static func deliver(_ text: String, into origin: NSRunningApplication?) -> Outcome {
         guard !text.isEmpty else { return .pasted }
 
         let pasteboard = NSPasteboard.general
+        let previous = pasteboard.string(forType: .string)
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
 
         if let blocker = whatIsBlockingPaste() {
+            // Leave the transcript on the clipboard: it is the fallback.
             return .clipboardOnly(blocker)
         }
+
+        restoreFocus(to: origin)
         sendCommandV()
+        restore(previous, after: .milliseconds(400))
         return .pasted
     }
 
@@ -54,6 +63,29 @@ enum Paster {
         // state. Its value is this string and has been since the API shipped.
         let options = ["AXTrustedCheckOptionPrompt": true]
         AXIsProcessTrustedWithOptions(options as CFDictionary)
+    }
+
+    // MARK: - Private
+
+    private static func restoreFocus(to origin: NSRunningApplication?) {
+        guard let origin, !origin.isActive, !origin.isTerminated else { return }
+        origin.activate()
+        // Activation is asynchronous. Without a beat the keystroke lands in the
+        // old application. This is a compromise, not a guarantee.
+        Thread.sleep(forTimeInterval: 0.12)
+    }
+
+    /// Hands the clipboard back. Dictating should not silently destroy whatever
+    /// the user had copied, but the transcript has to sit there long enough to
+    /// be pasted first.
+    private static func restore(_ previous: String?, after delay: Duration) {
+        guard let previous else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: delay)
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(previous, forType: .string)
+        }
     }
 
     private static func sendCommandV() {

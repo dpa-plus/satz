@@ -7,7 +7,7 @@ import Foundation
 @MainActor
 enum DemoDriver {
     static func run(on recording: Recording) {
-        recording.begin()
+        recording.listening()
         Task {
             var tick = 0.0
             while !Task.isCancelled {

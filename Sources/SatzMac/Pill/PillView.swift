@@ -42,6 +42,11 @@ struct PillView: View {
         switch recording.phase {
         case .listening, .idle:
             Waveform(levels: recording.levels)
+        case .starting:
+            Text("Mikrofon …")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.white.opacity(0.7))
+                .frame(width: 96, alignment: .leading)
         case .transcribing:
             Text("Schreibt …")
                 .font(.system(size: 12, weight: .medium))
