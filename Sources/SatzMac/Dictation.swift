@@ -22,6 +22,8 @@ final class Dictation {
     }
 
     private let pill: PillController
+    private let preferences: Preferences
+    private let history: History
     private var transcriber = Transcriber()
     private var state: State = .idle
     /// Bumped by every start and every cancel. Work resumed after an `await`
@@ -34,8 +36,10 @@ final class Dictation {
     /// there even if they switched apps while it uploaded.
     private var origin: NSRunningApplication?
 
-    init(pill: PillController) {
+    init(pill: PillController, preferences: Preferences, history: History) {
         self.pill = pill
+        self.preferences = preferences
+        self.history = history
     }
 
     func toggle() async {
@@ -71,7 +75,9 @@ final class Dictation {
     private func start() async {
         // Checked before recording rather than after. Discovering there is no
         // key only once you have finished speaking loses the whole message.
-        guard let key = Secrets.read(), !key.isEmpty else {
+        // Presence only: reading the secret itself can raise a Keychain prompt,
+        // and the moment the user presses the shortcut is the worst time for one.
+        guard Secrets.exists() else {
             report(Transcriber.Failure.noKey.message)
             return
         }
@@ -107,7 +113,6 @@ final class Dictation {
         }
         state = .listening(recorder)
         pill.recording.listening()
-        _ = key
     }
 
     private func finish() async {
@@ -140,6 +145,9 @@ final class Dictation {
         }
 
         do {
+            // Read at send time, so an edit in the settings window applies to
+            // the very next dictation.
+            transcriber.settings.vocabulary = preferences.vocabulary
             let text = try await transcriber.transcribe(wav: audio, apiKey: key)
             guard mine == generation, !Task.isCancelled else { return }
             settle()
@@ -156,6 +164,9 @@ final class Dictation {
             report("Nichts gehört.")
             return
         }
+        // Kept before pasting, so a paste that lands somewhere unexpected is
+        // still recoverable from the settings window.
+        history.add(text)
         switch Paster.deliver(text, into: origin) {
         case .pasted:
             dismiss()

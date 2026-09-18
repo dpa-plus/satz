@@ -26,13 +26,18 @@ model gets to reword you.
     make app
     open dist/satz.app
 
-Then, from the menu bar icon:
+The settings window opens by itself until satz is set up. It shows the three
+things it needs, each with the button that fixes it:
 
-1. **OpenAI-Schlüssel …** and paste your key. It goes to the Keychain.
-2. **Einfügen erlauben …** and grant Accessibility, which is what lets satz
-   paste into other applications.
+1. your OpenAI key, which goes to the Keychain,
+2. the microphone,
+3. permission to paste into other applications.
 
-Press **Option+Space** to start, again to stop, **Escape** to throw it away.
+**Probe aufnehmen** records four seconds and shows what it heard, which checks
+the first two plus your connection without pasting anything.
+
+Then press **Option+Space** to start, again to stop, **Escape** to throw it
+away. The settings window is always one click away in the menu bar.
 
 ## How it works
 
@@ -66,7 +71,7 @@ about each:
 ## Layout
 
     Sources/SatzKit    audio capture, WAV, the transcription client, Keychain
-    Sources/SatzMac    the macOS app: shortcut, pill, paste
+    Sources/SatzMac    the macOS app: shortcut, pill, paste, settings window
     Tests/             tests for SatzKit
 
 `SatzKit` is separate from day one so the planned iOS keyboard extension is
@@ -81,12 +86,12 @@ recording and transcription halves are the same.
     make test                       run the tests, offline
     make hero                       regenerate assets/hero.png
 
-    satz --snapshot out.png         render every pill state to a PNG and exit
+    satz --snapshot <dir>           render pill.png and settings.png and exit
     satz --demo                     show the pill driven by synthetic loudness
 
-`--snapshot` is how the pill gets looked at. It never puts a window on screen,
-needs no microphone and no screen recording permission, and captures all states
-in one sheet rather than whichever one happens to be live.
+`--snapshot` is how the interface gets looked at. It never puts a window on
+screen, needs no microphone and no screen recording permission, and captures
+every pill state at once rather than whichever one happens to be live.
 
 The live tests talk to a real endpoint and are skipped unless you supply a key:
 

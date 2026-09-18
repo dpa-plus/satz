@@ -4,14 +4,20 @@ import SatzKit
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
+    private let setup = Setup.current()
+    private let preferences = Preferences()
+    private let history = History()
+    private let probe = Probe()
+
     private var pill: PillController?
     private var dictation: Dictation?
     private var menuBar: MenuBar?
     private var hotKey: HotKey?
+    private var settings: SettingsWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        if let path = argument(after: "--snapshot") {
-            try? SnapshotRenderer.write(to: path)
+        if let directory = argument(after: "--snapshot") {
+            try? SnapshotRenderer.write(to: directory)
             NSApp.terminate(nil)
             return
         }
@@ -23,20 +29,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let pill = PillController(onCancel: { [weak self] in self?.dictation?.cancel() })
-        let dictation = Dictation(pill: pill)
         self.pill = pill
-        self.dictation = dictation
+        dictation = Dictation(pill: pill, preferences: preferences, history: history)
+
+        settings = SettingsWindow { [setup, preferences, history, probe] in
+            SettingsView(setup: setup, preferences: preferences, history: history, probe: probe)
+        }
 
         let shortcut = HotKey.Combination.optionSpace
-        menuBar = MenuBar(shortcut: shortcut.display) { [weak self] in
-            Task { await self?.dictation?.toggle() }
-        }
+        menuBar = MenuBar(
+            shortcut: shortcut.display,
+            onToggle: { [weak self] in Task { await self?.dictation?.toggle() } },
+            onSettings: { [weak self] in self?.settings?.show() }
+        )
         installHotKey(shortcut)
+
+        Log.note("setup: key=\(setup.hasKey) microphone=\(setup.microphone) paste=\(setup.canPaste)")
+
+        // Nothing works until setup is done, and a menu bar icon alone gives a
+        // new user no hint of that. Show them what is missing.
+        if !setup.isComplete {
+            settings?.show()
+        }
 
         if CommandLine.arguments.contains("--demo") {
             pill.show()
             DemoDriver.run(on: pill.recording)
         }
+    }
+
+    /// Clicking the app again, from Finder or Spotlight, should show something.
+    /// A menu bar app otherwise appears to do nothing when relaunched.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        settings?.show()
+        return true
     }
 
     private func installHotKey(_ combination: HotKey.Combination) {

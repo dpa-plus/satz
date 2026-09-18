@@ -14,8 +14,9 @@ jobs:
         run: swift test
       - name: Build the app bundle
         run: make app
-      - name: Pill still renders
+      - name: Interface still renders
         # Catches a view that compiles but crashes or lays out to nothing.
         run: |
-          ./dist/satz.app/Contents/MacOS/satz --snapshot /tmp/pill.png
-          test -s /tmp/pill.png
+          ./dist/satz.app/Contents/MacOS/satz --snapshot /tmp/snap
+          test -s /tmp/snap/pill.png
+          test -s /tmp/snap/settings.png
