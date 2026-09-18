@@ -55,6 +55,20 @@ because the customers are.
     make run      build and launch it
     make test     run the tests
 
+## The shortcut
+
+Option + Space, registered system-wide, toggling: press to start, press again
+to stop. Escape cancels.
+
+Carbon's `RegisterEventHotKey` rather than a `CGEventTap`, because it needs no
+Accessibility permission to fire and keeps working while another application
+holds macOS Secure Input, which silently kills event taps. The cost is that
+Carbon cannot tell the left Option key from the right one.
+
+If the shortcut is already taken the app says so on launch and still works from
+the menu bar. Note that a Carbon registration can succeed alongside an event
+tap on the same keys, so two dictation apps can both fire at once.
+
 ## Looking at the pill
 
     satz --snapshot out.png   render every pill state to a PNG and exit

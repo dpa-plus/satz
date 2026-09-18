@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var pill: PillController?
     private var recorder: AudioRecorder?
+    private var hotKey: HotKey?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if let index = CommandLine.arguments.firstIndex(of: "--snapshot"),
@@ -19,10 +20,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         pill = PillController(onCancel: { [weak self] in self?.cancel() })
         installStatusItem()
+        installHotKey()
 
         if CommandLine.arguments.contains("--demo"), let pill {
             pill.show()
             DemoDriver.run(on: pill.recording)
+        }
+    }
+
+    // MARK: - Shortcut
+
+    private func installHotKey() {
+        do {
+            hotKey = try HotKey(.optionSpace) { [weak self] in
+                Task { await self?.toggleRecording() }
+            }
+            statusItem?.button?.toolTip = "satz  \u{00B7}  " + HotKey.Combination.optionSpace.display
+            Log.note("shortcut registered: \(HotKey.Combination.optionSpace.display)")
+        } catch {
+            // Surfaced rather than swallowed: without the shortcut the app still
+            // works from the menu bar, but the key the user actually reaches for
+            // would silently do nothing.
+            statusItem?.button?.toolTip = error.localizedDescription
+            Log.note("shortcut NOT registered: \(error.localizedDescription)")
+            show(failure: error)
         }
     }
 
