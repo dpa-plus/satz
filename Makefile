@@ -12,6 +12,9 @@ app:
 	mkdir -p "$(APP)/Contents/MacOS" "$(APP)/Contents/Resources"
 	cp "$(BIN)" "$(APP)/Contents/MacOS/satz"
 	cp Resources/Info.plist "$(APP)/Contents/Info.plist"
+	# This folder is cloud-synced, which stamps extended attributes onto every
+	# file. codesign refuses to sign a bundle carrying them.
+	xattr -cr "$(APP)"
 	codesign --force --sign - "$(APP)"
 	@echo "built $(APP)"
 
