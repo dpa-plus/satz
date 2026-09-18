@@ -273,8 +273,27 @@ private struct KeyRow: View {
     }
 }
 
+/// A setup action. Orange only for the step to do next: with three missing
+/// steps and three orange buttons, nothing reads as "start here".
+private struct SetupButton: View {
+    let title: String
+    let isNext: Bool
+    let action: () -> Void
+
+    var body: some View {
+        if isNext {
+            Button(title, action: action).buttonStyle(.primary)
+        } else {
+            Button(title, action: action).buttonStyle(.quiet)
+        }
+    }
+}
+
 private struct MicrophoneRow: View {
     let setup: Setup
+
+    /// The key comes first, so the microphone is next only once it is stored.
+    private var isNext: Bool { setup.hasKey }
 
     var body: some View {
         SetupRow(done: setup.microphone == .allowed, title: "Mikrofon", detail: detail) {
@@ -282,9 +301,9 @@ private struct MicrophoneRow: View {
             case .allowed:
                 EmptyView()
             case .notAsked:
-                Button("Erlauben") { Task { await setup.requestMicrophone() } }.buttonStyle(.primary)
+                SetupButton(title: "Erlauben", isNext: isNext) { Task { await setup.requestMicrophone() } }
             case .denied:
-                Button("Einstellungen") { Task { await setup.requestMicrophone() } }.buttonStyle(.primary)
+                SetupButton(title: "Einstellungen", isNext: isNext) { Task { await setup.requestMicrophone() } }
             }
         }
     }
@@ -310,7 +329,10 @@ private struct PasteRow: View {
                 : "Ohne diese Freigabe landet der Text nur in der Zwischenablage."
         ) {
             if !setup.canPaste {
-                Button("Erlauben") { setup.requestPaste() }.buttonStyle(.primary)
+                SetupButton(
+                    title: "Erlauben",
+                    isNext: setup.hasKey && setup.microphone == .allowed
+                ) { setup.requestPaste() }
             }
         }
     }
