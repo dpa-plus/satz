@@ -33,6 +33,10 @@ public struct Transcriber: Sendable {
         /// starts, keeps every word that carries meaning. Ignored by models
         /// that do not have it.
         public var removesFillers = true
+        /// Tries per request when the provider throttles. MAI-Transcribe
+        /// answers 429 "retry after 2 seconds" now and then, even when idle,
+        /// and the next try goes through.
+        public var attempts = 3
         /// nil lets the model detect the language, which is what you want if
         /// you switch languages mid-sentence.
         public var language: String?
@@ -95,6 +99,23 @@ public struct Transcriber: Sendable {
         guard !apiKey.isEmpty else { throw Failure.noKey }
 
         let request = makeRequest(wav: wav, apiKey: apiKey)
+        var attempt = 1
+        while true {
+            let (data, http) = try await send(request)
+            if http.statusCode == 429, attempt < settings.attempts {
+                attempt += 1
+                try await Task.sleep(for: .seconds(Self.retryDelay(http: http, body: data)))
+                continue
+            }
+            guard (200 ..< 300).contains(http.statusCode) else {
+                throw Self.failure(status: http.statusCode, body: data)
+            }
+            guard let text = Self.text(in: data) else { throw Failure.unreadableResponse }
+            return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
+    private func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         let data: Data
         let response: URLResponse
         do {
@@ -102,13 +123,8 @@ public struct Transcriber: Sendable {
         } catch let error as URLError {
             throw Self.translate(error)
         }
-
         guard let http = response as? HTTPURLResponse else { throw Failure.unreadableResponse }
-        guard (200 ..< 300).contains(http.statusCode) else {
-            throw Self.failure(status: http.statusCode, body: data)
-        }
-        guard let text = Self.text(in: data) else { throw Failure.unreadableResponse }
-        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (data, http)
     }
 
     // MARK: - Private
@@ -154,6 +170,17 @@ public struct Transcriber: Sendable {
         ]
         if let language = settings.language { body["language"] = language }
         return body
+    }
+
+    /// How long the provider asks us to wait: the Retry-After header, or
+    /// OpenRouter's copy of it in the body. Capped, because a dictation that
+    /// sits for a minute is worse than one that says it failed.
+    static func retryDelay(http: HTTPURLResponse, body: Data) -> Double {
+        let header = http.value(forHTTPHeaderField: "Retry-After").flatMap(Double.init)
+        let metadata = (try? JSONSerialization.jsonObject(with: body) as? [String: Any])
+            .flatMap { ($0["error"] as? [String: Any])?["metadata"] as? [String: Any] }
+            .flatMap { $0["retry_after_seconds"] as? Double }
+        return min(5, max(0, header ?? metadata ?? 2))
     }
 
     static func translate(_ error: URLError) -> Failure {
