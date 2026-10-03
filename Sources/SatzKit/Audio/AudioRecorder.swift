@@ -119,12 +119,31 @@ public final class AudioRecorder: @unchecked Sendable {
     /// Stops after the tail has elapsed and returns the recording as WAV bytes.
     /// Returns `nil` if the recording was cancelled, or if it captured nothing.
     public func finish() async -> Data? {
+        guard let captured = await finishSamples(), !captured.isEmpty else { return nil }
+        return WAVEncoder.encode(samples: captured, sampleRate: Int(settings.sampleRate))
+    }
+
+    /// Like `finish()`, but hands back the raw samples, for callers that join
+    /// several recordings into one before sending.
+    public func finishSamples() async -> [Float]? {
         guard lock.withLock({ isRunning }) else { return nil }
         try? await Task.sleep(for: settings.tail)
+        return teardown()
+    }
 
-        let captured = teardown()
-        guard let captured, !captured.isEmpty else { return nil }
-        return WAVEncoder.encode(samples: captured, sampleRate: Int(settings.sampleRate))
+    /// Samples captured so far, while still recording.
+    public var sampleCount: Int {
+        lock.withLock { samples.count }
+    }
+
+    /// A stretch of what has been captured so far, without stopping. Used to
+    /// split a recording at a moment the user chose, with no gap at the cut.
+    public func samples(from start: Int, to end: Int) -> [Float] {
+        lock.withLock {
+            let upper = min(end, samples.count)
+            guard start < upper else { return [] }
+            return Array(samples[max(0, start) ..< upper])
+        }
     }
 
     /// Stops immediately and discards everything captured.
