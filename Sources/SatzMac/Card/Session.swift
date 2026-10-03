@@ -188,6 +188,10 @@ final class Session {
         }
         phase = .paused
         onOpen()
+        // Anything that was on its way when it was thrown away goes again.
+        for (id, segment) in segments where segment.audio.count > segment.transcribed {
+            send(id)
+        }
     }
 
     /// "Nochmal" after a failure.
