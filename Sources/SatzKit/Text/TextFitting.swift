@@ -11,12 +11,14 @@ import NaturalLanguage
 /// there only a short list of function words is lowered.
 public enum TextFitting {
 
-    public static func fit(_ transcript: String, into text: NSString, at range: NSRange, markerFollows: Bool) -> String {
+    /// - Parameter skip: characters right after `range` that are not part of
+    ///   the text (satz's placeholder), to look past.
+    public static func fit(_ transcript: String, into text: NSString, at range: NSRange, skipping skip: Int = 0) -> String {
         var result = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !result.isEmpty else { return "" }
 
         let before = previousVisible(in: text, before: range.location)
-        let afterIndex = NSMaxRange(range) + (markerFollows ? 1 : 0)
+        let afterIndex = NSMaxRange(range) + skip
         let after = afterIndex < text.length ? Character(UnicodeScalar(text.character(at: afterIndex)) ?? " ") : nil
 
         let midSentence = before.map { !".!?…:\n".contains($0) } ?? false

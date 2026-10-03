@@ -433,8 +433,9 @@ final class Session {
         } else {
             target = NSRange(location: text.length, length: 0)
         }
-        let piece = TextFitting.fit(transcript, into: text.string as NSString, at: target,
-                                    markerFollows: markerRange(id).map { $0.location == NSMaxRange(target) } ?? false)
+        let marker = markerRange(id)
+        let skip = marker.map { $0.location == NSMaxRange(target) ? $0.length : 0 } ?? 0
+        let piece = TextFitting.fit(transcript, into: text.string as NSString, at: target, skipping: skip)
         var attributes = Self.textAttributes
         attributes[.satzSegment] = id
         edit { text.replaceCharacters(in: target, with: NSAttributedString(string: piece, attributes: attributes)) }
@@ -513,7 +514,7 @@ final class Session {
 
     private func isAtMarker(_ location: Int, of id: Int) -> Bool {
         guard let marker = markerRange(id) else { return false }
-        return location == marker.location || location == NSMaxRange(marker)
+        return location >= marker.location && location <= NSMaxRange(marker)
     }
 
     private func isStrictlyInside(_ location: Int, segment id: Int) -> Bool {
@@ -656,7 +657,8 @@ final class Session {
         var attributes = textAttributes
         attributes[.foregroundColor] = NSColor(Theme.dark.accent)
         attributes[.satzMarker] = id
-        return NSAttributedString(string: "…", attributes: attributes)
+        // With a space of its own, so it never sticks to the text before it.
+        return NSAttributedString(string: " …", attributes: attributes)
     }
 
     /// The app the user is working in, never satz itself.

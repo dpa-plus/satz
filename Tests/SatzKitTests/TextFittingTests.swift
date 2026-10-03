@@ -2,10 +2,10 @@ import Foundation
 import Testing
 @testable import SatzKit
 
-private func insert(_ transcript: String, into text: String, after anchor: String, marker: Bool = false) -> String {
+private func insert(_ transcript: String, into text: String, after anchor: String) -> String {
     let source = text as NSString
     let location = source.range(of: anchor).location + (anchor as NSString).length
-    let piece = TextFitting.fit(transcript, into: source, at: NSRange(location: location, length: 0), markerFollows: marker)
+    let piece = TextFitting.fit(transcript, into: source, at: NSRange(location: location, length: 0))
     return source.replacingCharacters(in: NSRange(location: location, length: 0), with: piece)
 }
 
@@ -34,13 +34,13 @@ private func insert(_ transcript: String, into text: String, after anchor: Strin
 }
 
 @Test func atTheStartNothingIsAdded() {
-    #expect(TextFitting.fit("Hallo Welt.", into: "" as NSString, at: NSRange(location: 0, length: 0), markerFollows: false) == "Hallo Welt.")
+    #expect(TextFitting.fit("Hallo Welt.", into: "" as NSString, at: NSRange(location: 0, length: 0)) == "Hallo Welt.")
 }
 
 @Test func thePlaceholderAfterTheInsertIsSkipped() {
     // "…" is satz's placeholder; what counts is the text after it.
-    let text = "Eine Funktion…, die liest."
+    let text = "Eine Funktion …, die liest."
     let location = ("Eine Funktion" as NSString).length
-    let piece = TextFitting.fit("Nur PDFs.", into: text as NSString, at: NSRange(location: location, length: 0), markerFollows: true)
+    let piece = TextFitting.fit("Nur PDFs.", into: text as NSString, at: NSRange(location: location, length: 0), skipping: 2)
     #expect(piece == " nur PDFs")
 }
