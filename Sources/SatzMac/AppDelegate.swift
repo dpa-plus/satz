@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBar: MenuBarItem!
     private var settingsWindow: AppWindow!
     private var setupWindow: AppWindow!
+    private var devControl: DevControl?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Typography.registerBundledFonts()
@@ -42,6 +43,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         card = CardController(session: session, preferences: preferences)
         session.onOpen = { [weak self] in self?.card.show() }
         session.onClose = { [weak self] in self?.card.hide() }
+        if let files = argument(after: "--test-audio") {
+            AudioSources.testFiles = files.split(separator: ":").map { URL(fileURLWithPath: String($0)) }
+        }
+        if let stateFile = argument(after: "--dev-control") {
+            devControl = DevControl(session: session, stateFile: URL(fileURLWithPath: stateFile))
+        }
         shortcut = Shortcut(
             preferences: preferences,
             onPress: { [weak self] in self?.session.press() },

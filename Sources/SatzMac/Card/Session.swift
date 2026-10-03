@@ -66,6 +66,8 @@ final class Session {
     @ObservationIgnored private(set) var isEditing = false
 
     @ObservationIgnored var onOpen: () -> Void = {}
+    /// Test mode: receives the finished text instead of it being pasted.
+    @ObservationIgnored var deliverOverride: ((String) -> Void)?
     @ObservationIgnored var onClose: () -> Void = {}
 
     @ObservationIgnored private let preferences: Preferences
@@ -75,7 +77,7 @@ final class Session {
     @ObservationIgnored private var segments: [Int: Segment] = [:]
     @ObservationIgnored private var activeID: Int?
     @ObservationIgnored private var nextID = 1
-    @ObservationIgnored private var recorder: AudioRecorder?
+    @ObservationIgnored private var recorder: AudioSource?
     /// Where the active recording's audio starts in `recorder`'s buffer.
     @ObservationIgnored private var liveStart = 0
     @ObservationIgnored private var sends: [Int: Task<Void, Never>] = [:]
@@ -260,9 +262,7 @@ final class Session {
         levels = Array(repeating: 0, count: levels.count)
         holdEscape()
 
-        var settings = AudioRecorder.Settings()
-        settings.inputDeviceID = InputDevices.id(forUID: preferences.inputDeviceUID)
-        let recorder = AudioRecorder(settings: settings)
+        let recorder = AudioSources.make(inputDeviceUID: preferences.inputDeviceUID)
         recorder.onLevel = { [weak self] level in self?.push(level) }
 
         Task {
@@ -362,6 +362,10 @@ final class Session {
         let origin = self.origin
         // Gone before pasting, so the keyboard is back with the app it belongs to.
         close()
+        if let deliverOverride {
+            deliverOverride(output)
+            return
+        }
         let outcome = Paster.deliver(output, into: origin)
         history.add(output, app: origin?.localizedName, pasted: outcome == .pasted)
         if case .clipboardOnly(let reason) = outcome {
@@ -388,6 +392,7 @@ final class Session {
         let provider = preferences.provider
         let token = sessionToken
         inFlight.insert(id)
+        let started = Date()
 
         sends[id] = Task {
             let result: Result<String, Error>
@@ -404,6 +409,7 @@ final class Session {
             guard !Task.isCancelled, token == sessionToken else { return }
             inFlight.remove(id)
             sends[id] = nil
+            Log.note(String(format: "sent %.1f s of audio, answer after %.1f s", Double(covered) / 16_000, Date().timeIntervalSince(started)))
             switch result {
             case .success(let raw):
                 apply(Replacements.apply(rules, to: raw), to: id, covering: covered)
@@ -427,35 +433,14 @@ final class Session {
         } else {
             target = NSRange(location: text.length, length: 0)
         }
-        let piece = spaced(transcript, at: target)
+        let piece = TextFitting.fit(transcript, into: text.string as NSString, at: target,
+                                    markerFollows: markerRange(id).map { $0.location == NSMaxRange(target) } ?? false)
         var attributes = Self.textAttributes
         attributes[.satzSegment] = id
         edit { text.replaceCharacters(in: target, with: NSAttributedString(string: piece, attributes: attributes)) }
         segment.transcribed = count
         segments[id] = segment
         removeMarkerIfDone(id)
-    }
-
-    /// A space before and after the transcript where the text around it
-    /// needs one, so a sentence inserted mid-paragraph does not glue on.
-    private func spaced(_ transcript: String, at range: NSRange) -> String {
-        guard !transcript.isEmpty else { return "" }
-        let string = text.string as NSString
-        var result = transcript
-        if range.location > 0 {
-            let before = string.character(at: range.location - 1)
-            if let scalar = Unicode.Scalar(before), !CharacterSet.whitespacesAndNewlines.contains(scalar),
-               !"([{„\"“".unicodeScalars.contains(scalar) {
-                result = " " + result
-            }
-        }
-        var after = NSMaxRange(range)
-        if after < string.length, text.attribute(.satzMarker, at: after, effectiveRange: nil) != nil { after += 1 }
-        if after < string.length, let scalar = Unicode.Scalar(string.character(at: after)),
-           CharacterSet.alphanumerics.contains(scalar) {
-            result += " "
-        }
-        return result
     }
 
     // MARK: - Segments
