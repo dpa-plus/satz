@@ -31,13 +31,13 @@ import Testing
 
 @Test func vocabularyIsSentOnlyWhenItHasContent() throws {
     var withWords = Transcriber.Settings()
-    withWords.vocabulary = "ACON, Immofanten, Prozesshub"
+    withWords.vocabulary = ["ACON", "Immofanten", "Prozesshub"]
     let filled = String(
         decoding: try #require(Transcriber(settings: withWords).makeRequest(wav: Data(), apiKey: "k").httpBody),
         as: UTF8.self
     )
     #expect(filled.contains("name=\"prompt\""))
-    #expect(filled.contains("Immofanten"))
+    #expect(filled.contains("ACON, Immofanten, Prozesshub"))
 
     let empty = String(
         decoding: try #require(Transcriber().makeRequest(wav: Data(), apiKey: "k").httpBody),
@@ -85,4 +85,58 @@ import Testing
     #expect(Transcriber.text(in: Data(#"{"text":"Hallo Welt"}"#.utf8)) == "Hallo Welt")
     #expect(Transcriber.text(in: Data("not json".utf8)) == nil)
     #expect(Transcriber.text(in: Data(#"{"nope":1}"#.utf8)) == nil)
+}
+
+// MARK: - OpenRouter
+
+private func openRouterJSON(_ settings: Transcriber.Settings, wav: Data = Data("RIFFxxxx".utf8)) throws -> [String: Any] {
+    let request = Transcriber(settings: settings).makeRequest(wav: wav, apiKey: "sk-or-test")
+    #expect(request.value(forHTTPHeaderField: "Content-Type") == "application/json")
+    let body = try #require(request.httpBody)
+    let object = try JSONSerialization.jsonObject(with: body)
+    return try #require(object as? [String: Any])
+}
+
+private func azure(_ json: [String: Any]) -> [String: Any]? {
+    ((json["provider"] as? [String: Any])?["options"] as? [String: Any])?["azure"] as? [String: Any]
+}
+
+@Test func openRouterGetsJSONWithTheAudioInline() throws {
+    // OpenRouter accepts multipart too, but then silently ignores the word list
+    // and offers no place for provider options.
+    let json = try openRouterJSON(Transcriber.Settings(provider: .openRouter))
+
+    #expect(json["model"] as? String == "microsoft/mai-transcribe-2")
+    let audio = try #require(json["input_audio"] as? [String: Any])
+    #expect(audio["format"] as? String == "wav")
+    #expect(audio["data"] as? String == Data("RIFFxxxx".utf8).base64EncodedString())
+}
+
+@Test func cleanModeIsOnUnlessSwitchedOff() throws {
+    var settings = Transcriber.Settings(provider: .openRouter)
+    let style = { (json: [String: Any]) in
+        ((azure(json)?["enhancedMode"] as? [String: Any])?["modelOptions"] as? [String: Any])?["transcribeStyle"] as? String
+    }
+    #expect(style(try openRouterJSON(settings)) == "clean")
+
+    settings.removesFillers = false
+    #expect(style(try openRouterJSON(settings)) == "verbatim")
+}
+
+@Test func theWordListGoesToMAIsPhraseList() throws {
+    var settings = Transcriber.Settings(provider: .openRouter)
+    #expect(azure(try openRouterJSON(settings))?["phraseList"] == nil)
+
+    settings.vocabulary = ["ACON", "XX"]
+    let phrases = (azure(try openRouterJSON(settings))?["phraseList"] as? [String: Any])?["phrases"] as? [String]
+    #expect(phrases == ["ACON", "XX"])
+}
+
+@Test func longRecordingsGetMoreTime() {
+    var settings = Transcriber.Settings()
+    settings.timeout = 30
+    let fiveMinutes = Data(count: 44 + 300 * 32_000)
+    let request = Transcriber(settings: settings).makeRequest(wav: fiveMinutes, apiKey: "k")
+
+    #expect(request.timeoutInterval == 30 + 75)
 }

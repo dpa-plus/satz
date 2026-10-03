@@ -2,10 +2,11 @@ import Foundation
 
 /// Where the audio goes to become text.
 ///
-/// Every provider here speaks the same wire format: OpenAI's
-/// `POST {base}/audio/transcriptions` with a multipart upload. That is why
-/// supporting another one is a base URL and a default model, not new code, and
-/// why a custom endpoint works for anything that copies OpenAI's API.
+/// Every provider here takes `POST {base}/audio/transcriptions`: a multipart
+/// upload in OpenAI's format, or JSON for OpenRouter (see
+/// `Transcriber.Format`). That is why supporting another one is a base URL and
+/// a default model, and why a custom endpoint works for anything that copies
+/// OpenAI's API.
 public enum Provider: String, CaseIterable, Identifiable, Sendable {
     case openAI = "openai"
     case openRouter = "openrouter"
@@ -39,7 +40,9 @@ public enum Provider: String, CaseIterable, Identifiable, Sendable {
     public var defaultModel: String {
         switch self {
         case .openAI: "gpt-transcribe"
-        case .openRouter: "openai/gpt-transcribe"
+        // 2.0% word errors on Artificial Analysis in Sept. 2026 against 3.3%
+        // for GPT Transcribe, at a third of the price, and it has a clean mode.
+        case .openRouter: "microsoft/mai-transcribe-2"
         case .groq: "whisper-large-v3-turbo"
         case .custom: ""
         }

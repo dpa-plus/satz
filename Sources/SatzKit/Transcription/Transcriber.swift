@@ -1,21 +1,38 @@
 import Foundation
 
 /// Turns recorded audio into text, using any provider that speaks OpenAI's
-/// transcription API.
+/// transcription API, or OpenRouter's JSON flavour of it.
 ///
 /// One request, one timeout, one result. There is deliberately no second model
 /// rewriting the transcript: what you said is what you get.
 public struct Transcriber: Sendable {
 
+    /// How the audio travels. Both go to `{base}/audio/transcriptions`.
+    public enum Format: Sendable, Equatable {
+        /// OpenAI's own: a multipart file upload. Also Groq and most copies.
+        case multipart
+        /// OpenRouter's: JSON with the audio base64-encoded. It takes multipart
+        /// too, but then drops `prompt` and has nowhere to put provider options,
+        /// so the word list and clean mode would be lost.
+        case openRouter
+    }
+
     public struct Settings: Sendable {
         public var model: String = Provider.openAI.defaultModel
         public var baseURL: URL = Provider.openAI.baseURL!
+        public var format: Format = .multipart
         /// Every request is bounded. A dictation tool that can hang is worse
-        /// than one that fails, because you cannot tell hung from slow.
+        /// than one that fails, because you cannot tell hung from slow. Long
+        /// recordings get more on top, see `timeout(for:)`.
         public var timeout: TimeInterval = 30
-        /// Names, jargon and spellings to bias recognition towards. This is the
-        /// endpoint's own `prompt` parameter, not a second model.
-        public var vocabulary: String = ""
+        /// Names, jargon and spellings to bias recognition towards. Sent as the
+        /// endpoint's own hint (`prompt`, or MAI's phrase list), not to a
+        /// second model.
+        public var vocabulary: [String] = []
+        /// MAI-Transcribe's clean style: drops fillers, stutters and false
+        /// starts, keeps every word that carries meaning. Ignored by models
+        /// that do not have it.
+        public var removesFillers = true
         /// nil lets the model detect the language, which is what you want if
         /// you switch languages mid-sentence.
         public var language: String?
@@ -30,6 +47,13 @@ public struct Transcriber: Sendable {
             }
             let chosen = model.trimmingCharacters(in: .whitespaces)
             self.model = chosen.isEmpty ? provider.defaultModel : chosen
+            format = provider == .openRouter ? .openRouter : .multipart
+        }
+
+        /// The base timeout plus a second per four seconds of audio: a five
+        /// minute ramble is a 10 MB upload and should not fail at 30 seconds.
+        func timeout(for wav: Data) -> TimeInterval {
+            timeout + Double(max(0, wav.count - 44)) / 32_000 / 4
         }
     }
 
@@ -90,22 +114,46 @@ public struct Transcriber: Sendable {
     // MARK: - Private
 
     func makeRequest(wav: Data, apiKey: String) -> URLRequest {
-        var fields: [(name: String, value: String)] = [("model", settings.model)]
-        if !settings.vocabulary.isEmpty { fields.append(("prompt", settings.vocabulary)) }
-        if let language = settings.language { fields.append(("language", language)) }
-        fields.append(("response_format", "json"))
-
-        let body = MultipartBody()
         var request = URLRequest(url: settings.baseURL.appendingPathComponent("audio/transcriptions"))
         request.httpMethod = "POST"
-        request.timeoutInterval = settings.timeout
+        request.timeoutInterval = settings.timeout(for: wav)
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue(body.contentType, forHTTPHeaderField: "Content-Type")
-        request.httpBody = body.encode(
-            fields: fields,
-            file: ("file", "speech.wav", "audio/wav", wav)
-        )
+
+        switch settings.format {
+        case .multipart:
+            var fields: [(name: String, value: String)] = [("model", settings.model)]
+            let words = settings.vocabulary.joined(separator: ", ")
+            if !words.isEmpty { fields.append(("prompt", words)) }
+            if let language = settings.language { fields.append(("language", language)) }
+            fields.append(("response_format", "json"))
+
+            let body = MultipartBody()
+            request.setValue(body.contentType, forHTTPHeaderField: "Content-Type")
+            request.httpBody = body.encode(fields: fields, file: ("file", "speech.wav", "audio/wav", wav))
+
+        case .openRouter:
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try? JSONSerialization.data(withJSONObject: openRouterBody(wav: wav), options: [.sortedKeys, .withoutEscapingSlashes])
+        }
         return request
+    }
+
+    /// OpenRouter forwards `provider.options.<slug>` only to that provider, so
+    /// the Azure block reaches MAI-Transcribe and nothing else.
+    func openRouterBody(wav: Data) -> [String: Any] {
+        var azure: [String: Any] = [
+            "enhancedMode": ["modelOptions": ["transcribeStyle": settings.removesFillers ? "clean" : "verbatim"]],
+        ]
+        if !settings.vocabulary.isEmpty {
+            azure["phraseList"] = ["phrases": settings.vocabulary]
+        }
+        var body: [String: Any] = [
+            "model": settings.model,
+            "input_audio": ["data": wav.base64EncodedString(), "format": "wav"],
+            "provider": ["options": ["azure": azure]],
+        ]
+        if let language = settings.language { body["language"] = language }
+        return body
     }
 
     static func translate(_ error: URLError) -> Failure {

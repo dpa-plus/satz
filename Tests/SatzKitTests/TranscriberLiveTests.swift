@@ -6,22 +6,30 @@ import Testing
 /// so `make test` stays offline and free:
 ///
 ///     SATZ_TEST_API_KEY=sk-... make test
-///     SATZ_TEST_BASE_URL=https://openrouter.ai/api/v1 SATZ_TEST_MODEL=openai/gpt-transcribe ...
+///     SATZ_TEST_BASE_URL=https://openrouter.ai/api/v1 SATZ_TEST_MODEL=microsoft/mai-transcribe-2 ...
 ///
 /// It uploads one second of silence. The transcript is expected to be empty;
 /// what is being proved is that the request we build is one the server accepts.
 private let liveKey = ProcessInfo.processInfo.environment["SATZ_TEST_API_KEY"]
 
-@Test(.enabled(if: liveKey != nil))
-func aRealServerAcceptsTheRequestWeBuild() async throws {
+/// Settings for the endpoint in the environment. An OpenRouter URL switches to
+/// its JSON format, which is what the app sends there.
+private func liveSettings() -> Transcriber.Settings {
     let environment = ProcessInfo.processInfo.environment
     var settings = Transcriber.Settings()
     if let base = environment["SATZ_TEST_BASE_URL"], let url = URL(string: base) {
         settings.baseURL = url
+        if url.host == "openrouter.ai" { settings.format = .openRouter }
     }
     if let model = environment["SATZ_TEST_MODEL"] {
         settings.model = model
     }
+    return settings
+}
+
+@Test(.enabled(if: liveKey != nil))
+func aRealServerAcceptsTheRequestWeBuild() async throws {
+    let settings = liveSettings()
 
     let silence = WAVEncoder.encode(
         samples: Array(repeating: 0, count: 16_000),
@@ -42,13 +50,7 @@ func aRealServerAcceptsTheRequestWeBuild() async throws {
 @Test(.enabled(if: liveKey != nil && ProcessInfo.processInfo.environment["SATZ_TEST_WAV"] != nil))
 func realSpeechComesBackAsWords() async throws {
     let environment = ProcessInfo.processInfo.environment
-    var settings = Transcriber.Settings()
-    if let base = environment["SATZ_TEST_BASE_URL"], let url = URL(string: base) {
-        settings.baseURL = url
-    }
-    if let model = environment["SATZ_TEST_MODEL"] {
-        settings.model = model
-    }
+    let settings = liveSettings()
 
     let wav = try Data(contentsOf: URL(fileURLWithPath: try #require(environment["SATZ_TEST_WAV"])))
     let text = try await Transcriber(settings: settings)

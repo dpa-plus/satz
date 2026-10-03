@@ -15,7 +15,7 @@ private func body(_ settings: Transcriber.Settings) throws -> String {
 
 @Test(arguments: [
     (Provider.openAI, "https://api.openai.com/v1/audio/transcriptions", "gpt-transcribe"),
-    (Provider.openRouter, "https://openrouter.ai/api/v1/audio/transcriptions", "openai/gpt-transcribe"),
+    (Provider.openRouter, "https://openrouter.ai/api/v1/audio/transcriptions", "microsoft/mai-transcribe-2"),
     (Provider.groq, "https://api.groq.com/openai/v1/audio/transcriptions", "whisper-large-v3-turbo"),
 ])
 func eachProviderIsAskedAtItsOwnEndpoint(provider: Provider, url: String, model: String) throws {
