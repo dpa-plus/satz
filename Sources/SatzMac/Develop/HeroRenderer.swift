@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Renders the repository's hero image.
 ///
-/// It draws the real pill, so the picture in the README cannot drift away
+/// It draws the real card, so the picture in the README cannot drift away
 /// from the product the way a hand-made mockup does. Regenerate with:
 ///
 ///     satz --hero assets/hero.png
@@ -12,6 +12,13 @@ enum HeroRenderer {
 
     static func write(to path: String) throws {
         try SnapshotRenderer.png(of: hero).write(to: URL(fileURLWithPath: path))
+    }
+
+    private static var card: Session {
+        let session = Session(preferences: Preferences(defaults: nil), history: History(), discarded: Discarded())
+        session.stage(.listening, text: "Kurzbefehl drücken, reden, nochmal drücken. ", marker: true,
+                      levels: [0.1, 0.3, 0.55, 0.8, 0.62, 0.35, 0.5, 0.75, 0.9, 0.6, 0.3, 0.45])
+        return session
     }
 
     private static var hero: some View {
@@ -24,13 +31,10 @@ enum HeroRenderer {
             Text("Sprechen statt Tippen.")
                 .font(Typography.text(20, .medium))
                 .foregroundStyle(theme.accent)
-            Text("Kurzbefehl drücken, reden, nochmal drücken. Der Text steht da, wo der Cursor war.")
-                .font(Typography.text(15))
-                .foregroundStyle(theme.inkSecondary)
-            PillView(recording: SnapshotRenderer.listening, onCancel: {}, onRetry: {})
+            CardView(session: card, preferences: Preferences(defaults: nil))
                 .padding(.top, 8)
         }
-        .frame(width: 1000, height: 460)
+        .frame(width: 1000, height: 480)
         .background(theme.ground)
         .environment(\.theme, theme)
         .environment(\.isSnapshot, true)

@@ -8,12 +8,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let preferences = Preferences()
     private let history = History()
-    private let outbox = Outbox()
+    private let discarded = Discarded()
     private let launchAtLogin = LaunchAtLogin()
     private lazy var setup = Setup(preferences: preferences)
 
-    private var pill: PillController!
-    private var dictation: Dictation!
+    private var session: Session!
+    private var card: CardController!
     private var shortcut: Shortcut!
     private var menuBar: MenuBarItem!
     private var settingsWindow: AppWindow!
@@ -38,15 +38,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        pill = PillController(
-            onCancel: { [weak self] in self?.dictation.cancel() },
-            onRetry: { [weak self] in self?.dictation.retry() }
-        )
-        dictation = Dictation(pill: pill, preferences: preferences, history: history, outbox: outbox)
+        session = Session(preferences: preferences, history: history, discarded: discarded)
+        card = CardController(session: session, preferences: preferences)
+        session.onOpen = { [weak self] in self?.card.show() }
+        session.onClose = { [weak self] in self?.card.hide() }
         shortcut = Shortcut(
             preferences: preferences,
-            onPress: { [weak self] in self?.dictation.press() },
-            onRelease: { [weak self] in self?.dictation.release() }
+            onPress: { [weak self] in self?.session.press() },
+            onRelease: { [weak self] in self?.session.release() }
         )
         shortcut.start()
 
@@ -65,10 +64,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menuBar = MenuBarItem { [unowned self] in
             AnyView(PopoverView(
-                history: history, outbox: outbox, setup: setup, shortcut: shortcut, preferences: preferences,
+                history: history, discarded: discarded, setup: setup, shortcut: shortcut, preferences: preferences,
                 actions: PopoverActions(
-                    retry: { [weak self] in self?.menuBar.close(); self?.dictation.retry() },
-                    discard: { [weak self] in self?.dictation.discard() },
+                    restore: { [weak self] in
+                        guard let self, let snapshot = discarded.take() else { return }
+                        menuBar.close()
+                        session.restore(snapshot)
+                    },
                     openSetup: { [weak self] in self?.menuBar.close(); self?.setupWindow.show() },
                     openSettings: { [weak self] in self?.menuBar.close(); self?.settingsWindow.show() },
                     quit: { NSApp.terminate(nil) }
@@ -85,11 +87,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !setup.isComplete {
             setupWindow.show()
         }
-
-        if CommandLine.arguments.contains("--demo") {
-            pill.show()
-            DemoDriver.run(on: pill.recording)
-        }
     }
 
     /// Opening the app again from Finder or Spotlight shows the settings. A
@@ -102,7 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The orange dot on the menu bar icon: something needs the user.
     private func watchAttention() {
         withObservationTracking {
-            menuBar.needsAttention = outbox.pending != nil || !setup.isComplete || shortcut.status == .taken
+            menuBar.needsAttention = !setup.isComplete || shortcut.status == .taken
         } onChange: { [weak self] in
             Task { @MainActor in self?.watchAttention() }
         }

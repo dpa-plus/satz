@@ -9,7 +9,7 @@ import SwiftUI
 /// something breaks, the problem takes the top and the rest steps back.
 struct PopoverView: View {
     let history: History
-    let outbox: Outbox
+    let discarded: Discarded
     let setup: Setup
     let shortcut: Shortcut
     let preferences: Preferences
@@ -21,15 +21,16 @@ struct PopoverView: View {
         VStack(alignment: .leading, spacing: 10) {
             problem
 
-            Group {
-                if let latest = history.entries.first {
-                    LatestCard(entry: latest)
-                    EarlierRows(entries: Array(history.entries.dropFirst()))
-                } else {
-                    EmptyHint(trigger: preferences.trigger, mode: preferences.triggerMode)
-                }
+            if let latest = history.entries.first {
+                LatestCard(entry: latest)
+                EarlierRows(entries: Array(history.entries.dropFirst()))
+            } else if discarded.last == nil {
+                EmptyHint(trigger: preferences.trigger, mode: preferences.triggerMode)
             }
-            .opacity(outbox.pending == nil ? 1 : 0.45)
+
+            if let snapshot = discarded.last {
+                DiscardedRow(preview: snapshot.preview, restore: actions.restore)
+            }
 
             Rule()
 
@@ -37,6 +38,7 @@ struct PopoverView: View {
         }
         .padding(12)
         .frame(width: 340)
+        .onAppear { setup.refresh() }
         .background(theme.ground)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(theme.cardBorder, lineWidth: 1.5))
@@ -45,30 +47,19 @@ struct PopoverView: View {
     /// At most one thing is wrong at a time, in order of how much it blocks.
     @ViewBuilder
     private var problem: some View {
-        if let pending = outbox.pending {
-            ProblemCard(
-                title: pending.reason,
-                detail: Self.duration(pending.duration),
-                primary: ("Nochmal senden", actions.retry),
-                secondary: ("Verwerfen", actions.discard)
-            )
-        } else if !setup.isComplete {
+        if !setup.isComplete {
             ProblemCard(title: "Einrichtung fehlt", primary: ("Einrichten", actions.openSetup))
         } else if shortcut.status == .taken {
             ProblemCard(title: "Tasten belegt", primary: ("Ändern", actions.openSettings))
         }
     }
 
-    private static func duration(_ seconds: TimeInterval) -> String {
-        let total = Int(seconds.rounded())
-        return String(format: "%d:%02d", total / 60, total % 60)
-    }
 }
 
 /// What the popover can ask the app to do.
 struct PopoverActions {
-    var retry: () -> Void = {}
-    var discard: () -> Void = {}
+    /// Brings the last discarded dictation back into the card.
+    var restore: () -> Void = {}
     var openSetup: () -> Void = {}
     var openSettings: () -> Void = {}
     var quit: () -> Void = {}
@@ -110,6 +101,36 @@ private struct ProblemCard: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .surface()
+    }
+}
+
+/// The last dictation thrown away with ×, one click from coming back.
+private struct DiscardedRow: View {
+    let preview: String
+    let restore: () -> Void
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Rule()
+            HStack(spacing: 10) {
+                Image(systemName: "trash")
+                    .font(.system(size: 12, weight: .medium))
+                Text(preview.isEmpty ? "Aufnahme ohne Text" : preview)
+                    .font(Typography.text(14))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button(action: restore) {
+                    Label("Zurückholen", systemImage: "arrow.uturn.backward")
+                        .labelStyle(.titleAndIcon)
+                }
+                .buttonStyle(.outlineCompact)
+            }
+            .foregroundStyle(theme.inkSecondary)
+            .padding(.horizontal, 8)
+            .frame(height: 34)
+        }
     }
 }
 

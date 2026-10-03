@@ -47,6 +47,21 @@ final class Preferences {
         didSet { defaults?.set(inputDeviceUID, forKey: Key.inputDeviceUID) }
     }
 
+    /// Whether the card shows the text while dictating (the eye button).
+    var showsText: Bool {
+        didSet { defaults?.set(showsText, forKey: Key.showsText) }
+    }
+
+    /// Spoken words that become symbols: "Klammer auf" becomes "(".
+    var replacements: [Replacement] {
+        didSet { defaults?.set(try? JSONEncoder().encode(replacements), forKey: Key.replacements) }
+    }
+
+    /// MAI-Transcribe's clean mode: no "ähm", no stutters, no false starts.
+    var removesFillers: Bool {
+        didSet { defaults?.set(removesFillers, forKey: Key.removesFillers) }
+    }
+
     /// Everything the transcriber needs, read fresh at send time so an edit in
     /// the settings window applies to the very next dictation.
     var transcriberSettings: Transcriber.Settings {
@@ -55,7 +70,10 @@ final class Preferences {
             model: model,
             customBaseURL: URL(string: customBaseURL.trimmingCharacters(in: .whitespaces))
         )
-        settings.vocabulary = words
+        // Trigger words go in too: a made-up one only survives transcription
+        // if the model was told to expect it.
+        settings.vocabulary = words + Replacements.phrases(replacements)
+        settings.removesFillers = removesFillers
         return settings
     }
 
@@ -91,6 +109,9 @@ final class Preferences {
         static let trigger = "trigger"
         static let triggerMode = "triggerMode"
         static let inputDeviceUID = "inputDeviceUID"
+        static let showsText = "showsText"
+        static let replacements = "replacements"
+        static let removesFillers = "removesFillers"
     }
 
     init(defaults: UserDefaults? = .standard) {
@@ -104,6 +125,11 @@ final class Preferences {
             ?? .standard
         triggerMode = defaults?.string(forKey: Key.triggerMode).flatMap(TriggerMode.init(rawValue:)) ?? .tap
         inputDeviceUID = defaults?.string(forKey: Key.inputDeviceUID)
+        showsText = defaults?.object(forKey: Key.showsText) as? Bool ?? true
+        replacements = defaults?.data(forKey: Key.replacements)
+            .flatMap { try? JSONDecoder().decode([Replacement].self, from: $0) }
+            ?? Replacements.standard
+        removesFillers = defaults?.object(forKey: Key.removesFillers) as? Bool ?? true
     }
 
     /// The vocabulary used to be one comma-separated field.

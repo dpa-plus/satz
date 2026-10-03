@@ -16,7 +16,7 @@ enum SnapshotRenderer {
         let folder = URL(fileURLWithPath: directory, isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let sheets: [(String, AnyView)] = [
-            ("pill", AnyView(pillSheet)),
+            ("card", AnyView(cardSheet)),
             ("menu-light", AnyView(menuSheet.environment(\.theme, .light))),
             ("menu-dark", AnyView(menuSheet.environment(\.theme, .dark))),
             ("settings-light", AnyView(settingsSheet.environment(\.theme, .light))),
@@ -69,26 +69,45 @@ enum SnapshotRenderer {
 
     // MARK: - Sheets
 
-    private static var pillSheet: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            PillView(recording: listening, onCancel: {}, onRetry: {})
-            PillView(recording: transcribing, onCancel: {}, onRetry: {})
-            PillView(recording: clipboard, onCancel: {}, onRetry: {})
-            PillView(recording: failed, onCancel: {}, onRetry: {})
+    private static let speech: [Float] = [0.1, 0.3, 0.55, 0.8, 0.62, 0.35, 0.5, 0.75, 0.9, 0.6, 0.3, 0.45]
+
+    private static func card(_ phase: Session.Phase, text: String = "", marker: Bool = false) -> some View {
+        let session = Session(preferences: preferences, history: History(), discarded: Discarded())
+        session.stage(phase, text: text, marker: marker, levels: phase == .listening ? speech : [])
+        return CardView(session: session, preferences: preferences)
+    }
+
+    private static var cardSheet: some View {
+        let text = "Schreib mir eine Funktion, die alle Rechnungen aus dem Ordner liest. Dann soll sie die Beträge summieren."
+        return VStack(spacing: 22) {
+            card(.listening, marker: true)
+            card(.listening, text: text + " ", marker: true)
+            card(.paused, text: text)
+            card(.finishing, text: text)
+            card(.failed("Keine Verbindung", canRetry: true), text: text)
+            card(.discarded)
+            card(.clipboard)
         }
         .padding(28)
         .background(Color(hex: 0xE9DDD2))
     }
 
+    private static var discardedFixture: Discarded {
+        let discarded = Discarded()
+        discarded.keep(.init(text: NSAttributedString(string: "Bitte schick mir die Unterlagen bis Freitag."),
+                             segments: [:], activeID: nil, nextID: 1, origin: nil,
+                             preview: "Bitte schick mir die Unterlagen bis Freitag."))
+        return discarded
+    }
+
     private static var menuSheet: some View {
         HStack(alignment: .top, spacing: 24) {
-            PopoverView(history: history, outbox: Outbox(), setup: Setup(hasKey: true, microphone: .allowed, canPaste: true),
+            PopoverView(history: history, discarded: Discarded(), setup: Setup(hasKey: true, microphone: .allowed, canPaste: true),
                         shortcut: shortcut, preferences: preferences, actions: PopoverActions())
-            PopoverView(history: History(), outbox: Outbox(), setup: Setup(hasKey: true, microphone: .allowed, canPaste: true),
+            PopoverView(history: History(), discarded: Discarded(), setup: Setup(hasKey: true, microphone: .allowed, canPaste: true),
                         shortcut: shortcut, preferences: preferences, actions: PopoverActions())
-            PopoverView(history: history,
-                        outbox: Outbox(pending: .init(audio: Data(count: 44 + 23 * 32_000), origin: nil, reason: "Keine Verbindung")),
-                        setup: Setup(hasKey: true, microphone: .allowed, canPaste: true),
+            PopoverView(history: history, discarded: discardedFixture,
+                        setup: Setup(hasKey: true, microphone: .allowed, canPaste: false),
                         shortcut: shortcut, preferences: preferences, actions: PopoverActions())
         }
         .padding(28)
@@ -116,37 +135,6 @@ enum SnapshotRenderer {
         )
     }
 
-    // MARK: - Pill states
-
-    static var listening: Recording {
-        let recording = Recording()
-        recording.listening()
-        // A plausible speech envelope rather than a flat line.
-        for level in [0.1, 0.3, 0.55, 0.8, 0.62, 0.35, 0.5, 0.75, 0.9, 0.6, 0.3, 0.45, 0.7, 0.4] {
-            recording.push(level: Float(level))
-        }
-        return recording
-    }
-
-    private static var transcribing: Recording {
-        let recording = Recording()
-        recording.listening()
-        recording.transcribing()
-        return recording
-    }
-
-    private static var clipboard: Recording {
-        let recording = Recording()
-        recording.clipboard()
-        return recording
-    }
-
-    private static var failed: Recording {
-        let recording = Recording()
-        recording.listening()
-        recording.fail("Keine Verbindung", canRetry: true)
-        return recording
-    }
 }
 
 /// True while a view is being rendered to an image rather than shown in a window.
