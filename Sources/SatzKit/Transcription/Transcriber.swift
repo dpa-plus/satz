@@ -169,6 +169,9 @@ public struct Transcriber: Sendable {
             "provider": ["options": ["azure": azure]],
         ]
         if let language = settings.language { body["language"] = language }
+        // For models other than MAI. OpenRouter documents it as ignored for
+        // multipart; in JSON it costs nothing to offer.
+        if !settings.vocabulary.isEmpty { body["prompt"] = settings.vocabulary.joined(separator: ", ") }
         return body
     }
 

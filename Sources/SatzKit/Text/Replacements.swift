@@ -62,6 +62,9 @@ public enum Replacements {
         var quoteIsOpen = false
 
         for match in matches(of: rules, in: text) {
+            // The tidying after the last match may have eaten into this one
+            // (only possible with a trigger that starts with punctuation).
+            guard match.range.location >= cursor else { continue }
             output += source.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
             var after = match.range.location + match.range.length
             let written = match.rule.written

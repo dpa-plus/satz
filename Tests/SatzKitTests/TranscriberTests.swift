@@ -128,8 +128,11 @@ private func azure(_ json: [String: Any]) -> [String: Any]? {
     #expect(azure(try openRouterJSON(settings))?["phraseList"] == nil)
 
     settings.vocabulary = ["ACON", "XX"]
-    let phrases = (azure(try openRouterJSON(settings))?["phraseList"] as? [String: Any])?["phrases"] as? [String]
+    let json = try openRouterJSON(settings)
+    let phrases = (azure(json)?["phraseList"] as? [String: Any])?["phrases"] as? [String]
     #expect(phrases == ["ACON", "XX"])
+    // And as a prompt, for models on OpenRouter that are not MAI.
+    #expect(json["prompt"] as? String == "ACON, XX")
 }
 
 @Test func longRecordingsGetMoreTime() {

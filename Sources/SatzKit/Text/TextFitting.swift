@@ -19,7 +19,7 @@ public enum TextFitting {
 
         let before = previousVisible(in: text, before: range.location)
         let afterIndex = NSMaxRange(range) + skip
-        let after = afterIndex < text.length ? Character(UnicodeScalar(text.character(at: afterIndex)) ?? " ") : nil
+        let after = afterIndex < text.length ? character(in: text, at: afterIndex) : nil
 
         let midSentence = before.map { !".!?…:\n".contains($0) } ?? false
         if midSentence { result = lowerFirstWordIfSafe(result, context: text as String) }
@@ -31,20 +31,26 @@ public enum TextFitting {
         }
 
         if range.location > 0 {
-            let previous = Character(UnicodeScalar(text.character(at: range.location - 1)) ?? " ")
+            let previous = character(in: text, at: range.location - 1)
             if !previous.isWhitespace, !"([{„\"“".contains(previous) { result = " " + result }
         }
         if let after, after.isLetter || after.isNumber { result += " " }
         return result
     }
 
+    /// The whole character at a UTF-16 index, so an emoji counts as one
+    /// character and not as two broken halves.
+    private static func character(in text: NSString, at index: Int) -> Character {
+        Character(text.substring(with: text.rangeOfComposedCharacterSequence(at: index)))
+    }
+
     /// The first character from `location` on that is not a space.
     private static func nextVisible(in text: NSString, from location: Int) -> Character? {
         var index = location
         while index < text.length {
-            let character = Character(UnicodeScalar(text.character(at: index)) ?? " ")
-            if character == "\n" || !character.isWhitespace { return character }
-            index += 1
+            let found = character(in: text, at: index)
+            if found == "\n" || !found.isWhitespace { return found }
+            index = NSMaxRange(text.rangeOfComposedCharacterSequence(at: index))
         }
         return nil
     }
@@ -53,10 +59,9 @@ public enum TextFitting {
     private static func previousVisible(in text: NSString, before location: Int) -> Character? {
         var index = location - 1
         while index >= 0 {
-            let character = Character(UnicodeScalar(text.character(at: index)) ?? " ")
-            if character == "\n" { return character }
-            if !character.isWhitespace { return character }
-            index -= 1
+            let found = character(in: text, at: index)
+            if found == "\n" || !found.isWhitespace { return found }
+            index = text.rangeOfComposedCharacterSequence(at: index).location - 1
         }
         return nil
     }

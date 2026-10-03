@@ -71,3 +71,9 @@ private let standard = Replacements.standard
     ]
     #expect(Replacements.phrases(rules) == ["XX"])
 }
+
+@Test func aTriggerStartingWithPunctuationDoesNotCrash() {
+    // The tidying after "Doppelpunkt" skips ": ", which is where this rule matches.
+    let rules = Replacements.standard + [Replacement(spoken: ": Strich", written: "-")]
+    #expect(!Replacements.apply(rules, to: "Doppelpunkt : Strich weiter").isEmpty)
+}

@@ -44,3 +44,11 @@ private func insert(_ transcript: String, into text: String, after anchor: Strin
     let piece = TextFitting.fit("Nur PDFs.", into: text as NSString, at: NSRange(location: location, length: 0), skipping: 2)
     #expect(piece == " nur PDFs")
 }
+
+@Test func anEmojiCountsAsOneCharacter() {
+    let text = "Ich mag 🍕"
+    let piece = TextFitting.fit("Und Pasta.", into: text as NSString, at: NSRange(location: (text as NSString).length, length: 0))
+    // A space before it (the emoji used to read as one), and "Und" lowered
+    // because the emoji is not a sentence end.
+    #expect(piece == " und Pasta.")
+}
