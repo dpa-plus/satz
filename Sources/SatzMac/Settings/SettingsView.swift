@@ -45,6 +45,7 @@ struct SettingsView: View {
                 MicrophoneBlock(preferences: preferences)
                 ProviderBlock(preferences: preferences, setup: setup)
                 WordsBlock(preferences: preferences)
+                ReplacementsBlock(preferences: preferences)
                 GeneralBlock(launchAtLogin: launchAtLogin, history: history)
             }
             .padding(.horizontal, 32)
@@ -161,6 +162,7 @@ private struct LevelMeter: View {
 private struct ProviderBlock: View {
     @Bindable var preferences: Preferences
     let setup: Setup
+    @Environment(\.theme) private var theme
 
     var body: some View {
         Block(title: "Anbieter") {
@@ -171,6 +173,16 @@ private struct ProviderBlock: View {
                 KeyRow(setup: setup, provider: preferences.provider)
                 Rule()
                 FieldRow(label: "Modell", text: $preferences.model, prompt: preferences.provider.defaultModel)
+                // Only MAI-Transcribe has a clean mode; elsewhere the switch would do nothing.
+                if preferences.model.contains("mai-transcribe") {
+                    Rule()
+                    Toggle(isOn: $preferences.removesFillers) { Text("Füllwörter weglassen") }
+                        .toggleStyle(AccentToggleStyle())
+                        .font(Typography.text(15))
+                        .foregroundStyle(theme.ink)
+                        .padding(.horizontal, 16)
+                        .frame(height: 48)
+                }
                 if preferences.provider == .custom {
                     Rule()
                     FieldRow(label: "Adresse", text: $preferences.customBaseURL, prompt: "https://…/v1")
@@ -343,6 +355,100 @@ private struct WordsBlock: View {
     private func add() {
         preferences.addWord(newWord)
         newWord = ""
+        adding = false
+    }
+}
+
+// MARK: - Ersetzungen
+
+/// Spoken words that become symbols, as chips like the Wortschatz:
+/// "Klammer auf → (". Only the ones that are on are shown.
+private struct ReplacementsBlock: View {
+    @Bindable var preferences: Preferences
+    @Environment(\.theme) private var theme
+    @Environment(\.isSnapshot) private var isSnapshot
+    @State private var adding = false
+    @State private var spoken = ""
+    @State private var written = ""
+
+    var body: some View {
+        Block(title: "Ersetzungen") {
+            VStack(alignment: .leading, spacing: 10) {
+                FlowLayout(spacing: 8) {
+                    ForEach(preferences.replacements.filter(\.isOn)) { rule in
+                        HStack(spacing: 6) {
+                            Text(rule.spoken).font(Typography.text(14))
+                            Image(systemName: "arrow.right").font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(theme.inkSecondary)
+                            Text(Self.shown(rule.written)).font(Typography.mono(13, .medium))
+                            Button { preferences.replacements.removeAll { $0.id == rule.id } } label: {
+                                Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
+                            }
+                            .buttonStyle(.plain)
+                            .help("Entfernen")
+                        }
+                        .foregroundStyle(theme.ink)
+                        .padding(.leading, 12)
+                        .padding(.trailing, 9)
+                        .frame(height: 28)
+                        .overlay(Capsule().strokeBorder(theme.cardBorder, lineWidth: 1.5))
+                    }
+                    if !adding || isSnapshot {
+                        Button { adding = true } label: {
+                            Text("+ Ersetzung")
+                                .font(Typography.text(14))
+                                .foregroundStyle(theme.inkSecondary)
+                                .padding(.horizontal, 12)
+                                .frame(height: 28)
+                                .overlay(Capsule().strokeBorder(theme.control, style: StrokeStyle(lineWidth: 1.5, dash: [4, 3])))
+                                .contentShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                if adding && !isSnapshot {
+                    HStack(spacing: 8) {
+                        TextField("", text: $spoken, prompt: Text("gesagt, z. B. XX").foregroundStyle(theme.inkOnCard))
+                        Image(systemName: "arrow.right").font(.system(size: 10, weight: .bold))
+                        TextField("", text: $written, prompt: Text("geschrieben").foregroundStyle(theme.inkOnCard))
+                            .onSubmit(add)
+                        Button("Hinzufügen", action: add).buttonStyle(.outlineCompact)
+                    }
+                    .textFieldStyle(.plain)
+                    .font(Typography.text(14))
+                    .foregroundStyle(theme.ink)
+                    .padding(.horizontal, 12)
+                    .frame(height: 34)
+                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(theme.control, lineWidth: 1.5))
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .surface(radius: 16)
+        }
+    }
+
+    /// Line breaks and spaces are invisible, so they get a sign.
+    static func shown(_ written: String) -> String {
+        switch written {
+        case "\n": "↵"
+        case "\n\n": "¶"
+        case " ": "␣"
+        default: written
+        }
+    }
+
+    private func add() {
+        let said = spoken.trimmingCharacters(in: .whitespaces)
+        // "\n" typed as two characters means a line break.
+        let result = written.replacingOccurrences(of: "\\n", with: "\n")
+        guard !said.isEmpty, !result.isEmpty else {
+            adding = false
+            return
+        }
+        preferences.replacements.append(Replacement(spoken: said, written: result))
+        spoken = ""
+        written = ""
         adding = false
     }
 }
