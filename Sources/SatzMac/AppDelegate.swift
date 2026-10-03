@@ -27,6 +27,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
+        if let index = CommandLine.arguments.firstIndex(of: "--import-key") {
+            importKey(CommandLine.arguments.dropFirst(index + 1).prefix(2).map { $0 })
+            NSApp.terminate(nil)
+            return
+        }
         if let path = argument(after: "--hero") {
             try? HeroRenderer.write(to: path)
             NSApp.terminate(nil)
@@ -111,6 +116,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 try? await Task.sleep(for: .seconds(3))
                 self?.setup.refresh()
             }
+        }
+    }
+
+    /// `satz --import-key openrouter <file>`: stores the key in that file for
+    /// that provider and selects it, without the key ever being typed, shown
+    /// or logged. Stored by satz itself so the Keychain never asks satz for
+    /// permission to read its own item.
+    private func importKey(_ arguments: [String]) {
+        guard arguments.count == 2, let provider = Provider(rawValue: arguments[0]),
+              let contents = try? String(contentsOfFile: arguments[1], encoding: .utf8)
+        else {
+            Log.note("usage: satz --import-key openai|openrouter|groq|custom <file>")
+            return
+        }
+        let key = contents.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return }
+        do {
+            try Secrets.store(key, for: provider)
+            preferences.provider = provider
+            Log.note("key imported for \(provider.rawValue)")
+        } catch {
+            Log.note("key import failed: \(error.localizedDescription)")
         }
     }
 
