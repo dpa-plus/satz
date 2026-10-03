@@ -13,11 +13,15 @@ final class AppWindow: NSObject, NSWindowDelegate {
     private static var open = 0
 
     private var window: NSWindow?
+    private let title: String
     private let content: () -> AnyView
     var onClose: (() -> Void)?
 
     /// The content sets its own width; the window follows its preferred size.
-    init(content: @escaping () -> AnyView) {
+    /// The title is not drawn, but names the window in Mission Control, the
+    /// Window menu and for VoiceOver.
+    init(title: String, content: @escaping () -> AnyView) {
+        self.title = title
         self.content = content
     }
 
@@ -51,6 +55,7 @@ final class AppWindow: NSObject, NSWindowDelegate {
         // The title bar melts into the ground rather than sitting on top of it
         // as a grey strip.
         window.titlebarAppearsTransparent = true
+        window.title = title
         window.titleVisibility = .hidden
         window.backgroundColor = Self.ground
         window.isReleasedWhenClosed = false
