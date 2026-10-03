@@ -70,7 +70,10 @@ struct CardTextView: NSViewRepresentable {
         }
 
         func textView(_ textView: NSTextView, shouldChangeTextIn range: NSRange, replacementString: String?) -> Bool {
-            session.userWillEdit(range)
+            // Typed text is plain, even right after a placeholder whose
+            // attributes the text view would otherwise carry on.
+            textView.typingAttributes = Session.textAttributes
+            return session.userWillEdit(range)
         }
 
         func textDidChange(_ notification: Notification) {
@@ -83,9 +86,12 @@ struct CardTextView: NSViewRepresentable {
             // Typed text is plain: never part of a recording, never a placeholder.
             textView.typingAttributes = Session.textAttributes
             let selection = textView.selectedRange()
-            if selection.length == 0, textView.window?.isKeyWindow == true {
-                session.userMovedCaret(to: selection.location)
-            }
+            guard selection.length == 0, textView.window?.isKeyWindow == true else { return }
+            // Only a click moves where speech goes. Typing and the arrow keys
+            // move the caret too, and splitting the recording at every
+            // keystroke would cut it into useless slivers.
+            let clicked = [.leftMouseDown, .leftMouseUp, .leftMouseDragged].contains(NSApp.currentEvent?.type)
+            session.userMovedCaret(to: selection.location, byClick: clicked)
         }
 
         func remeasure() {

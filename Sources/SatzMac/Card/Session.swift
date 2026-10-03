@@ -81,6 +81,11 @@ final class Session {
     /// Where the active recording's audio starts in `recorder`'s buffer.
     @ObservationIgnored private var liveStart = 0
     @ObservationIgnored private var sends: [Int: Task<Void, Never>] = [:]
+    /// How much audio each running send carries, so the same bytes are not
+    /// uploaded twice.
+    @ObservationIgnored private var sendCovers: [Int: Int] = [:]
+    /// Recordings whose last stretch is still in the microphone's tail.
+    @ObservationIgnored private var tailing: Set<Int> = []
     /// Stopping the microphone keeps it open for a short tail; these are those.
     @ObservationIgnored private var tails: [Task<Void, Never>] = []
     @ObservationIgnored private var finishing: Task<Void, Never>?
@@ -104,7 +109,11 @@ final class Session {
     func press() {
         switch (preferences.triggerMode, phase) {
         case (_, .idle), (_, .discarded), (_, .clipboard): begin()
-        case (.tap, .listening), (.tap, .paused), (_, .failed): finish()
+        case (.tap, .listening), (.tap, .paused): finish()
+        case (_, .failed(_, let canRetry)):
+            // Nothing kept to send ("Kein Schlüssel", "Nichts gehört"): the
+            // shortcut starts over instead of failing the same way again.
+            if canRetry || segments.values.contains(where: { !$0.audio.isEmpty }) { finish() } else { begin() }
         case (.hold, .paused): resume()
         default: break
         }
@@ -202,17 +211,20 @@ final class Session {
 
     // MARK: - Text view
 
-    /// The user moved the caret. While listening that moves the insertion
-    /// point: what was said so far goes where it was meant, the rest goes here.
-    func userMovedCaret(to location: Int) {
+    /// The user moved the caret. A click while listening moves the insertion
+    /// point: what was said so far goes where it was meant, the rest goes
+    /// here. Any move counts for where to go on after a pause.
+    func userMovedCaret(to location: Int, byClick: Bool = true) {
         caret = location
-        guard phase == .listening, let recorder, let id = activeID, !isAtMarker(location, of: id) else { return }
+        guard byClick, phase == .listening, let recorder, let id = activeID, !isAtMarker(location, of: id) else { return }
         let end = recorder.sampleCount
         append(recorder.samples(from: liveStart, to: end), to: id)
         liveStart = end
         activeID = newSegment(at: location)
         caret = nil
         send(id)
+        // Two clicks inside one audio buffer leave nothing to send.
+        removeMarkerIfDone(id)
     }
 
     /// The user is about to change `range`. False refuses the change.
@@ -221,8 +233,9 @@ final class Session {
         case .finishing, .discarded, .clipboard, .idle: return false
         default: break
         }
-        // The placeholders are satz's, not part of the text.
-        guard !containsMarker(range) else { return false }
+        // The placeholders are satz's, not part of the text, and typing
+        // inside one would split it in two.
+        guard !containsMarker(range), !isInsideMarker(range.location) else { return false }
         for id in segments.keys where touches(range, segment: id) {
             freeze(id)
         }
@@ -297,11 +310,16 @@ final class Session {
         releaseEscape()
         levels = Array(repeating: 0, count: levels.count)
         let start = liveStart
+        let token = sessionToken
+        tailing.insert(id)
         tails.append(Task {
             // The tail keeps the last word.
             let samples = await recorder.finishSamples() ?? []
+            guard token == sessionToken else { return }
+            tailing.remove(id)
             append(Array(samples.dropFirst(start)), to: id)
             send(id)
+            removeMarkerIfDone(id)
         })
     }
 
@@ -364,12 +382,28 @@ final class Session {
             return
         }
         let origin = self.origin
+        // The card had the keyboard if the user clicked into its text.
+        let cardHadKeyboard = NSApp.keyWindow != nil
         // Gone before pasting, so the keyboard is back with the app it belongs to.
         close()
         if let deliverOverride {
             deliverOverride(output)
             return
         }
+        guard cardHadKeyboard else {
+            paste(output, into: origin)
+            return
+        }
+        // The keyboard has to get back to the other app before ⌘V, or the
+        // keystroke lands nowhere and the clipboard is then restored over it.
+        origin?.activate()
+        Task {
+            try? await Task.sleep(for: .milliseconds(150))
+            paste(output, into: origin)
+        }
+    }
+
+    private func paste(_ output: String, into origin: NSRunningApplication?) {
         let outcome = Paster.deliver(output, into: origin)
         history.add(output, app: origin?.localizedName, pasted: outcome == .pasted)
         if case .clipboardOnly(let reason) = outcome {
@@ -385,6 +419,8 @@ final class Session {
     private func send(_ id: Int) {
         guard var segment = segments[id], segment.audio.count > segment.transcribed || segment.failure != nil,
               !segment.audio.isEmpty else { return }
+        // Already on its way with exactly this audio: let it arrive.
+        if sends[id] != nil, sendCovers[id] == segment.audio.count, segment.failure == nil { return }
         sends[id]?.cancel()
         segment.failure = nil
         segments[id] = segment
@@ -396,6 +432,7 @@ final class Session {
         let provider = preferences.provider
         let token = sessionToken
         inFlight.insert(id)
+        sendCovers[id] = covered
         let started = Date()
 
         sends[id] = Task {
@@ -413,6 +450,7 @@ final class Session {
             guard !Task.isCancelled, token == sessionToken else { return }
             inFlight.remove(id)
             sends[id] = nil
+            sendCovers[id] = nil
             Log.note(String(format: "sent %.1f s of audio, answer after %.1f s", Double(covered) / 16_000, Date().timeIntervalSince(started)))
             switch result {
             case .success(let raw):
@@ -451,7 +489,9 @@ final class Session {
     // MARK: - Segments
 
     private func newSegment(at location: Int) -> Int {
-        let location = min(max(0, location), text.length)
+        var location = min(max(0, location), text.length)
+        // Never inside another placeholder: right after it instead.
+        if let marker = markerContaining(location) { location = NSMaxRange(marker) }
         // A new spot inside another recording's text splits it, so that text
         // stops being replaceable as a whole.
         for id in segments.keys where isStrictlyInside(location, segment: id) {
@@ -478,6 +518,7 @@ final class Session {
         if sends[id] != nil {
             sends[id]?.cancel()
             sends[id] = nil
+            sendCovers[id] = nil
             inFlight.remove(id)
             if !(id == activeID && phase == .listening) { send(id) }
         }
@@ -489,7 +530,7 @@ final class Session {
     }
 
     private func removeMarkerIfDone(_ id: Int) {
-        guard id != activeID, let segment = segments[id], segment.audio.count == segment.transcribed,
+        guard id != activeID, !tailing.contains(id), let segment = segments[id], segment.audio.count == segment.transcribed,
               let marker = markerRange(id) else { return }
         edit { text.deleteCharacters(in: marker) }
     }
@@ -498,13 +539,23 @@ final class Session {
 
     private func markerRange(_ id: Int) -> NSRange? {
         var found: NSRange?
-        text.enumerateAttribute(.satzMarker, in: NSRange(location: 0, length: text.length)) { value, range, stop in
-            if value as? Int == id {
-                found = range
-                stop.pointee = true
-            }
+        text.enumerateAttribute(.satzMarker, in: NSRange(location: 0, length: text.length)) { value, range, _ in
+            guard value as? Int == id else { return }
+            found = found.map { NSUnionRange($0, range) } ?? range
         }
         return found
+    }
+
+    /// The placeholder `location` falls strictly inside, if any.
+    private func markerContaining(_ location: Int) -> NSRange? {
+        guard location > 0, location < text.length,
+              let id = text.attribute(.satzMarker, at: location, effectiveRange: nil) as? Int,
+              let marker = markerRange(id), location > marker.location else { return nil }
+        return marker
+    }
+
+    private func isInsideMarker(_ location: Int) -> Bool {
+        markerContaining(location) != nil
     }
 
     private func segmentRange(_ id: Int) -> NSRange? {
@@ -583,8 +634,10 @@ final class Session {
         recorder = nil
         for task in sends.values { task.cancel() }
         sends = [:]
+        sendCovers = [:]
         inFlight = []
         tails = []
+        tailing = []
         finishing?.cancel()
         finishing = nil
         releaseEscape()
