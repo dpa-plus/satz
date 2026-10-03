@@ -1,24 +1,81 @@
 import Foundation
 import Security
 
-/// API keys, in the Keychain, one per provider.
+/// API keys, one per provider.
 ///
-/// Never a file in the bundle, never a preference, never this repository. The
-/// Keychain also means a key survives reinstalling the app and is readable only
-/// by the user who put it there.
+/// On the Mac: a file per provider in satz's own folder, readable only by the
+/// user (0600 in a 0700 folder), the same way Handy keeps its key. Not the
+/// Keychain, because the login keychain identifies an ad-hoc signed app by
+/// its exact build: every rebuild made macOS ask for the user's password
+/// before satz could read its own key, and froze the app while it asked.
+/// With a real signing certificate the Keychain is the better home again.
+///
+/// On iOS: the Keychain, which has no such problem.
+///
+/// Never a file in the bundle, never a preference, never this repository.
 public enum Secrets {
 
     public enum Failure: Error, LocalizedError, Equatable {
         case keychain(OSStatus)
+        case file(String)
 
         public var errorDescription: String? {
             switch self {
             case .keychain(let status):
                 let detail = SecCopyErrorMessageString(status, nil) as String? ?? "\(status)"
                 return "Schlüsselbund: \(detail)"
+            case .file(let detail):
+                return "Schlüssel nicht gespeichert: \(detail)"
             }
         }
     }
+
+    #if os(macOS)
+    /// Where the key files live. Replaced by tests.
+    nonisolated(unsafe) public static var directory: URL = FileManager.default
+        .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("satz/keys", isDirectory: true)
+
+    private static func file(for provider: Provider) -> URL {
+        directory.appendingPathComponent(provider.keychainAccount)
+    }
+
+    public static func store(_ secret: String, for provider: Provider) throws {
+        let manager = FileManager.default
+        do {
+            try manager.createDirectory(at: directory, withIntermediateDirectories: true,
+                                        attributes: [.posixPermissions: 0o700])
+            try manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+            let target = file(for: provider)
+            // Created empty with 0600 first, so the key is never on disk with
+            // looser permissions, not even for a moment.
+            if !manager.fileExists(atPath: target.path) {
+                manager.createFile(atPath: target.path, contents: nil, attributes: [.posixPermissions: 0o600])
+            }
+            try manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: target.path)
+            let handle = try FileHandle(forWritingTo: target)
+            defer { try? handle.close() }
+            try handle.truncate(atOffset: 0)
+            try handle.write(contentsOf: Data(secret.utf8))
+        } catch {
+            throw Failure.file(error.localizedDescription)
+        }
+    }
+
+    public static func read(for provider: Provider) -> String? {
+        guard let data = try? Data(contentsOf: file(for: provider)) else { return nil }
+        let key = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        return key.isEmpty ? nil : key
+    }
+
+    public static func exists(for provider: Provider) -> Bool {
+        read(for: provider) != nil
+    }
+
+    public static func remove(for provider: Provider) {
+        try? FileManager.default.removeItem(at: file(for: provider))
+    }
+    #else
 
     private static let service = "plus.dpa.satz"
 
@@ -80,4 +137,5 @@ public enum Secrets {
             kSecAttrAccount as String: provider.keychainAccount,
         ]
     }
+    #endif
 }
