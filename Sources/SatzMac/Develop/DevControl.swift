@@ -5,18 +5,21 @@ import AppKit
 /// Only listens when launched with `--dev-control <state file>`. Commands
 /// arrive as distributed notifications named `plus.dpa.satz.dev`, with the
 /// command as the object: `press`, `release`, `mic`, `discard`, `undo`,
-/// `caret:<index>` (as if clicked there) and `dump`, which writes the card's
-/// phase and text to the state file.
+/// `caret:<index>` (as if clicked there), `dump`, which writes the card's
+/// phase and text to the state file, and `picture`, which saves the live
+/// card as a PNG next to it.
 @MainActor
 final class DevControl {
 
     private let session: Session
+    private let card: CardController
     private let stateFile: URL
     private var observer: NSObjectProtocol?
     private var delivered: [String] = []
 
-    init(session: Session, stateFile: URL) {
+    init(session: Session, card: CardController, stateFile: URL) {
         self.session = session
+        self.card = card
         self.stateFile = stateFile
         // Never paste during a test: the text would land in whatever app the
         // person at the Mac is using.
@@ -42,6 +45,8 @@ final class DevControl {
         case "discard": session.discard()
         case "undo": session.undoDiscard()
         case "dump": dump()
+        case "picture":
+            try? card.picture()?.write(to: stateFile.deletingPathExtension().appendingPathExtension("png"))
         default:
             if command.hasPrefix("caret:"), let index = Int(command.dropFirst(6)) {
                 session.userMovedCaret(to: index)

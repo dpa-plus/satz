@@ -28,6 +28,14 @@ final class CardController {
         panel?.orderOut(nil)
     }
 
+    /// The live card as a PNG, drawn by AppKit itself: real text view, real
+    /// layout. For test mode, where no screenshot tool can see the panel.
+    func picture() -> Data? {
+        guard let view = panel?.contentView, let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return nil }
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        return bitmap.representation(using: .png, properties: [:])
+    }
+
     private func make() -> CardPanel {
         let panel = CardPanel()
         let view = CardView(session: session, preferences: preferences) { [weak panel] size in

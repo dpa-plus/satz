@@ -47,7 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             AudioSources.testFiles = files.split(separator: ":").map { URL(fileURLWithPath: String($0)) }
         }
         if let stateFile = argument(after: "--dev-control") {
-            devControl = DevControl(session: session, stateFile: URL(fileURLWithPath: stateFile))
+            devControl = DevControl(session: session, card: card, stateFile: URL(fileURLWithPath: stateFile))
         }
         shortcut = Shortcut(
             preferences: preferences,
