@@ -55,7 +55,7 @@ final class Preferences {
             model: model,
             customBaseURL: URL(string: customBaseURL.trimmingCharacters(in: .whitespaces))
         )
-        settings.vocabulary = words.joined(separator: ", ")
+        settings.vocabulary = words
         return settings
     }
 

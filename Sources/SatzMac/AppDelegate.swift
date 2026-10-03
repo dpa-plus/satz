@@ -1,61 +1,84 @@
 import AppKit
+import Observation
 import SatzKit
+import SwiftUI
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
-    private let preferences: Preferences
-    private let setup: Setup
+    private let preferences = Preferences()
     private let history = History()
-    private let probe = Probe()
+    private let outbox = Outbox()
+    private let launchAtLogin = LaunchAtLogin()
+    private lazy var setup = Setup(preferences: preferences)
 
-    override init() {
-        preferences = Preferences()
-        setup = Setup(preferences: preferences)
-        super.init()
-    }
-
-    private var pill: PillController?
-    private var dictation: Dictation?
-    private var menuBar: MenuBar?
-    private var hotKey: HotKey?
-    private var settings: SettingsWindow?
+    private var pill: PillController!
+    private var dictation: Dictation!
+    private var shortcut: Shortcut!
+    private var menuBar: MenuBarItem!
+    private var settingsWindow: AppWindow!
+    private var setupWindow: AppWindow!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        Typography.registerBundledFonts()
+
         if let directory = argument(after: "--snapshot") {
             try? SnapshotRenderer.write(to: directory)
             NSApp.terminate(nil)
             return
         }
-
         if let path = argument(after: "--hero") {
             try? HeroRenderer.write(to: path)
             NSApp.terminate(nil)
             return
         }
 
-        let pill = PillController(onCancel: { [weak self] in self?.dictation?.cancel() })
-        self.pill = pill
-        dictation = Dictation(pill: pill, preferences: preferences, history: history)
+        pill = PillController(
+            onCancel: { [weak self] in self?.dictation.cancel() },
+            onRetry: { [weak self] in self?.dictation.retry() }
+        )
+        dictation = Dictation(pill: pill, preferences: preferences, history: history, outbox: outbox)
+        shortcut = Shortcut(
+            preferences: preferences,
+            onPress: { [weak self] in self?.dictation.press() },
+            onRelease: { [weak self] in self?.dictation.release() }
+        )
+        shortcut.start()
 
-        settings = SettingsWindow { [setup, preferences, history, probe] in
-            SettingsView(setup: setup, preferences: preferences, history: history, probe: probe)
+        settingsWindow = AppWindow { [unowned self] in
+            AnyView(SettingsView(
+                preferences: preferences, setup: setup, shortcut: shortcut,
+                launchAtLogin: launchAtLogin, history: history
+            ))
+        }
+        setupWindow = AppWindow { [unowned self] in
+            AnyView(SetupView(
+                preferences: preferences, setup: setup, shortcut: shortcut, history: history,
+                onDone: { [weak self] in self?.setupWindow.close() }
+            ))
         }
 
-        let shortcut = HotKey.Combination.optionSpace
-        menuBar = MenuBar(
-            shortcut: shortcut.display,
-            onToggle: { [weak self] in Task { await self?.dictation?.toggle() } },
-            onSettings: { [weak self] in self?.settings?.show() }
-        )
-        installHotKey(shortcut)
+        menuBar = MenuBarItem { [unowned self] in
+            AnyView(PopoverView(
+                history: history, outbox: outbox, setup: setup, shortcut: shortcut, preferences: preferences,
+                actions: PopoverActions(
+                    retry: { [weak self] in self?.menuBar.close(); self?.dictation.retry() },
+                    discard: { [weak self] in self?.dictation.discard() },
+                    openSetup: { [weak self] in self?.menuBar.close(); self?.setupWindow.show() },
+                    openSettings: { [weak self] in self?.menuBar.close(); self?.settingsWindow.show() },
+                    quit: { NSApp.terminate(nil) }
+                )
+            ))
+        }
+        watchAttention()
+        keepSetupFresh()
 
         Log.note("setup: provider=\(preferences.provider.rawValue) key=\(setup.hasKey) microphone=\(setup.microphone) paste=\(setup.canPaste)")
 
         // Nothing works until setup is done, and a menu bar icon alone gives a
-        // new user no hint of that. Show them what is missing.
+        // new user no hint of that.
         if !setup.isComplete {
-            settings?.show()
+            setupWindow.show()
         }
 
         if CommandLine.arguments.contains("--demo") {
@@ -64,25 +87,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Clicking the app again, from Finder or Spotlight, should show something.
-    /// A menu bar app otherwise appears to do nothing when relaunched.
+    /// Opening the app again from Finder or Spotlight shows the settings. A
+    /// menu bar app otherwise appears to do nothing when relaunched.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        settings?.show()
+        settingsWindow.show()
         return true
     }
 
-    private func installHotKey(_ combination: HotKey.Combination) {
-        do {
-            hotKey = try HotKey(combination) { [weak self] in
-                Task { await self?.dictation?.toggle() }
+    /// The orange dot on the menu bar icon: something needs the user.
+    private func watchAttention() {
+        withObservationTracking {
+            menuBar.needsAttention = outbox.pending != nil || !setup.isComplete || shortcut.status == .taken
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.watchAttention() }
+        }
+    }
+
+    /// A permission can be granted or revoked in System Settings at any time,
+    /// with no notification. Cheap reads, so just look every few seconds.
+    private func keepSetupFresh() {
+        Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(3))
+                self?.setup.refresh()
             }
-            Log.note("shortcut registered: \(combination.display)")
-        } catch {
-            // Surfaced rather than swallowed: the app still works from the menu
-            // bar, but the key the user reaches for would do nothing and say
-            // nothing about why.
-            Log.note("shortcut NOT registered: \(error.localizedDescription)")
-            menuBar?.report(shortcutProblem: error.localizedDescription)
         }
     }
 

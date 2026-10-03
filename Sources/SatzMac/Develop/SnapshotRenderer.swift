@@ -1,22 +1,32 @@
 import AppKit
+import SatzKit
 import SwiftUI
 
 /// Renders satz's surfaces straight to PNGs, without ever putting a window on
 /// screen.
 ///
-/// `satz --snapshot <directory>` writes `pill.png` with every pill state and
-/// `settings.png` with the settings window in a half set-up state. This is how
-/// the interface gets looked at during development: no window stealing the
-/// desktop, no screen recording permission, and every state at once rather
-/// than whichever one happens to be live. CI renders it too.
+/// `satz --snapshot <directory>` writes one PNG per surface, light and dark,
+/// in fixed example states. This is how the interface gets looked at during
+/// development: no window taking over the desktop, no screen recording
+/// permission, and every state at once.
 @MainActor
 enum SnapshotRenderer {
 
     static func write(to directory: String) throws {
         let folder = URL(fileURLWithPath: directory, isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        try png(of: pillSheet).write(to: folder.appendingPathComponent("pill.png"))
-        try png(of: settingsSheet).write(to: folder.appendingPathComponent("settings.png"))
+        let sheets: [(String, AnyView)] = [
+            ("pill", AnyView(pillSheet)),
+            ("menu-light", AnyView(menuSheet.environment(\.theme, .light))),
+            ("menu-dark", AnyView(menuSheet.environment(\.theme, .dark))),
+            ("settings-light", AnyView(settingsSheet.environment(\.theme, .light))),
+            ("settings-dark", AnyView(settingsSheet.environment(\.theme, .dark))),
+            ("setup-key", AnyView(setupSheet(.key).environment(\.theme, .light))),
+            ("setup-probe", AnyView(setupSheet(.probe).environment(\.theme, .light))),
+        ]
+        for (name, view) in sheets {
+            try png(of: view.environment(\.isSnapshot, true)).write(to: folder.appendingPathComponent("\(name).png"))
+        }
     }
 
     static func png(of view: some View) throws -> Data {
@@ -33,42 +43,88 @@ enum SnapshotRenderer {
         return png
     }
 
-    // MARK: - Pill
+    // MARK: - Fixtures
+
+    /// In memory: a snapshot must never write to the user's preferences.
+    private static var preferences: Preferences {
+        let preferences = Preferences(defaults: nil)
+        preferences.provider = .openRouter
+        preferences.words = ["ACON", "Immofanten", "Prozesshub"]
+        return preferences
+    }
+
+    private static var history: History {
+        let history = History()
+        let base = Date(timeIntervalSince1970: 1_791_000_000)
+        history.add("Der Test ist rot, bitte nicht mergen.", app: "Slack", pasted: true, at: base)
+        history.add("Termin mit ACON auf Donnerstag 14 Uhr verschieben.", app: "Mail", pasted: true, at: base + 600)
+        history.add("Kannst du mir eine Funktion schreiben, die alle Rechnungen aus dem Ordner Buchhaltung liest und die Beträge pro Kunde summiert?",
+                    app: "Claude", pasted: true, at: base + 1200)
+        return history
+    }
+
+    private static var shortcut: Shortcut {
+        Shortcut(preferences: preferences, onPress: {}, onRelease: {})
+    }
+
+    // MARK: - Sheets
 
     private static var pillSheet: some View {
         VStack(alignment: .leading, spacing: 20) {
-            row("Mikrofon", PillView(recording: starting, onCancel: {}))
-            row("aufnehmen", PillView(recording: listening, onCancel: {}))
-            row("übertragen", PillView(recording: transcribing, onCancel: {}))
-            row("Fehler", PillView(recording: failed, onCancel: {}))
+            PillView(recording: listening, onCancel: {}, onRetry: {})
+            PillView(recording: transcribing, onCancel: {}, onRetry: {})
+            PillView(recording: clipboard, onCancel: {}, onRetry: {})
+            PillView(recording: failed, onCancel: {}, onRetry: {})
         }
         .padding(28)
-        .background(Color(white: 0.9))
+        .background(Color(hex: 0xE9DDD2))
     }
 
-    private static func row(_ label: String, _ pill: some View) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.black.opacity(0.45))
-            pill
+    private static var menuSheet: some View {
+        HStack(alignment: .top, spacing: 24) {
+            PopoverView(history: history, outbox: Outbox(), setup: Setup(hasKey: true, microphone: .allowed, canPaste: true),
+                        shortcut: shortcut, preferences: preferences, actions: PopoverActions())
+            PopoverView(history: History(), outbox: Outbox(), setup: Setup(hasKey: true, microphone: .allowed, canPaste: true),
+                        shortcut: shortcut, preferences: preferences, actions: PopoverActions())
+            PopoverView(history: history,
+                        outbox: Outbox(pending: .init(audio: Data(count: 44 + 23 * 32_000), origin: nil, reason: "Keine Verbindung")),
+                        setup: Setup(hasKey: true, microphone: .allowed, canPaste: true),
+                        shortcut: shortcut, preferences: preferences, actions: PopoverActions())
         }
+        .padding(28)
+        .background(Color(hex: 0xC9D4D8))
     }
+
+    private static var settingsSheet: some View {
+        SettingsView(
+            preferences: preferences,
+            setup: Setup(hasKey: true, microphone: .allowed, canPaste: true),
+            shortcut: shortcut,
+            launchAtLogin: LaunchAtLogin(),
+            history: history
+        )
+    }
+
+    private static func setupSheet(_ step: SetupView.Step) -> some View {
+        SetupView(
+            preferences: preferences,
+            setup: Setup(hasKey: step != .key, microphone: .allowed, canPaste: true),
+            shortcut: shortcut,
+            history: History(),
+            start: step,
+            onDone: {}
+        )
+    }
+
+    // MARK: - Pill states
 
     static var listening: Recording {
         let recording = Recording()
         recording.listening()
-        // A plausible speech envelope rather than a flat line, so the snapshot
-        // shows what the bars actually look like mid-sentence.
+        // A plausible speech envelope rather than a flat line.
         for level in [0.1, 0.3, 0.55, 0.8, 0.62, 0.35, 0.5, 0.75, 0.9, 0.6, 0.3, 0.45, 0.7, 0.4] {
             recording.push(level: Float(level))
         }
-        return recording
-    }
-
-    private static var starting: Recording {
-        let recording = Recording()
-        recording.starting()
         return recording
     }
 
@@ -79,38 +135,17 @@ enum SnapshotRenderer {
         return recording
     }
 
-    private static var failed: Recording {
+    private static var clipboard: Recording {
         let recording = Recording()
-        recording.listening()
-        recording.fail("Keine Verbindung zum Anbieter.")
+        recording.clipboard()
         return recording
     }
 
-    // MARK: - Settings
-
-    /// Half set up on purpose, so one picture shows both a finished row and a
-    /// row asking for action.
-    private static var settingsSheet: some View {
-        let history = History()
-        history.add("Bitte schick mir die Unterlagen bis Freitag, dann schaue ich sie mir am Wochenende an.",
-                    at: Date(timeIntervalSince1970: 1_789_300_000))
-        history.add("Termin mit ACON auf Donnerstag 14 Uhr verschieben.",
-                    at: Date(timeIntervalSince1970: 1_789_303_600))
-
-        // In memory: a snapshot must never write to the user's preferences.
-        let preferences = Preferences(defaults: nil)
-        preferences.provider = .openRouter
-        preferences.vocabulary = "ACON, Immofanten, Prozesshub, DPA Plus"
-
-        return SettingsContent(
-            setup: Setup(hasKey: true, microphone: .allowed, canPaste: false),
-            preferences: preferences,
-            history: history,
-            probe: Probe(state: .heard("Das ist ein Test, eins, zwei, drei."))
-        )
-        .background(Palette.petrol)
-        .environment(\.colorScheme, .dark)
-        .environment(\.isSnapshot, true)
+    private static var failed: Recording {
+        let recording = Recording()
+        recording.listening()
+        recording.fail("Keine Verbindung", canRetry: true)
+        return recording
     }
 }
 

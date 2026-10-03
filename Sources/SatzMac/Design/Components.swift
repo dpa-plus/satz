@@ -33,10 +33,15 @@ struct SurfaceModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(theme.card))
+            .background(
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(theme.card)
+                    // The brand's sticker shadow: a hard offset, no blur. On
+                    // the shape only; on the whole view every label inside
+                    // would get a ghost copy under it.
+                    .shadow(color: lifted ? theme.cardBorder.opacity(0.09) : .clear, radius: 0, y: 4)
+            )
             .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(theme.cardBorder, lineWidth: 1.5))
-            // The brand's sticker shadow: a hard offset, no blur.
-            .shadow(color: lifted ? theme.cardBorder.opacity(0.09) : .clear, radius: 0, y: 4)
     }
 }
 
@@ -102,8 +107,12 @@ struct AccentButtonStyle: ButtonStyle {
                 .padding(.horizontal, square ? 0 : 16)
                 .frame(minWidth: height, minHeight: height)
                 .frame(width: square ? height : nil)
-                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(theme.accent))
-                .shadow(color: theme.accentShadow, radius: 0, y: configuration.isPressed ? 1 : 3)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(theme.accent)
+                        // On the shape, not the label, or the label gets a ghost.
+                        .shadow(color: theme.accentShadow, radius: 0, y: configuration.isPressed ? 1 : 3)
+                )
                 .offset(y: configuration.isPressed ? 2 : 0)
                 .opacity(isEnabled ? 1 : 0.45)
                 .contentShape(Rectangle())

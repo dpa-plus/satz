@@ -1,307 +1,184 @@
-import AppKit
 import SatzKit
 import SwiftUI
 
-/// The settings window: what is missing, how to use it, and what was said.
-///
-/// Ordered by what a new user needs first. Setup comes before everything else
-/// because nothing else works until it is done.
+/// Everything changed rarely. Labels and controls only: each control says what
+/// it does, so none of them needs a sentence underneath.
 struct SettingsView: View {
-    let setup: Setup
     let preferences: Preferences
-    let history: History
-    let probe: Probe
-    /// Re-read the system every second while visible. Off when rendering a
-    /// snapshot, so the picture shows the fixture rather than this Mac.
-    var live = true
-
-    var body: some View {
-        ScrollView {
-            SettingsContent(setup: setup, preferences: preferences, history: history, probe: probe)
-        }
-        .scrollIndicators(.never)
-        .frame(width: SettingsContent.width)
-        .frame(minHeight: 420, idealHeight: 720)
-        .background(Palette.petrol)
-        .environment(\.colorScheme, .dark)
-        // A different provider has a different key. Show that at once rather
-        // than on the next poll.
-        .onChange(of: preferences.provider) { setup.refresh() }
-        .task(id: live) {
-            guard live else { return }
-            // Permissions are granted in System Settings, which gives the app
-            // no signal when it happens. Polling is the only way to notice.
-            while !Task.isCancelled {
-                setup.refresh()
-                try? await Task.sleep(for: .seconds(1))
-            }
-        }
-    }
-}
-
-/// Everything in the window, without the scroll view, so it can also be
-/// rendered straight to an image.
-struct SettingsContent: View {
-    static let width: CGFloat = 480
-
     let setup: Setup
-    @Bindable var preferences: Preferences
+    let shortcut: Shortcut
+    let launchAtLogin: LaunchAtLogin
     let history: History
-    let probe: Probe
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            header
-
-            SettingsSection(
-                title: "Anbieter",
-                note: "Jeder Dienst mit OpenAIs Schnittstelle für Transkription. Jeder Anbieter behält seinen eigenen Schlüssel und sein Modell."
-            ) {
-                Card { ProviderRows(preferences: preferences) }
-            }
-
-            SettingsSection(title: "Einrichtung") {
-                Card {
-                    KeyRow(setup: setup, provider: preferences.provider)
-                    RowDivider()
-                    MicrophoneRow(setup: setup)
-                    RowDivider()
-                    PasteRow(setup: setup)
-                }
-            }
-
-            SettingsSection(title: "Tastenkürzel") {
-                Card {
-                    ShortcutRow(title: "Aufnehmen und beenden", keys: ["⌥", "Space"])
-                    RowDivider()
-                    ShortcutRow(title: "Abbrechen, während aufgenommen wird", keys: ["Esc"])
-                }
-            }
-
-            SettingsSection(
-                title: "Wortschatz",
-                note: "Namen, Fachbegriffe und Schreibweisen, die satz treffen soll. Wird bei jeder Übertragung mitgeschickt und ändert nichts am Gesagten."
-            ) {
-                Card {
-                    EditableText(
-                        text: $preferences.vocabulary,
-                        prompt: "zum Beispiel: ACON, Immofanten, Prozesshub",
-                        multiline: true
-                    )
-                    .padding(14)
-                }
-            }
-
-            SettingsSection(
-                title: "Probe",
-                note: "Vier Sekunden sprechen. Prüft Mikrofon, Schlüssel und Verbindung, ohne etwas einzufügen."
-            ) {
-                Card { ProbeRow(probe: probe, preferences: preferences) }
-            }
-
-            SettingsSection(
-                title: "Zuletzt",
-                note: "Nur bis zum Beenden, nie auf der Festplatte."
-            ) {
-                Card { HistoryList(history: history) }
-            }
-        }
-        .padding(28)
-        .frame(width: Self.width, alignment: .leading)
-    }
-
-    private var header: some View {
-        HStack(alignment: .center, spacing: 14) {
-            WaveformMark(height: 30)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("satz")
-                    .font(.system(size: 22, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Palette.text)
-                Text("Sprechen statt Tippen.")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(Palette.orangeOnPetrol)
-            }
-            Spacer()
-            ReadinessLabel(ready: setup.isComplete)
-        }
-        .padding(.top, 12)
-    }
-}
-
-// MARK: - Header
-
-private struct ReadinessLabel: View {
-    let ready: Bool
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(ready ? Palette.orangeOnPetrol : Palette.textTertiary)
-                .frame(width: 7, height: 7)
-            Text(ready ? "Bereit" : "Einrichtung fehlt")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(ready ? Palette.text : Palette.textSecondary)
-        }
-    }
-}
-
-// MARK: - Provider
-
-private struct ProviderRows: View {
-    @Bindable var preferences: Preferences
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ProviderPicker(selection: $preferences.provider)
-                .padding(10)
-
-            RowDivider()
-            LabeledField(label: "Modell") {
-                EditableText(
-                    text: $preferences.model,
-                    prompt: preferences.provider.defaultModel.isEmpty
-                        ? "Modellname"
-                        : preferences.provider.defaultModel,
-                    monospaced: true
-                )
-            }
-
-            if preferences.provider == .custom {
-                RowDivider()
-                LabeledField(
-                    label: "Adresse",
-                    problem: preferences.isEndpointMissing ? "Ohne Adresse weiß satz nicht, wohin." : nil
-                ) {
-                    EditableText(
-                        text: $preferences.customBaseURL,
-                        prompt: "https://…/v1",
-                        monospaced: true
-                    )
-                }
-            }
-        }
-    }
-}
-
-/// Choosing between a few providers is a view choice, so a segmented control
-/// rather than a menu: every option is visible at once.
-private struct ProviderPicker: View {
-    @Binding var selection: Provider
-
-    var body: some View {
-        HStack(spacing: 2) {
-            ForEach(Provider.allCases) { provider in
-                let chosen = selection == provider
-                Button { selection = provider } label: {
-                    Text(provider.name)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(chosen ? Palette.text : Palette.textSecondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .fill(chosen ? Color.white.opacity(0.13) : .clear)
-                        )
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(3)
-        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color.black.opacity(0.18)))
-    }
-}
-
-/// A label on the left, a field on the right, and a line explaining what is
-/// wrong with it when something is.
-private struct LabeledField<Field: View>: View {
-    let label: String
-    var problem: String?
-    @ViewBuilder var field: Field
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 12) {
-                Text(label)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Palette.textSecondary)
-                    .frame(width: 64, alignment: .leading)
-                field
-            }
-            if let problem {
-                Text(problem)
-                    .font(.system(size: 11))
-                    .foregroundStyle(Palette.orangeOnPetrol)
-                    .padding(.leading, 76)
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
-    }
-}
-
-/// A plain text field, or its text when rendered to an image: ImageRenderer
-/// cannot draw AppKit-backed controls and paints a yellow placeholder instead.
-private struct EditableText: View {
-    @Binding var text: String
-    let prompt: String
-    var monospaced = false
-    var multiline = false
-
+    @Environment(\.theme) private var theme
     @Environment(\.isSnapshot) private var isSnapshot
 
     var body: some View {
-        Group {
-            if isSnapshot {
-                Text(text.isEmpty ? prompt : text)
-                    .foregroundStyle(text.isEmpty ? Palette.textTertiary : Palette.text)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } else if multiline {
-                TextField("", text: $text, prompt: placeholder, axis: .vertical)
-                    .lineLimit(2...5)
-            } else {
-                TextField("", text: $text, prompt: placeholder)
-            }
+        if isSnapshot {
+            // ImageRenderer draws a ScrollView's content as nothing.
+            content.background(theme.ground)
+        } else {
+            ScrollView { content }
+                .scrollIndicators(.never)
+                .frame(width: 520, height: 720)
+                .background(theme.ground)
+                .task {
+                    // Permissions are granted in System Settings, which gives
+                    // the app no signal when it happens. Polling is the only
+                    // way to notice.
+                    while !Task.isCancelled {
+                        setup.refresh()
+                        try? await Task.sleep(for: .seconds(1))
+                    }
+                }
         }
-        .textFieldStyle(.plain)
-        .font(.system(size: 13, design: monospaced ? .monospaced : .default))
-        .foregroundStyle(Palette.text)
     }
 
-    private var placeholder: Text {
-        Text(prompt).foregroundStyle(Palette.textTertiary)
+    private var content: some View {
+            VStack(alignment: .leading, spacing: 26) {
+                Text("Einstellungen")
+                    .font(Typography.display(26))
+                    .foregroundStyle(theme.ink)
+                Block(title: "Kurzbefehl") {
+                    ShortcutChoice(preferences: preferences, setup: setup, shortcut: shortcut)
+                }
+                MicrophoneBlock(preferences: preferences)
+                ProviderBlock(preferences: preferences, setup: setup)
+                WordsBlock(preferences: preferences)
+                GeneralBlock(launchAtLogin: launchAtLogin, history: history)
+            }
+            .padding(.horizontal, 32)
+            .padding(.top, 34)
+            .padding(.bottom, 32)
+            .frame(width: 520, alignment: .leading)
     }
 }
 
-// MARK: - Setup rows
+// MARK: - Mikrofon
 
-/// One requirement: whether it is met, what it is for, and the way to fix it.
-private struct SetupRow<Action: View>: View {
-    let done: Bool
-    let title: String
-    let detail: String
-    @ViewBuilder var action: Action
+private struct MicrophoneBlock: View {
+    @Bindable var preferences: Preferences
+    @Environment(\.theme) private var theme
+    @Environment(\.isSnapshot) private var isSnapshot
+    @State private var devices: [InputDevice] = []
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Image(systemName: done ? "checkmark.circle.fill" : "circle")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(done ? Palette.orangeOnPetrol : Palette.textTertiary)
-                .frame(width: 18)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(Palette.text)
-                Text(detail)
-                    .font(.system(size: 11))
-                    .foregroundStyle(Palette.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
+        Block(title: "Mikrofon") {
+            HStack(spacing: 12) {
+                if isSnapshot {
+                    deviceLabel
+                } else {
+                    Menu {
+                        Button("Wie in macOS") { preferences.inputDeviceUID = nil }
+                        Divider()
+                        ForEach(devices) { device in
+                            Button(device.name) { preferences.inputDeviceUID = device.uid }
+                        }
+                    } label: {
+                        deviceLabel
+                    }
+                    .menuStyle(.button)
+                    .buttonStyle(.plain)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                }
+                Spacer()
+                LevelMeter(deviceUID: preferences.inputDeviceUID)
             }
-            Spacer(minLength: 12)
-            action
+            .padding(.horizontal, 16)
+            .frame(height: 52)
+            .surface(radius: 16)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .onAppear { if !isSnapshot { devices = InputDevices.all() } }
+    }
+
+    private var deviceLabel: some View {
+        HStack(spacing: 8) {
+            Text(currentName).font(Typography.text(15, .semibold))
+            Image(systemName: "chevron.down").font(.system(size: 10, weight: .bold))
+        }
+        .foregroundStyle(theme.ink)
+        .contentShape(Rectangle())
+    }
+
+    private var currentName: String {
+        if let uid = preferences.inputDeviceUID, let device = devices.first(where: { $0.uid == uid }) {
+            return device.name
+        }
+        if isSnapshot { return "MacBook Pro-Mikrofon" }
+        return InputDevices.systemDefault()?.name ?? "Wie in macOS"
+    }
+}
+
+/// Bars that come alive for a few seconds when clicked. Not always on: a live
+/// meter would keep the microphone, and the orange privacy dot, on the whole
+/// time the window is open.
+private struct LevelMeter: View {
+    let deviceUID: String?
+    @Environment(\.theme) private var theme
+    @State private var levels: [Float] = Array(repeating: 0, count: 9)
+    @State private var testing = false
+
+    var body: some View {
+        Button(action: test) {
+            HStack(spacing: 3) {
+                ForEach(Array(levels.enumerated()), id: \.offset) { _, level in
+                    Capsule()
+                        .fill(level > 0.02 ? theme.accent : theme.hairline)
+                        .frame(width: 4, height: 6 + 12 * CGFloat(level))
+                }
+            }
+            .frame(height: 18)
+            .animation(.easeOut(duration: 0.1), value: levels)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(testing)
+        .help("Testen")
+    }
+
+    private func test() {
+        testing = true
+        var settings = AudioRecorder.Settings()
+        settings.inputDeviceID = InputDevices.id(forUID: deviceUID)
+        let recorder = AudioRecorder(settings: settings)
+        recorder.onLevel = { level in
+            levels.removeFirst()
+            levels.append(level)
+        }
+        Task {
+            try? await recorder.start()
+            try? await Task.sleep(for: .seconds(4))
+            recorder.cancel()
+            levels = Array(repeating: 0, count: levels.count)
+            testing = false
+        }
+    }
+}
+
+// MARK: - Anbieter
+
+private struct ProviderBlock: View {
+    @Bindable var preferences: Preferences
+    let setup: Setup
+
+    var body: some View {
+        Block(title: "Anbieter") {
+            VStack(spacing: 0) {
+                Segmented(options: Provider.allCases.map { (value: $0, label: $0.name) }, selection: $preferences.provider)
+                    .padding(10)
+                Rule()
+                KeyRow(setup: setup, provider: preferences.provider)
+                Rule()
+                FieldRow(label: "Modell", text: $preferences.model, prompt: preferences.provider.defaultModel)
+                if preferences.provider == .custom {
+                    Rule()
+                    FieldRow(label: "Adresse", text: $preferences.customBaseURL, prompt: "https://…/v1")
+                }
+            }
+            .surface(radius: 16)
+        }
+        .onChange(of: preferences.provider) { setup.refresh() }
     }
 }
 
@@ -309,79 +186,43 @@ private struct KeyRow: View {
     let setup: Setup
     let provider: Provider
 
+    @Environment(\.theme) private var theme
+    @Environment(\.isSnapshot) private var isSnapshot
     @State private var editing = false
     @State private var input = ""
     @State private var problem: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SetupRow(
-                done: setup.hasKey,
-                title: "API-Schlüssel",
-                detail: setup.hasKey
-                    ? "Für \(owner), im Schlüsselbund gespeichert."
-                    : "Für \(owner)."
-            ) {
-                if setup.hasKey && !editing {
-                    Button("Ändern") { editing = true }.buttonStyle(.quiet)
-                }
-            }
-
-            if !setup.hasKey || editing {
-                entry
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 12)
-                    .padding(.leading, 30)
-            }
-        }
-        // A half-typed key belongs to the provider it was typed for.
-        .onChange(of: provider) { close() }
-    }
-
-    private var owner: String {
-        provider == .custom ? "den eigenen Anbieter" : provider.name
-    }
-
-    private var entry: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                // Always empty when opened. The stored key is never read back
+        HStack(spacing: 10) {
+            Image(systemName: "lock")
+                .font(.system(size: 13, weight: .medium))
+            if editing || !setup.hasKey {
+                // Always empty when opened: the stored key is never read back
                 // into a field, where it would sit in memory for no reason.
-                SecureField(
-                    "",
-                    text: $input,
-                    prompt: Text(provider.keyPlaceholder).foregroundStyle(Palette.textTertiary)
-                )
-                .textFieldStyle(.plain)
-                .font(.system(size: 13, design: .monospaced))
-                .foregroundStyle(Palette.text)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.black.opacity(0.18)))
-                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Palette.line))
-                .onSubmit(save)
-
+                if isSnapshot {
+                    Text(provider.keyPlaceholder).font(Typography.mono(13)).foregroundStyle(theme.inkOnCard)
+                } else {
+                    SecureField("", text: $input, prompt: Text(provider.keyPlaceholder).foregroundStyle(theme.inkOnCard))
+                        .textFieldStyle(.plain)
+                        .font(Typography.mono(13))
+                        .onSubmit(save)
+                }
+                Spacer()
                 Button("Sichern", action: save)
-                    .buttonStyle(.primary)
+                    .buttonStyle(.outlineCompact)
                     .disabled(input.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-
-            HStack(spacing: 12) {
-                if editing {
-                    Button("Abbrechen") { close() }.buttonStyle(.quiet)
-                    Button("Schlüssel entfernen") {
-                        setup.removeKey()
-                        close()
-                    }
-                    .buttonStyle(.quiet)
-                }
-                if let problem {
-                    Text(problem)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Palette.orangeOnPetrol)
-                }
+            } else {
+                Text("Schlüssel")
+                Spacer()
+                Button("Ändern") { editing = true }.buttonStyle(.outlineCompact)
             }
         }
+        .font(Typography.text(15))
+        .foregroundStyle(theme.ink)
+        .padding(.horizontal, 16)
+        .frame(height: 48)
+        .onChange(of: provider) { close() }
+        .help(problem ?? "")
     }
 
     private func save() {
@@ -389,216 +230,154 @@ private struct KeyRow: View {
         guard !key.isEmpty else { return }
         do {
             try setup.store(key: key)
+            problem = nil
             close()
         } catch {
-            // Said on screen rather than only logged: a key that silently
-            // failed to save shows up later as a failed dictation.
             problem = error.localizedDescription
         }
     }
 
     private func close() {
         input = ""
-        problem = nil
         editing = false
     }
 }
 
-/// A setup action. Orange only for the step to do next: with three missing
-/// steps and three orange buttons, nothing reads as "start here".
-private struct SetupButton: View {
-    let title: String
-    let isNext: Bool
-    let action: () -> Void
+private struct FieldRow: View {
+    let label: String
+    @Binding var text: String
+    let prompt: String
+
+    @Environment(\.theme) private var theme
+    @Environment(\.isSnapshot) private var isSnapshot
 
     var body: some View {
-        if isNext {
-            Button(title, action: action).buttonStyle(.primary)
-        } else {
-            Button(title, action: action).buttonStyle(.quiet)
-        }
-    }
-}
-
-private struct MicrophoneRow: View {
-    let setup: Setup
-
-    /// The key comes first, so the microphone is next only once it is stored.
-    private var isNext: Bool { setup.hasKey }
-
-    var body: some View {
-        SetupRow(done: setup.microphone == .allowed, title: "Mikrofon", detail: detail) {
-            switch setup.microphone {
-            case .allowed:
-                EmptyView()
-            case .notAsked:
-                SetupButton(title: "Erlauben", isNext: isNext) { Task { await setup.requestMicrophone() } }
-            case .denied:
-                SetupButton(title: "Einstellungen", isNext: isNext) { Task { await setup.requestMicrophone() } }
-            }
-        }
-    }
-
-    private var detail: String {
-        switch setup.microphone {
-        case .allowed: "Erlaubt."
-        case .notAsked: "Noch nicht gefragt."
-        case .denied: "Abgelehnt. Nur in den Systemeinstellungen änderbar."
-        }
-    }
-}
-
-private struct PasteRow: View {
-    let setup: Setup
-
-    var body: some View {
-        SetupRow(
-            done: setup.canPaste,
-            title: "In andere Apps einfügen",
-            detail: setup.canPaste
-                ? "Erlaubt."
-                : "Ohne diese Freigabe landet der Text nur in der Zwischenablage."
-        ) {
-            if !setup.canPaste {
-                SetupButton(
-                    title: "Erlauben",
-                    isNext: setup.hasKey && setup.microphone == .allowed
-                ) { setup.requestPaste() }
-            }
-        }
-    }
-}
-
-// MARK: - Shortcuts
-
-private struct ShortcutRow: View {
-    let title: String
-    let keys: [String]
-
-    var body: some View {
-        HStack {
-            Text(title)
-                .font(.system(size: 13))
-                .foregroundStyle(Palette.text)
+        HStack(spacing: 12) {
+            Text(label)
+                .font(Typography.text(15))
+                .foregroundStyle(theme.ink)
             Spacer()
-            HStack(spacing: 4) {
-                ForEach(keys, id: \.self) { Keycap(label: $0) }
+            Group {
+                if isSnapshot {
+                    // ImageRenderer cannot draw AppKit-backed fields.
+                    Text(text.isEmpty ? prompt : text)
+                } else {
+                    TextField("", text: $text, prompt: Text(prompt).foregroundStyle(theme.inkOnCard))
+                        .textFieldStyle(.plain)
+                        .multilineTextAlignment(.trailing)
+                }
             }
+            .font(Typography.mono(13))
+            .foregroundStyle(theme.inkOnCard)
+            .frame(maxWidth: 260, alignment: .trailing)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
+        .padding(.horizontal, 16)
+        .frame(height: 48)
     }
 }
 
-// MARK: - Probe
+// MARK: - Wortschatz
 
-private struct ProbeRow: View {
-    let probe: Probe
+private struct WordsBlock: View {
     let preferences: Preferences
+    @Environment(\.theme) private var theme
+    @Environment(\.isSnapshot) private var isSnapshot
+    @State private var adding = false
+    @State private var newWord = ""
+    @FocusState private var focused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
-                Button(action: { Task { await probe.run(with: preferences) } }) {
+        Block(title: "Wortschatz") {
+            FlowLayout(spacing: 8) {
+                ForEach(preferences.words, id: \.self) { word in
                     HStack(spacing: 6) {
-                        Image(systemName: probe.isRunning ? "waveform" : "mic.fill")
-                        Text(label)
-                            .monospacedDigit()
+                        Text(word).font(Typography.text(14))
+                        Button { preferences.removeWord(word) } label: {
+                            Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
+                        }
+                        .buttonStyle(.plain)
+                        .help("Entfernen")
                     }
+                    .foregroundStyle(theme.ink)
+                    .padding(.leading, 12)
+                    .padding(.trailing, 9)
+                    .frame(height: 28)
+                    .overlay(Capsule().strokeBorder(theme.cardBorder, lineWidth: 1.5))
                 }
-                .buttonStyle(.primary)
-                .disabled(probe.isRunning)
-
-                if case .transcribing = probe.state {
-                    ProgressView().controlSize(.small).tint(Palette.orangeOnPetrol)
-                }
-                Spacer()
+                addChip
             }
-
-            switch probe.state {
-            case .heard(let text):
-                Text("„\(text)“")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Palette.text)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-            case .failed(let message):
-                Label(message, systemImage: "exclamationmark.triangle.fill")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Palette.orangeOnPetrol)
-            default:
-                EmptyView()
-            }
-        }
-        .padding(14)
-    }
-
-    private var label: String {
-        switch probe.state {
-        case .recording(let secondsLeft): "Sprechen … \(secondsLeft)"
-        case .transcribing: "Schreibt …"
-        default: "Probe aufnehmen"
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .surface(radius: 16)
         }
     }
-}
 
-// MARK: - History
-
-private struct HistoryList: View {
-    let history: History
-
-    var body: some View {
-        if history.entries.isEmpty {
-            Text("Noch nichts diktiert.")
-                .font(.system(size: 13))
-                .foregroundStyle(Palette.textTertiary)
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
+    @ViewBuilder
+    private var addChip: some View {
+        if adding && !isSnapshot {
+            TextField("", text: $newWord, prompt: Text("Wort").foregroundStyle(theme.inkOnCard))
+                .textFieldStyle(.plain)
+                .font(Typography.text(14))
+                .focused($focused)
+                .onSubmit(add)
+                .frame(width: 140)
+                .padding(.horizontal, 12)
+                .frame(height: 28)
+                .overlay(Capsule().strokeBorder(theme.control, lineWidth: 1.5))
+                .onAppear { focused = true }
+                .onChange(of: focused) { _, isFocused in if !isFocused { add() } }
         } else {
-            ForEach(Array(history.entries.enumerated()), id: \.element.id) { index, entry in
-                if index > 0 { RowDivider() }
-                HistoryRow(entry: entry)
+            Button { adding = true } label: {
+                Text("+ Wort")
+                    .font(Typography.text(14))
+                    .foregroundStyle(theme.inkSecondary)
+                    .padding(.horizontal, 12)
+                    .frame(height: 28)
+                    .overlay(Capsule().strokeBorder(theme.control, style: StrokeStyle(lineWidth: 1.5, dash: [4, 3])))
+                    .contentShape(Capsule())
             }
+            .buttonStyle(.plain)
         }
+    }
+
+    private func add() {
+        preferences.addWord(newWord)
+        newWord = ""
+        adding = false
     }
 }
 
-private struct HistoryRow: View {
-    let entry: History.Entry
-    @State private var copied = false
+// MARK: - Allgemein
+
+private struct GeneralBlock: View {
+    let launchAtLogin: LaunchAtLogin
+    let history: History
+    @Environment(\.theme) private var theme
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Text(entry.text)
-                .font(.system(size: 13))
-                .foregroundStyle(Palette.text)
-                .lineLimit(3)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Text(entry.date, format: .dateTime.hour().minute())
-                .font(.system(size: 11))
-                .monospacedDigit()
-                .foregroundStyle(Palette.textTertiary)
-                .padding(.top, 2)
-            Button(action: copy) {
-                Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                    .font(.system(size: 11, weight: .medium))
-                    .frame(width: 14, height: 14)
+        Block(title: "Allgemein") {
+            VStack(spacing: 0) {
+                Toggle(isOn: Binding(get: { launchAtLogin.isEnabled }, set: { launchAtLogin.set($0) })) {
+                    Text("Bei Anmeldung starten")
+                }
+                .toggleStyle(AccentToggleStyle())
+                .padding(.horizontal, 16)
+                .frame(height: 48)
+                .help(launchAtLogin.problem ?? "")
+                Rule()
+                HStack {
+                    Text("Verlauf")
+                    Spacer()
+                    Button("Leeren", action: history.clear)
+                        .buttonStyle(.outlineCompact)
+                        .disabled(history.entries.isEmpty)
+                }
+                .padding(.horizontal, 16)
+                .frame(height: 48)
             }
-            .buttonStyle(.quiet)
-            .help("Kopieren")
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
-    }
-
-    private func copy() {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(entry.text, forType: .string)
-        copied = true
-        Task {
-            try? await Task.sleep(for: .seconds(1.5))
-            copied = false
+            .font(Typography.text(15))
+            .foregroundStyle(theme.ink)
+            .surface(radius: 16)
         }
     }
 }

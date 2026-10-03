@@ -23,8 +23,12 @@ final class Setup {
     private(set) var microphone: Microphone
     private(set) var canPaste: Bool
 
+    /// Pasting is optional only for a key combination: right ⌘ twice and the
+    /// mouse button need the same Accessibility permission to work at all.
     var isComplete: Bool {
-        hasKey && microphone == .allowed && canPaste && !(preferences?.isEndpointMissing ?? false)
+        let pasteNeeded = preferences?.trigger.needsEventTap ?? true
+        return hasKey && microphone == .allowed && (canPaste || !pasteNeeded)
+            && !(preferences?.isEndpointMissing ?? false)
     }
 
     /// nil for a fixture, whose values never change.
@@ -51,9 +55,14 @@ final class Setup {
     /// reads can raise a prompt: the key is checked by its attributes only.
     func refresh() {
         guard let preferences else { return }
-        hasKey = Secrets.exists(for: preferences.provider)
-        microphone = Self.microphoneStatus()
-        canPaste = AXIsProcessTrusted()
+        // Assigned only on change: every assignment re-renders whatever
+        // observes it, and this runs every few seconds.
+        let key = Secrets.exists(for: preferences.provider)
+        let mic = Self.microphoneStatus()
+        let paste = AXIsProcessTrusted()
+        if key != hasKey { hasKey = key }
+        if mic != microphone { microphone = mic }
+        if paste != canPaste { canPaste = paste }
     }
 
     // MARK: - Fixing things
