@@ -383,7 +383,16 @@ private struct ProbeStep: View {
             // the clipboard, show it anyway: the point is that it arrived.
             guard newest != seen, let entry = history.entries.first else { return }
             seen = newest
-            if !text.contains(entry.text) { text = entry.text }
+            guard entry.pasted else {
+                if !text.contains(entry.text) { text = entry.text }
+                return
+            }
+            // The paste is a keystroke that lands a moment after the history
+            // entry. Filling the field at once and then getting the paste put
+            // the sentence in twice; it is only filled in if no paste came.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                if !text.contains(entry.text) { text = entry.text }
+            }
         }
     }
 
