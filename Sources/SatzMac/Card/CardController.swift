@@ -134,10 +134,12 @@ final class CardPanel: NSPanel {
         NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
     }
 
-    /// Taller or shorter with the text, bottom edge fixed.
+    /// Taller or shorter with the text, bottom edge fixed; wider or narrower
+    /// from the right edge, so the eye and x stay under the mouse that just
+    /// clicked them.
     func resize(to size: CGSize) {
         guard size.width > 0, size.height > 0 else { return }
-        let origin = NSPoint(x: frame.midX - size.width / 2, y: bottom ?? frame.minY)
+        let origin = NSPoint(x: frame.maxX - size.width, y: bottom ?? frame.minY)
         setFrame(NSRect(origin: origin, size: size), display: true)
         invalidateShadow()
     }
