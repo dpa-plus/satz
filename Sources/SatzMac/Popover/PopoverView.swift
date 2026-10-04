@@ -16,6 +16,7 @@ struct PopoverView: View {
     let actions: PopoverActions
 
     @Environment(\.theme) private var theme
+    @Environment(\.isSnapshot) private var isSnapshot
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -42,9 +43,9 @@ struct PopoverView: View {
         // No blue keyboard-focus ring on the copy button when the menu opens.
         .focusEffectDisabled()
         .onAppear { setup.refresh() }
-        .background(theme.ground)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(theme.cardBorder, lineWidth: 1.5))
+        .background(GlassSurface(cornerRadius: 16, tint: theme.ground, snapshot: isSnapshot))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(theme.cardBorder.opacity(0.6), lineWidth: 1))
     }
 
     /// At most one thing is wrong at a time, in order of how much it blocks.

@@ -54,8 +54,8 @@ struct CardView: View {
         // Nothing inside, text included, ever shows outside the card's shape,
         // not even halfway through a resize.
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(theme.ground))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(.white.opacity(0.12), lineWidth: 1))
+        .background(GlassSurface(cornerRadius: 18, tint: theme.ground, snapshot: isSnapshot))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(.white.opacity(0.14), lineWidth: 1))
         .animation(.smooth(duration: 0.32), value: showsText)
         .animation(.smooth(duration: 0.22), value: session.textVersion)
         .environment(\.theme, theme)
