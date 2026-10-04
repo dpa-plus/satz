@@ -33,6 +33,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
+        if let folder = argument(after: "--icon") {
+            try? IconRenderer.write(to: folder)
+            NSApp.terminate(nil)
+            return
+        }
         if let path = argument(after: "--hero") {
             try? HeroRenderer.write(to: path)
             NSApp.terminate(nil)

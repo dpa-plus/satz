@@ -4,7 +4,7 @@ SCRATCH ?= $(HOME)/Library/Caches/satz-build
 APP     := dist/satz.app
 BIN     := $(SCRATCH)/release/SatzMac
 
-.PHONY: app run test hero clean
+.PHONY: app run test hero icon clean
 
 app:
 	swift build -c release --scratch-path "$(SCRATCH)"
@@ -13,6 +13,7 @@ app:
 	cp "$(BIN)" "$(APP)/Contents/MacOS/satz"
 	cp Resources/Info.plist "$(APP)/Contents/Info.plist"
 	cp -R Resources/Fonts "$(APP)/Contents/Resources/Fonts"
+	cp Resources/AppIcon.icns "$(APP)/Contents/Resources/AppIcon.icns"
 	# This folder is cloud-synced, which stamps extended attributes onto every
 	# file. codesign refuses to sign a bundle carrying them.
 	xattr -cr "$(APP)"
@@ -38,6 +39,13 @@ test:
 hero: app
 	"$(APP)/Contents/MacOS/satz" --hero assets/hero.png
 	@echo "rendered assets/hero.png"
+
+# The icon is drawn by the app itself from the brand mark, then packed.
+icon: app
+	rm -rf "$(SCRATCH)/AppIcon.iconset"
+	"$(APP)/Contents/MacOS/satz" --icon "$(SCRATCH)/AppIcon.iconset"
+	iconutil -c icns "$(SCRATCH)/AppIcon.iconset" -o Resources/AppIcon.icns
+	@echo "wrote Resources/AppIcon.icns"
 
 clean:
 	rm -rf "$(SCRATCH)" dist

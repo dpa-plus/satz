@@ -8,6 +8,8 @@
 	<string>satz</string>
 	<key>CFBundleIdentifier</key>
 	<string>plus.dpa.satz</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleExecutable</key>
 	<string>satz</string>
 	<key>CFBundlePackageType</key>
