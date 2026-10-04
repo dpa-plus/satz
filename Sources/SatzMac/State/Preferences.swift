@@ -47,16 +47,39 @@ final class Preferences {
         didSet { defaults?.set(inputDeviceUID, forKey: Key.inputDeviceUID) }
     }
 
-    /// German or English. The predefined Ersetzungen follow it, as long as
-    /// the user has not changed them.
+    /// German or English, for the app itself.
     var language: Language {
         didSet {
             defaults?.set(language.rawValue, forKey: Key.language)
             Language.current = language
-            if Replacements.sameRules(replacements, Replacements.standard(for: oldValue)) {
-                replacements = Replacements.standard(for: language)
-            }
+            if spokenChoice == nil { swapPredefinedReplacements(from: oldValue, to: language) }
         }
+    }
+
+    /// The language the user talks to satz in, which decides the predefined
+    /// Ersetzungen and the trigger words the model is told to expect. The
+    /// same as the app's until chosen: people keep the Mac in one language
+    /// and talk in another.
+    var spokenLanguage: Language {
+        get { spokenChoice ?? language }
+        set {
+            let old = spokenLanguage
+            spokenChoice = newValue
+            defaults?.set(newValue.rawValue, forKey: Key.spokenLanguage)
+            swapPredefinedReplacements(from: old, to: newValue)
+        }
+    }
+
+    /// nil until the user picks a spoken language of their own.
+    private var spokenChoice: Language?
+
+    /// The predefined rules of one language make way for the other's. The
+    /// user's own rules stay; a predefined one they removed comes back.
+    private func swapPredefinedReplacements(from old: Language, to new: Language) {
+        guard old != new else { return }
+        let predefined = Set(Replacements.standard(for: old).map { $0.spoken.lowercased() })
+        let own = replacements.filter { !predefined.contains($0.spoken.lowercased()) }
+        replacements = Replacements.standard(for: new) + own
     }
 
     /// Where the user dragged the card, as an offset from the bottom centre
@@ -156,6 +179,7 @@ final class Preferences {
         static let triggerMode = "triggerMode"
         static let inputDeviceUID = "inputDeviceUID"
         static let language = "language"
+        static let spokenLanguage = "spokenLanguage"
         static let showsText = "showsText"
         static let appTheme = "appTheme"
         static let cardOffset = "cardOffset"
@@ -182,9 +206,11 @@ final class Preferences {
             .flatMap { values in values["x"].flatMap { x in values["y"].map { CGPoint(x: x, y: $0) } } }
         let language = defaults?.string(forKey: Key.language).flatMap(Language.init(rawValue:)) ?? .system
         self.language = language
+        let spokenChoice = defaults?.string(forKey: Key.spokenLanguage).flatMap(Language.init(rawValue:))
+        self.spokenChoice = spokenChoice
         replacements = defaults?.data(forKey: Key.replacements)
             .flatMap { try? JSONDecoder().decode([Replacement].self, from: $0) }
-            ?? Replacements.standard(for: language)
+            ?? Replacements.standard(for: spokenChoice ?? language)
         removesFillers = defaults?.object(forKey: Key.removesFillers) as? Bool ?? true
         usesReplacements = defaults?.object(forKey: Key.usesReplacements) as? Bool ?? true
         // Only the real, stored preferences set the app-wide language and

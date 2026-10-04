@@ -441,6 +441,20 @@ private struct ReplacementsBlock: View {
                 .frame(height: 48)
                 if preferences.usesReplacements {
                     Rule()
+                    // Apart from the app's language: the Mac in English, the
+                    // dictation in German, or the other way round.
+                    HStack {
+                        Text(de("Gesprochen auf", en: "Spoken in"))
+                        Spacer()
+                        Segmented(options: Language.allCases.map { (value: $0, label: $0.name) },
+                                  selection: $preferences.spokenLanguage)
+                            .frame(width: 210)
+                    }
+                    .font(Typography.text(15))
+                    .foregroundStyle(theme.ink)
+                    .padding(.horizontal, 16)
+                    .frame(height: 52)
+                    Rule()
                     rules
                 }
             }
