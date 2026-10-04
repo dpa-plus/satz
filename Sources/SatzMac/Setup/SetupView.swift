@@ -51,6 +51,8 @@ struct SetupView: View {
         .padding(.bottom, 32)
         .frame(width: 460)
         .background(theme.ground)
+        // No blue keyboard-focus ring on the first button when the window opens.
+        .focusEffectDisabled()
         .task {
             guard !isSnapshot else { return }
             while !Task.isCancelled {

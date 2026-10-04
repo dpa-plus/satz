@@ -37,6 +37,7 @@ struct CardView: View {
         .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(theme.ground))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(.white.opacity(0.12), lineWidth: 1))
         .environment(\.theme, theme)
+        .focusEffectDisabled()
         .fixedSize(horizontal: false, vertical: true)
         .onGeometryChange(for: CGSize.self, of: { $0.size }, action: onSize)
     }

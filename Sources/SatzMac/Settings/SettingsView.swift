@@ -19,6 +19,7 @@ struct SettingsView: View {
             content.background(theme.ground)
         } else {
             ScrollView { content }
+                .focusEffectDisabled()
                 .scrollIndicators(.never)
                 .frame(width: 520, height: 720)
                 .background(theme.ground)

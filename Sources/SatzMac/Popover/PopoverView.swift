@@ -38,6 +38,8 @@ struct PopoverView: View {
         }
         .padding(12)
         .frame(width: 340)
+        // No blue keyboard-focus ring on the copy button when the menu opens.
+        .focusEffectDisabled()
         .onAppear { setup.refresh() }
         .background(theme.ground)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
