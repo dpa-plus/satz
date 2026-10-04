@@ -8,8 +8,9 @@ import AppKit
 /// `caret:<index>` (as if clicked there), `field` (logs where the focused
 /// text field is), `dump`, which writes the card's
 /// phase and text to the state file, `picture`, which saves the live
-/// card as a PNG next to it, and `film`, which toggles the eye and saves a
-/// picture of every step of the animation.
+/// card as a PNG next to it, `film`, which toggles the eye and saves a
+/// picture of every step of the animation, and `clipboard`, which checks on
+/// a private pasteboard that a paste hands every kind of content back.
 @MainActor
 final class DevControl {
 
@@ -54,6 +55,7 @@ final class DevControl {
         case "picture":
             try? card.picture()?.write(to: stateFile.deletingPathExtension().appendingPathExtension("png"))
         case "film": film()
+        case "clipboard": checkClipboard()
         default:
             if command.hasPrefix("caret:"), let index = Int(command.dropFirst(6)) {
                 session.userMovedCaret(to: index)
@@ -71,6 +73,33 @@ final class DevControl {
                 try? card.picture()?.write(to: URL(fileURLWithPath: "\(base)-film-\(step).png"))
             }
         }
+    }
+
+    /// Puts a picture and a styled text on a private pasteboard, does what a
+    /// paste does to the clipboard, and logs whether everything came back.
+    /// Never the real clipboard.
+    private func checkClipboard() {
+        let board = NSPasteboard(name: NSPasteboard.Name("plus.dpa.satz.test"))
+        board.clearContents()
+        let item = NSPasteboardItem()
+        item.setData(NSImage(size: NSSize(width: 4, height: 4)).tiffRepresentation ?? Data(), forType: .tiff)
+        item.setString("copied", forType: .string)
+        item.setData(Data("{\\rtf1 copied}".utf8), forType: .rtf)
+        board.writeObjects([item])
+        let before = Set(board.pasteboardItems?.first?.types ?? [])
+        let saved = Paster.copy(of: board)
+        board.clearContents()
+        board.setString("transcript", forType: .string)
+        Paster.putBack(saved, on: board, ifStill: board.changeCount)
+        let after = Set(board.pasteboardItems?.first?.types ?? [])
+        let restored = board.string(forType: .string) ?? "-"
+        // Something copied after the paste must not be overwritten.
+        let copiedLater = board.changeCount
+        board.clearContents()
+        board.setString("newer", forType: .string)
+        Paster.putBack(saved, on: board, ifStill: copiedLater)
+        Log.note("clipboard: types back \(before == after) (\(after.count) of \(before.count)), text \(restored), newer kept \(board.string(forType: .string) == "newer")")
+        board.releaseGlobally()
     }
 
     private func dump() {

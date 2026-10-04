@@ -31,9 +31,10 @@ enum Paster {
         guard !text.isEmpty else { return .pasted }
 
         let pasteboard = NSPasteboard.general
-        let previous = pasteboard.string(forType: .string)
+        let previous = copy(of: pasteboard)
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
+        let ours = pasteboard.changeCount
 
         if let blocker = whatIsBlockingPaste() {
             // Leave the transcript on the clipboard: it is the fallback.
@@ -42,7 +43,10 @@ enum Paster {
 
         restoreFocus(to: origin)
         sendCommandV()
-        restore(previous, after: .milliseconds(400))
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(400))
+            putBack(previous, on: pasteboard, ifStill: ours)
+        }
         return .pasted
     }
 
@@ -76,17 +80,27 @@ enum Paster {
         Thread.sleep(forTimeInterval: 0.12)
     }
 
-    /// Hands the clipboard back. Dictating should not silently destroy whatever
-    /// the user had copied, but the transcript has to sit there long enough to
-    /// be pasted first.
-    private static func restore(_ previous: String?, after delay: Duration) {
-        guard let previous else { return }
-        Task { @MainActor in
-            try? await Task.sleep(for: delay)
-            let pasteboard = NSPasteboard.general
-            pasteboard.clearContents()
-            pasteboard.setString(previous, forType: .string)
+    /// Everything on the clipboard, in every form it was offered in. Only the
+    /// plain text was kept before, so a copied picture or file was gone after
+    /// one dictation.
+    static func copy(of pasteboard: NSPasteboard) -> [NSPasteboardItem] {
+        (pasteboard.pasteboardItems ?? []).map { item in
+            let copy = NSPasteboardItem()
+            for type in item.types {
+                if let data = item.data(forType: type) { copy.setData(data, forType: type) }
+            }
+            return copy
         }
+    }
+
+    /// Hands the clipboard back once the transcript has been pasted. Dictating
+    /// should not destroy whatever the user had copied, but only while the
+    /// transcript is still what is there: something copied in the meantime
+    /// stays.
+    static func putBack(_ previous: [NSPasteboardItem], on pasteboard: NSPasteboard, ifStill ours: Int) {
+        guard !previous.isEmpty, pasteboard.changeCount == ours else { return }
+        pasteboard.clearContents()
+        pasteboard.writeObjects(previous)
     }
 
     private static func sendCommandV() {
