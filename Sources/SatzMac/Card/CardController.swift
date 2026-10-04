@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// Owns the card's window: shows it near the bottom of the screen and grows
-/// it upward, so the strip with the buttons stays exactly where it was.
+/// Owns the card's window: shows it near the bottom of the screen, where the
+/// card grows upward so the row with the buttons stays exactly where it was.
 @MainActor
 final class CardController {
 
@@ -66,15 +66,12 @@ final class CardController {
             dragging = false
             preferences.cardOffset = panel.offset()
         }
-        let view = CardView(
-            session: session, preferences: preferences,
-            onSize: { [weak panel] size in panel?.resize(to: size) },
-            onDrag: { [weak self] dragging in self?.drag(dragging) }
-        )
+        let view = CardView(session: session, preferences: preferences) { [weak self] dragging in
+            self?.drag(dragging)
+        }
         let hosting = NSHostingView(rootView: view.themed())
         hosting.sizingOptions = []
         panel.contentView = hosting
-        panel.resize(to: hosting.fittingSize)
         return panel
     }
 }
@@ -82,19 +79,28 @@ final class CardController {
 /// Floats above everything, follows the user across desktops, and takes the
 /// keyboard only when the user clicks into the text. Pressing a button on
 /// the card leaves the app they were typing in focused.
+///
+/// The window never changes size. It is as big as the card can get, plus a
+/// margin for the shadow, and see-through around the card, which sits in its
+/// bottom right corner and animates inside it. Resizing the window as well,
+/// on its own clock, made the card flicker and jump when it grew. Clicks on
+/// the see-through part go to whatever is underneath.
 final class CardPanel: NSPanel {
 
-    /// Where the bottom and right edges sit, kept while the card changes size.
-    private var bottom: CGFloat?
-    private var right: CGFloat?
+    /// Room around the card for its shadow.
+    static let margin: CGFloat = 18
+    static let size = CGSize(
+        width: CardView.width + 2 * margin,
+        height: CardView.maxTextHeight + 1 + CardView.rowHeight + 2 * margin
+    )
+
     /// Called once the user has finished dragging the card somewhere new.
     var onMoved: () -> Void = {}
     private var settling: Task<Void, Never>?
-    private var settlingSize: Task<Void, Never>?
 
     init() {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: CardView.width, height: 38),
+            contentRect: NSRect(origin: .zero, size: Self.size),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -103,7 +109,8 @@ final class CardPanel: NSPanel {
         level = .statusBar
         isOpaque = false
         backgroundColor = .clear
-        hasShadow = true
+        // The card draws its own shadow, inside the margin.
+        hasShadow = false
         hidesOnDeactivate = false
         becomesKeyOnlyIfNeeded = true
         isMovableByWindowBackground = false
@@ -117,8 +124,6 @@ final class CardPanel: NSPanel {
     /// A drag by the window server ends without telling us; the moves stop.
     /// So the new spot is taken a moment after the last one.
     private func moved() {
-        bottom = frame.minY
-        right = frame.maxX
         settling?.cancel()
         settling = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(300))
@@ -130,6 +135,12 @@ final class CardPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
+    /// Where the window goes by default: the full card centred near the
+    /// bottom of the screen.
+    private static func base(in visible: NSRect) -> NSPoint {
+        NSPoint(x: visible.midX - CardView.width / 2 - margin, y: visible.minY + 96 - margin)
+    }
+
     /// Near the bottom centre of the screen holding the mouse, which is where
     /// the user is already looking, or where they last dragged it to.
     ///
@@ -138,68 +149,28 @@ final class CardPanel: NSPanel {
     /// goes just above the field, where growing upward cannot cover it either.
     func place(offset: CGPoint?, avoiding field: NSRect?) {
         guard let visible = Self.screen()?.visibleFrame else { return }
-        let base = NSPoint(x: visible.midX - frame.width / 2, y: visible.minY + 96)
+        let base = Self.base(in: visible)
         var origin = NSPoint(x: base.x + (offset?.x ?? 0), y: base.y + (offset?.y ?? 0))
-        let card = NSRect(origin: origin, size: frame.size)
-        if let field, card.insetBy(dx: 0, dy: -8).intersects(field) {
-            origin.y = field.maxY + 12
+        // The card's bottom row, where it first appears.
+        let row = NSRect(x: origin.x + Self.margin, y: origin.y + Self.margin, width: CardView.width, height: CardView.rowHeight)
+        if let field, row.insetBy(dx: 0, dy: -8).intersects(field) {
+            origin.y = field.maxY + 12 - Self.margin
         }
         // Kept on screen, also when the remembered spot was on a larger display.
-        origin.x = min(max(origin.x, visible.minX + 8), visible.maxX - frame.width - 8)
-        origin.y = min(max(origin.y, visible.minY + 8), visible.maxY - frame.height - 8)
-        bottom = origin.y
-        right = origin.x + frame.width
-        setFrameOrigin(origin)
-    }
-
-    func move(to origin: NSPoint) {
-        bottom = origin.y
-        right = origin.x + frame.width
+        origin.x = min(max(origin.x, visible.minX - Self.margin), visible.maxX - frame.width + Self.margin)
+        origin.y = min(max(origin.y, visible.minY - Self.margin), visible.maxY - frame.height + Self.margin)
         setFrameOrigin(origin)
     }
 
     /// The card's spot as an offset from the default one, for remembering.
     func offset() -> CGPoint {
         guard let visible = (screen ?? Self.screen())?.visibleFrame else { return .zero }
-        return CGPoint(x: frame.minX - (visible.midX - frame.width / 2), y: frame.minY - (visible.minY + 96))
+        let base = Self.base(in: visible)
+        return CGPoint(x: frame.minX - base.x, y: frame.minY - base.y)
     }
 
     private static func screen() -> NSScreen? {
         NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
-    }
-
-    /// Taller or shorter with the text, bottom edge fixed; wider or narrower
-    /// from the right edge, so the eye and x stay under the mouse that just
-    /// clicked them.
-    ///
-    /// One animation only, SwiftUI's, moves the card. The window first makes
-    /// room for both the old and the new size, the card animates inside it,
-    /// and only then does the window take the new size. Animating the window
-    /// as well, on its own clock, made the text and "Paused" drift around.
-    func resize(to size: CGSize) {
-        guard size.width > 0, size.height > 0 else { return }
-        guard isVisible else {
-            setFrame(anchored(size), display: true)
-            return
-        }
-        let room = CGSize(width: max(frame.width, size.width), height: max(frame.height, size.height))
-        if room != frame.size { setFrame(anchored(room), display: true) }
-        settlingSize?.cancel()
-        guard room != size else {
-            invalidateShadow()
-            return
-        }
-        settlingSize = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(320))
-            guard let self, !Task.isCancelled else { return }
-            setFrame(anchored(size), display: true)
-            invalidateShadow()
-        }
-    }
-
-    /// A frame of `size` with the bottom and right edges where they belong.
-    private func anchored(_ size: CGSize) -> NSRect {
-        NSRect(x: (right ?? frame.maxX) - size.width, y: bottom ?? frame.minY, width: size.width, height: size.height)
     }
 }
 

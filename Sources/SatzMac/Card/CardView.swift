@@ -11,7 +11,6 @@ import SatzKit
 struct CardView: View {
     let session: Session
     @Bindable var preferences: Preferences
-    var onSize: (CGSize) -> Void = { _ in }
     /// Dragging the strip moves the card: true while the drag goes on,
     /// false once it ends.
     var onDrag: (Bool) -> Void = { _ in }
@@ -23,6 +22,7 @@ struct CardView: View {
     /// About five lines, then the text scrolls inside the card.
     static let maxTextHeight: CGFloat = 5 * 20 + CardTextView.inset.height * 2
     static let width: CGFloat = 380
+    static let rowHeight: CGFloat = 40
 
     var body: some View {
         VStack(spacing: 0) {
@@ -60,10 +60,10 @@ struct CardView: View {
         .animation(.smooth(duration: 0.22), value: session.textVersion)
         .environment(\.theme, theme)
         .focusEffectDisabled()
-        .onGeometryChange(for: CGSize.self, of: { $0.size }, action: onSize)
         .onChange(of: Look.shared.family) { session.recolor() }
-        // Pinned to the window's bottom right while the window makes room,
-        // matching how the window itself is anchored.
+        // In the bottom right corner of a window that never changes size, so
+        // the card animates on its own and the buttons stay put.
+        .padding(CardPanel.margin)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
     }
 
@@ -119,7 +119,7 @@ private struct Strip: View {
         }
         .padding(.leading, 14)
         .padding(.trailing, 7)
-        .frame(height: 40)
+        .frame(height: CardView.rowHeight)
         // The whole strip is the handle, waveform and labels included; a
         // plain click on a button still goes to the button.
         .contentShape(Rectangle())
