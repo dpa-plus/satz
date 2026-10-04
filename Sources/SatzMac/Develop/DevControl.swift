@@ -17,6 +17,8 @@ final class DevControl {
     private let stateFile: URL
     private var observer: NSObjectProtocol?
     private var delivered: [String] = []
+    /// The eye button, from the app's preferences.
+    var toggleEye: () -> Void = {}
 
     init(session: Session, card: CardController, stateFile: URL) {
         self.session = session
@@ -46,6 +48,7 @@ final class DevControl {
         case "discard": session.discard()
         case "undo": session.undoDiscard()
         case "dump": dump()
+        case "eye": toggleEye()
         case "field": Log.note("focused field: \(FocusedField.frame().map { NSStringFromRect($0) } ?? "unknown")")
         case "picture":
             try? card.picture()?.write(to: stateFile.deletingPathExtension().appendingPathExtension("png"))
@@ -63,6 +66,7 @@ final class DevControl {
             "raw": session.text.string,
             "sending": session.inFlight.count,
             "delivered": delivered,
+            "window": card.frameDescription,
         ]
         if let data = try? JSONSerialization.data(withJSONObject: state, options: [.prettyPrinted, .sortedKeys]) {
             try? data.write(to: stateFile)

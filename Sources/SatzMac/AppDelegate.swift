@@ -54,6 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if let stateFile = argument(after: "--dev-control") {
             devControl = DevControl(session: session, card: card, stateFile: URL(fileURLWithPath: stateFile))
+            devControl?.toggleEye = { [weak self] in self?.preferences.showsText.toggle() }
         }
         shortcut = Shortcut(
             preferences: preferences,

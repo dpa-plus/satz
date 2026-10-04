@@ -30,6 +30,11 @@ final class CardController {
         panel?.orderOut(nil)
     }
 
+    /// For test mode's state file.
+    var frameDescription: String {
+        panel.map { NSStringFromRect($0.frame) } ?? "none"
+    }
+
     /// The live card as a PNG, drawn by AppKit itself: real text view, real
     /// layout. For test mode, where no screenshot tool can see the panel.
     func picture() -> Data? {
