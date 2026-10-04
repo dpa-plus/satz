@@ -4,10 +4,23 @@ SCRATCH ?= $(HOME)/Library/Caches/satz-build
 APP     := dist/satz.app
 BIN     := $(SCRATCH)/release/SatzMac
 
-.PHONY: app run test hero icon clean
+UNIVERSAL ?= $(HOME)/Library/Caches/satz-universal
+
+.PHONY: app bundle share run test hero icon clean
 
 app:
 	swift build -c release --scratch-path "$(SCRATCH)"
+	$(MAKE) bundle
+
+# For another Mac: Apple chip and Intel in one app, zipped for AirDrop.
+share:
+	swift build -c release --arch arm64 --arch x86_64 --scratch-path "$(UNIVERSAL)"
+	$(MAKE) bundle BIN="$(UNIVERSAL)/out/Products/Release/SatzMac"
+	rm -f dist/satz.zip
+	ditto -c -k --keepParent "$(APP)" dist/satz.zip
+	@echo "built dist/satz.zip"
+
+bundle:
 	rm -rf "$(APP)"
 	mkdir -p "$(APP)/Contents/MacOS" "$(APP)/Contents/Resources"
 	cp "$(BIN)" "$(APP)/Contents/MacOS/satz"
