@@ -36,7 +36,13 @@ struct CardView: View {
                             .frame(height: min(max(textHeight, 36), Self.maxTextHeight))
                     }
                 }
-                .transition(.opacity)
+                // Gone quickly before the card shrinks; in after it has grown.
+                .transition(.asymmetric(
+                    insertion: .opacity.animation(.easeOut(duration: 0.18).delay(0.1)),
+                    removal: .opacity.animation(.easeIn(duration: 0.08))
+                ))
+                // Above the line: text to click and select. Below: the handle.
+                Rectangle().fill(theme.hairline).frame(height: 1)
             }
             Strip(session: session, preferences: preferences, wide: showsText, onDrag: onDrag)
         }
@@ -46,6 +52,9 @@ struct CardView: View {
         // Full width only with text to show; otherwise a compact pill, since
         // an empty middle is just wasted space.
         .frame(width: showsText ? Self.width : nil)
+        // Nothing inside, text included, ever shows outside the card's shape,
+        // not even halfway through a resize.
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(theme.ground))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(.white.opacity(0.12), lineWidth: 1))
         .environment(\.theme, theme)
