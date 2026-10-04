@@ -17,7 +17,6 @@ struct CardView: View {
     var onDrag: (Bool) -> Void = { _ in }
 
     @Environment(\.isSnapshot) private var isSnapshot
-    @State private var textHeight: CGFloat = 0
     /// Read on every draw, so a newly picked colour shows at once.
     private var theme: Theme { Look.shared.family.dark }
 
@@ -27,44 +26,65 @@ struct CardView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if showsText {
+            if canHoldText {
+                // Always there while dictating, folded to nothing when hidden,
+                // so showing and hiding is one smooth change of height
+                // instead of a view appearing and disappearing.
                 Group {
                     if isSnapshot {
                         SnapshotText(session: session)
                     } else {
-                        CardTextView(session: session, height: $textHeight)
-                            .frame(height: min(max(textHeight, 36), Self.maxTextHeight))
+                        CardTextView(session: session, version: session.textVersion)
                     }
                 }
-                // Gone quickly before the card shrinks; in after it has grown.
-                .transition(.asymmetric(
-                    insertion: .opacity.animation(.easeOut(duration: 0.18).delay(0.1)),
-                    removal: .opacity.animation(.easeIn(duration: 0.08))
-                ))
+                .frame(height: showsText ? nil : 0, alignment: .top)
+                .opacity(showsText ? 1 : 0)
+                .clipped()
                 // Above the line: text to click and select. Below: the handle.
-                Rectangle().fill(theme.hairline).frame(height: 1)
+                Rectangle().fill(theme.hairline)
+                    .frame(height: showsText ? 1 : 0)
             }
             Strip(session: session, preferences: preferences, wide: showsText, onDrag: onDrag)
         }
-        .animation(.smooth(duration: 0.24), value: showsText)
-        .animation(.smooth(duration: 0.2), value: textHeight)
         .id(preferences.lookKey)
-        // Full width only with text to show; otherwise a compact pill, since
-        // an empty middle is just wasted space.
-        .frame(width: showsText ? Self.width : nil)
+        // Full width with text, a fixed small width as a pill, so the width
+        // always has a number to animate between.
+        .frame(width: width)
+        .fixedSize(horizontal: width == nil, vertical: true)
         // Nothing inside, text included, ever shows outside the card's shape,
         // not even halfway through a resize.
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(theme.ground))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(.white.opacity(0.12), lineWidth: 1))
+        .animation(.smooth(duration: 0.32), value: showsText)
+        .animation(.smooth(duration: 0.22), value: session.textVersion)
         .environment(\.theme, theme)
         .focusEffectDisabled()
-        .fixedSize(horizontal: !showsText, vertical: true)
         .onGeometryChange(for: CGSize.self, of: { $0.size }, action: onSize)
         .onChange(of: Look.shared.family) { session.recolor() }
-        // Pinned to the window's bottom right while the window animates to
-        // its new size, matching how the window itself is anchored.
+        // Pinned to the window's bottom right while the window makes room,
+        // matching how the window itself is anchored.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+    }
+
+    /// The pill's width: room for the short wave and the three buttons.
+    static let pillWidth: CGFloat = 200
+
+    private var width: CGFloat? {
+        if showsText { return Self.width }
+        switch session.phase {
+        case .idle, .starting, .listening, .paused: return Self.pillWidth
+        // Short status lines ("Verworfen · Rückgängig") take what they need.
+        default: return nil
+        }
+    }
+
+    /// Phases in which the card can show text at all.
+    private var canHoldText: Bool {
+        switch session.phase {
+        case .idle, .discarded, .clipboard: false
+        default: true
+        }
     }
 
     /// Only once there is text: the placeholder alone is not worth a line.
@@ -116,8 +136,8 @@ private struct Strip: View {
         case .idle, .starting, .listening, .paused:
             // While listening the moving bars say it; only a pause gets a word.
             if session.phase == .paused { label(de("Pausiert", en: "Paused")) }
-            Waveform(levels: wide ? session.levels : Array(session.levels.suffix(14)),
-                     live: session.phase == .listening, spread: wide)
+            Waveform(levels: wide ? session.levels : Array(session.levels.suffix(12)),
+                     live: session.phase == .listening, spread: true)
                 // Long and short waves cross-fade instead of reshuffling bars.
                 .id(wide)
                 .transition(.opacity)

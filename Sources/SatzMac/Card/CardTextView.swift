@@ -5,13 +5,13 @@ import SwiftUI
 /// and type, and the session can tell where the caret is.
 struct CardTextView: NSViewRepresentable {
     let session: Session
-    /// The height the text needs, reported back for the card to size itself.
-    @Binding var height: CGFloat
+    /// Changes with every edit, so SwiftUI asks for the size again.
+    let version: Int
 
     static let inset = NSSize(width: 12, height: 9)
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(session: session, height: $height)
+        Coordinator(session: session)
     }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -47,9 +47,25 @@ struct CardTextView: NSViewRepresentable {
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
-        // Read so SwiftUI calls this again whenever satz changes the text.
-        _ = session.textVersion
-        context.coordinator.remeasure()
+        // New text at the end stays in view while dictating.
+        if session.phase == .listening || session.phase == .paused {
+            DispatchQueue.main.async { context.coordinator.textView?.scrollToEndOfDocument(nil) }
+        }
+    }
+
+    /// As tall as the text needs at the width offered, up to about five
+    /// lines, then it scrolls. Measured from the text itself rather than read
+    /// back from the view, which lagged a line behind and cut text off.
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSScrollView, context: Context) -> CGSize? {
+        let width = proposal.width ?? CardView.width
+        // The inset on both sides, plus the text container's own padding.
+        let available = max(1, width - 2 * (Self.inset.width + 5))
+        let bounds = session.text.boundingRect(
+            with: NSSize(width: available, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading]
+        )
+        let height = ceil(bounds.height) + Self.inset.height * 2
+        return CGSize(width: width, height: min(max(height, 36), CardView.maxTextHeight))
     }
 
     static func dismantleNSView(_ scroll: NSScrollView, coordinator: Coordinator) {
@@ -61,12 +77,10 @@ struct CardTextView: NSViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         let session: Session
-        let height: Binding<CGFloat>
         weak var textView: NSTextView?
 
-        init(session: Session, height: Binding<CGFloat>) {
+        init(session: Session) {
             self.session = session
-            self.height = height
         }
 
         func textView(_ textView: NSTextView, shouldChangeTextIn range: NSRange, replacementString: String?) -> Bool {
@@ -78,7 +92,6 @@ struct CardTextView: NSViewRepresentable {
 
         func textDidChange(_ notification: Notification) {
             session.userDidEdit()
-            remeasure()
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
@@ -97,20 +110,6 @@ struct CardTextView: NSViewRepresentable {
             // decide where to go on after a pause, since splitting the
             // recording at every keystroke would cut it into slivers.
             session.userMovedCaret(to: selection.location, byClick: clicked)
-        }
-
-        func remeasure() {
-            guard let textView, let layout = textView.layoutManager, let container = textView.textContainer else { return }
-            layout.ensureLayout(for: container)
-            let used = layout.usedRect(for: container).height
-            let needed = ceil(used + CardTextView.inset.height * 2)
-            if abs(height.wrappedValue - needed) > 0.5 {
-                DispatchQueue.main.async { self.height.wrappedValue = needed }
-            }
-            // New text at the end stays in view.
-            if let end = textView.textStorage?.length, textView.selectedRange().location >= end - 1 || session.phase == .listening {
-                textView.scrollToEndOfDocument(nil)
-            }
         }
     }
 }
