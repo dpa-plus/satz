@@ -80,8 +80,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             AnyView(PopoverView(
                 history: history, discarded: discarded, setup: setup, shortcut: shortcut, preferences: preferences,
                 actions: PopoverActions(
+                    // Taken only when it can come back: taking it while
+                    // dictating threw it away for good.
+                    canRestore: { [weak self] in self?.session.canRestore ?? false },
                     restore: { [weak self] in
-                        guard let self, let snapshot = discarded.take() else { return }
+                        guard let self, session.canRestore, let snapshot = discarded.take() else { return }
                         menuBar.close()
                         session.restore(snapshot)
                     },

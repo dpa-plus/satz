@@ -207,9 +207,15 @@ final class Session {
         restore(snapshot)
     }
 
+    /// Whether a discarded dictation can come back now: not over one that is
+    /// still going.
+    var canRestore: Bool {
+        phase == .idle || phase == .discarded || phase == .clipboard
+    }
+
     /// Brings a discarded dictation back, paused, from the card or the menu.
     func restore(_ snapshot: Discarded.Snapshot) {
-        guard phase == .idle || phase == .discarded || phase == .clipboard else { return }
+        guard canRestore else { return }
         closingLater?.cancel()
         stopEverything()
         reset()

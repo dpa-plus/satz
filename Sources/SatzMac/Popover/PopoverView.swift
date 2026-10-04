@@ -29,7 +29,8 @@ struct PopoverView: View {
                 EmptyHint(trigger: preferences.trigger, mode: preferences.triggerMode)
             }
 
-            if let snapshot = discarded.last {
+            // Not while dictating: it would have nowhere to go.
+            if let snapshot = discarded.last, actions.canRestore() {
                 DiscardedRow(preview: snapshot.preview, restore: actions.restore)
             }
 
@@ -62,6 +63,8 @@ struct PopoverView: View {
 
 /// What the popover can ask the app to do.
 struct PopoverActions {
+    /// Whether the last discarded dictation can come back right now.
+    var canRestore: () -> Bool = { true }
     /// Brings the last discarded dictation back into the card.
     var restore: () -> Void = {}
     var openSetup: () -> Void = {}
