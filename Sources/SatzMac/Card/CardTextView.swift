@@ -47,6 +47,13 @@ struct CardTextView: NSViewRepresentable {
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
+        // The text view's undo remembers offsets. Once satz has changed the
+        // text, ⌘Z would undo the user's typing at the wrong spot, or cut
+        // into a placeholder, so its history starts over.
+        if context.coordinator.seenSatzEdits != session.satzEdits {
+            context.coordinator.seenSatzEdits = session.satzEdits
+            context.coordinator.textView?.undoManager?.removeAllActions()
+        }
         // Where speech goes next stays in view while dictating. Not while the
         // user types or clicks in the text: scrolling to the end on every
         // keystroke jumped away from what they were editing.
@@ -88,6 +95,7 @@ struct CardTextView: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         let session: Session
         weak var textView: NSTextView?
+        var seenSatzEdits = 0
 
         init(session: Session) {
             self.session = session

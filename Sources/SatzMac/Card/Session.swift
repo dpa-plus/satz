@@ -52,6 +52,8 @@ final class Session {
     private(set) var inFlight: Set<Int> = []
     /// Changes whenever the text does, so the card re-measures.
     private(set) var textVersion = 0
+    /// Counts only satz's own changes to the text, not the user's typing.
+    @ObservationIgnored private(set) var satzEdits = 0
 
     /// Text or at least a placeholder to show.
     var hasText: Bool {
@@ -589,7 +591,7 @@ final class Session {
     // MARK: - Segments
 
     private func newSegment(at location: Int) -> Int {
-        var location = min(max(0, location), text.length)
+        var location = wordEdge(near: min(max(0, location), text.length))
         // Never inside another placeholder: right after it instead.
         if let marker = markerContaining(location) { location = NSMaxRange(marker) }
         // A new spot inside another recording's text splits it, so that text
@@ -652,6 +654,23 @@ final class Session {
     }
 
     // MARK: - Text queries
+
+    /// A click lands between two letters as easily as between two words, and
+    /// speech put there split the word: "Schrei … b". The nearer end of the
+    /// word instead.
+    private func wordEdge(near location: Int) -> Int {
+        let string = text.string as NSString
+        func isWordCharacter(_ index: Int) -> Bool {
+            guard index >= 0, index < string.length, let scalar = Unicode.Scalar(string.character(at: index)) else { return false }
+            return CharacterSet.alphanumerics.contains(scalar)
+        }
+        guard isWordCharacter(location - 1), isWordCharacter(location) else { return location }
+        var start = location
+        while isWordCharacter(start - 1) { start -= 1 }
+        var end = location
+        while isWordCharacter(end) { end += 1 }
+        return location - start <= end - location ? start : end
+    }
 
     /// The placeholder where the next words will go, for the card to keep in view.
     var activeMarkerRange: NSRange? {
@@ -740,6 +759,7 @@ final class Session {
         text.endEditing()
         isEditing = false
         textVersion += 1
+        satzEdits += 1
     }
 
     private func push(_ level: Float) {
