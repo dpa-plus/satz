@@ -110,6 +110,9 @@ struct OptionRow<Label: View>: View {
         .frame(maxWidth: .infinity, minHeight: 48, maxHeight: 48, alignment: .leading)
         .contentShape(Rectangle())
         .onTapGesture(perform: action)
+        // VoiceOver can choose the option, not only the record button in it.
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction(.default, action)
     }
 }
 

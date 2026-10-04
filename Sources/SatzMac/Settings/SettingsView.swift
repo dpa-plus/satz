@@ -600,6 +600,9 @@ private struct ThemePicker: View {
                 }
                 .buttonStyle(.plain)
                 .help(family.name)
+                // A colour dot alone says nothing to VoiceOver.
+                .accessibilityLabel(family.name)
+                .accessibilityAddTraits(family == selection ? .isSelected : [])
             }
         }
     }

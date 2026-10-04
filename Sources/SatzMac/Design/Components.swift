@@ -254,8 +254,10 @@ struct AccentToggleStyle: ToggleStyle {
                 }
                 .frame(width: 38, height: 22)
                 .animation(.easeOut(duration: 0.15), value: configuration.isOn)
-                .onTapGesture { configuration.isOn.toggle() }
             }
+            // The label switches it too, like a system toggle's does.
+            .contentShape(Rectangle())
+            .onTapGesture { configuration.isOn.toggle() }
         }
     }
 }
