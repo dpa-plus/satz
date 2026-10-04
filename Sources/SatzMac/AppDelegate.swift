@@ -20,6 +20,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var setupWindow: AppWindow!
     private var devControl: DevControl?
 
+    /// A dictation tool is only useful if it is there when the Mac starts, so
+    /// starting at login is on from the first launch. Only once: switched off
+    /// in the settings, it stays off.
+    private func startAtLoginByDefault() {
+        let key = "startAtLoginDefaulted"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set(true, forKey: key)
+        if !launchAtLogin.isEnabled { launchAtLogin.set(true) }
+        Log.note("start at login: \(launchAtLogin.isEnabled ? "on" : "could not be switched on")")
+    }
+
     private func quitOtherCopies() {
         let me = NSRunningApplication.current
         let others = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "plus.dpa.satz")
@@ -64,6 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // twice. The newest one takes over. A test copy leaves the real one be.
         if argument(after: "--dev-control") == nil {
             quitOtherCopies()
+            startAtLoginByDefault()
         }
 
         session = Session(preferences: preferences, history: history, discarded: discarded)

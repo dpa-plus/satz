@@ -9,8 +9,8 @@ final class CardController {
     private let session: Session
     private let preferences: Preferences
     private var panel: CardPanel?
-    /// True from the first movement of a drag until the window has settled.
-    private var dragging = false
+    /// Where the mouse and the window were when the current drag began.
+    private var dragStart: (mouse: NSPoint, origin: NSPoint)?
 
     init(session: Session, preferences: Preferences) {
         self.session = session
@@ -44,26 +44,27 @@ final class CardController {
         return bitmap.representation(using: .png, properties: [:])
     }
 
-    /// Hands the drag to the window server, the way a title bar moves a
-    /// window: smooth at any size. Moving the window ourselves on every mouse
-    /// event stuttered once the card held text.
+    /// Moves the window with the mouse, measured on the screen rather than in
+    /// the card (which moves with it), and never past the edge of the screen:
+    /// the card stops at the wall, even while the mouse goes on. The window
+    /// server's own drag had no wall and let the card slide half off screen.
     private func drag(_ isDragging: Bool) {
         guard let panel else { return }
         guard isDragging else {
-            dragging = false
+            dragStart = nil
             return
         }
-        guard !dragging, let event = NSApp.currentEvent else { return }
-        dragging = true
-        panel.performDrag(with: event)
+        let mouse = NSEvent.mouseLocation
+        let start = dragStart ?? (mouse, panel.frame.origin)
+        dragStart = start
+        let wanted = NSPoint(x: start.origin.x + mouse.x - start.mouse.x, y: start.origin.y + mouse.y - start.mouse.y)
+        panel.setFrameOrigin(panel.keptOnScreen(wanted, mouse: mouse))
     }
 
     private func make() -> CardPanel {
         let panel = CardPanel()
         panel.onMoved = { [weak self, weak panel] in
             // Every move but satz's own placing is the user's, and is kept.
-            // Waiting for the drag flag lost them: the drag had ended before
-            // the window settled, so nothing was ever saved.
             guard let self, let panel else { return }
             preferences.cardOffset = panel.offset()
         }
@@ -167,11 +168,26 @@ final class CardPanel: NSPanel {
             origin.y = field.maxY + 12 - Self.margin
         }
         // Kept on screen, also when the remembered spot was on a larger display.
-        origin.x = min(max(origin.x, visible.minX - Self.margin), visible.maxX - frame.width + Self.margin)
-        origin.y = min(max(origin.y, visible.minY - Self.margin), visible.maxY - frame.height + Self.margin)
+        origin = Self.clamped(origin, in: visible, size: frame.size)
         placing = true
         setFrameOrigin(origin)
         placing = false
+    }
+
+    /// `origin` moved just enough that the whole card, also at full size,
+    /// stays on the screen under the mouse.
+    func keptOnScreen(_ origin: NSPoint, mouse: NSPoint) -> NSPoint {
+        let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? self.screen ?? NSScreen.main
+        guard let visible = screen?.visibleFrame else { return origin }
+        return Self.clamped(origin, in: visible, size: frame.size)
+    }
+
+    /// The margin around the card is see-through, so it may leave the screen.
+    private static func clamped(_ origin: NSPoint, in visible: NSRect, size: NSSize) -> NSPoint {
+        NSPoint(
+            x: min(max(origin.x, visible.minX - margin), visible.maxX - size.width + margin),
+            y: min(max(origin.y, visible.minY - margin), visible.maxY - size.height + margin)
+        )
     }
 
     /// The card's spot as an offset from the default one, for remembering.
