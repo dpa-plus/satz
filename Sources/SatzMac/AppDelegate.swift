@@ -55,13 +55,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let stateFile = argument(after: "--dev-control") {
             devControl = DevControl(session: session, card: card, stateFile: URL(fileURLWithPath: stateFile))
             devControl?.toggleEye = { [weak self] in self?.preferences.showsText.toggle() }
+            // A test copy running next to the real satz must not answer the
+            // user's own shortcut or Escape: it did, and ate their dictations.
+            session.takesEscape = false
         }
         shortcut = Shortcut(
             preferences: preferences,
             onPress: { [weak self] in self?.session.press() },
             onRelease: { [weak self] in self?.session.release() }
         )
-        shortcut.start()
+        if devControl == nil { shortcut.start() }
 
         settingsWindow = AppWindow(title: de("satz Einstellungen", en: "satz Settings")) { [unowned self] in
             AnyView(SettingsView(

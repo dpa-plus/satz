@@ -78,6 +78,8 @@ final class Session {
     /// Test mode: receives the finished text instead of it being pasted.
     @ObservationIgnored var deliverOverride: ((String) -> Void)?
     @ObservationIgnored var onClose: () -> Void = {}
+    /// Escape discards while recording; off for a test copy.
+    @ObservationIgnored var takesEscape = true
 
     @ObservationIgnored private let preferences: Preferences
     @ObservationIgnored private let history: History
@@ -202,6 +204,7 @@ final class Session {
             origin: origin,
             preview: plainText()
         )
+        Log.note("discarded while \(phase)")
         stopEverything()
         reset()
         let hasContent = !snapshot.preview.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -315,6 +318,7 @@ final class Session {
             return
         }
         activeID = newSegment(at: 0)
+        Log.note("dictation started, for \(origin?.localizedName ?? "?")")
         onOpen()
         breathe()
         startRecording()
@@ -437,6 +441,8 @@ final class Session {
     private func deliver() {
         let output = plainText().trimmingCharacters(in: .whitespacesAndNewlines)
         guard !output.isEmpty else {
+            let seconds = Double(segments.values.map(\.audio.count).reduce(0, +)) / 16_000
+            Log.note(String(format: "nothing heard in %.1f s of audio", seconds))
             reset()
             phase = .failed(de("Nichts gehört", en: "Nothing heard"), canRetry: false)
             closeLater(after: .seconds(3))
@@ -817,7 +823,7 @@ final class Session {
     // MARK: - Escape
 
     private func holdEscape() {
-        guard escape == nil else { return }
+        guard takesEscape, escape == nil else { return }
         escape = try? HotKey(.escape, onPress: { [weak self] in self?.discard() })
     }
 

@@ -23,6 +23,7 @@ final class CardController {
         if !panel.isVisible {
             panel.place(offset: preferences.cardOffset, avoiding: FocusedField.frame())
             panel.orderFrontRegardless()
+            Log.note("card shown at \(NSStringFromRect(panel.frame)) on a screen of \(NSStringFromRect(panel.screen?.frame ?? .zero)), visible \(panel.isOnActiveSpace)")
         }
     }
 
