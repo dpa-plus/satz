@@ -299,31 +299,52 @@ private struct WordsBlock: View {
     @Environment(\.isSnapshot) private var isSnapshot
     @State private var adding = false
     @State private var newWord = ""
+    @State private var removed: (index: Int, word: String)?
+    @State private var forgetting: Task<Void, Never>?
     @FocusState private var focused: Bool
 
     var body: some View {
         Block(title: de("Wortschatz", en: "Vocabulary")) {
-            FlowLayout(spacing: 8) {
-                ForEach(preferences.words, id: \.self) { word in
-                    HStack(spacing: 6) {
-                        Text(word).font(Typography.text(14))
-                        Button { preferences.removeWord(word) } label: {
-                            Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
+            VStack(alignment: .leading, spacing: 10) {
+                FlowLayout(spacing: 8) {
+                    ForEach(preferences.words, id: \.self) { word in
+                        HStack(spacing: 6) {
+                            Text(word).font(Typography.text(14))
+                            Button { remove(word) } label: {
+                                Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
+                            }
+                            .buttonStyle(.plain)
+                            .help(de("Entfernen", en: "Remove"))
                         }
-                        .buttonStyle(.plain)
-                        .help(de("Entfernen", en: "Remove"))
+                        .foregroundStyle(theme.ink)
+                        .padding(.leading, 12)
+                        .padding(.trailing, 9)
+                        .frame(height: 28)
+                        .overlay(Capsule().strokeBorder(theme.cardBorder, lineWidth: 1.5))
                     }
-                    .foregroundStyle(theme.ink)
-                    .padding(.leading, 12)
-                    .padding(.trailing, 9)
-                    .frame(height: 28)
-                    .overlay(Capsule().strokeBorder(theme.cardBorder, lineWidth: 1.5))
+                    addChip
                 }
-                addChip
+                if let removed {
+                    UndoLine(label: de("„\(removed.word)“ entfernt", en: "Removed “\(removed.word)”")) {
+                        preferences.words.insert(removed.word, at: min(removed.index, preferences.words.count))
+                        self.removed = nil
+                    }
+                }
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .surface(radius: 16)
+        }
+    }
+
+    private func remove(_ word: String) {
+        let index = preferences.words.firstIndex(of: word) ?? preferences.words.count
+        preferences.removeWord(word)
+        removed = (index, word)
+        forgetting?.cancel()
+        forgetting = Task {
+            try? await Task.sleep(for: .seconds(6))
+            if !Task.isCancelled { removed = nil }
         }
     }
 
@@ -341,6 +362,11 @@ private struct WordsBlock: View {
                 .overlay(Capsule().strokeBorder(theme.control, lineWidth: 1.5))
                 .onAppear { focused = true }
                 .onChange(of: focused) { _, isFocused in if !isFocused { add() } }
+                // Escape closes the field without adding anything.
+                .onExitCommand {
+                    newWord = ""
+                    adding = false
+                }
         } else {
             Button { adding = true } label: {
                 Text(de("+ Wort", en: "+ Word"))
@@ -373,6 +399,8 @@ private struct ReplacementsBlock: View {
     @State private var adding = false
     @State private var spoken = ""
     @State private var written = ""
+    @State private var removed: (index: Int, rule: Replacement)?
+    @State private var forgetting: Task<Void, Never>?
 
     var body: some View {
         Block(title: de("Ersetzungen", en: "Replacements")) {
@@ -384,7 +412,7 @@ private struct ReplacementsBlock: View {
                             Image(systemName: "arrow.right").font(.system(size: 9, weight: .bold))
                                 .foregroundStyle(theme.inkSecondary)
                             Text(Self.shown(rule.written)).font(Typography.mono(13, .medium))
-                            Button { preferences.replacements.removeAll { $0.id == rule.id } } label: {
+                            Button { remove(rule) } label: {
                                 Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
                             }
                             .buttonStyle(.plain)
@@ -416,13 +444,28 @@ private struct ReplacementsBlock: View {
                         TextField("", text: $written, prompt: Text(de("geschrieben", en: "written")).foregroundStyle(theme.inkOnCard))
                             .onSubmit(add)
                         Button(de("Hinzufügen", en: "Add"), action: add).buttonStyle(.outlineCompact)
+                        Button(action: cancel) {
+                            Image(systemName: "xmark").font(.system(size: 10, weight: .bold))
+                                .frame(width: 22, height: 22)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help(de("Schließen", en: "Close"))
                     }
+                    // Escape closes the row without adding anything.
+                    .onExitCommand(perform: cancel)
                     .textFieldStyle(.plain)
                     .font(Typography.text(14))
                     .foregroundStyle(theme.ink)
                     .padding(.horizontal, 12)
                     .frame(height: 34)
                     .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(theme.control, lineWidth: 1.5))
+                }
+                if let removed {
+                    UndoLine(label: de("„\(removed.rule.spoken)“ entfernt", en: "Removed “\(removed.rule.spoken)”")) {
+                        preferences.replacements.insert(removed.rule, at: min(removed.index, preferences.replacements.count))
+                        self.removed = nil
+                    }
                 }
             }
             .padding(12)
@@ -441,6 +484,23 @@ private struct ReplacementsBlock: View {
         }
     }
 
+    private func remove(_ rule: Replacement) {
+        let index = preferences.replacements.firstIndex { $0.id == rule.id } ?? preferences.replacements.count
+        preferences.replacements.removeAll { $0.id == rule.id }
+        removed = (index, rule)
+        forgetting?.cancel()
+        forgetting = Task {
+            try? await Task.sleep(for: .seconds(6))
+            if !Task.isCancelled { removed = nil }
+        }
+    }
+
+    private func cancel() {
+        spoken = ""
+        written = ""
+        adding = false
+    }
+
     private func add() {
         let said = spoken.trimmingCharacters(in: .whitespaces)
         // "\n" typed as two characters means a line break.
@@ -453,6 +513,25 @@ private struct ReplacementsBlock: View {
         spoken = ""
         written = ""
         adding = false
+    }
+}
+
+/// "Removed … · Undo", for a few seconds after a chip goes.
+private struct UndoLine: View {
+    let label: String
+    let undo: () -> Void
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(label).foregroundStyle(theme.inkSecondary).lineLimit(1)
+            Button(action: undo) {
+                Text(de("Rückgängig", en: "Undo")).underline()
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(theme.ink)
+        }
+        .font(Typography.text(13, .medium))
     }
 }
 

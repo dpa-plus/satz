@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Typography.registerBundledFonts()
+        NSApp.mainMenu = Self.mainMenu()
 
         if let directory = argument(after: "--snapshot") {
             try? SnapshotRenderer.write(to: directory)
@@ -148,6 +149,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             Log.note("key import failed: \(error.localizedDescription)")
         }
+    }
+
+    /// Never shown (satz has no menu bar of its own), but macOS routes ⌘Z,
+    /// ⌘X, ⌘C, ⌘V and ⌘A to text fields through it. Without it pasting a key
+    /// with ⌘V did nothing.
+    private static func mainMenu() -> NSMenu {
+        let main = NSMenu()
+        let appMenu = NSMenu()
+        appMenu.addItem(withTitle: de("satz beenden", en: "Quit satz"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let appItem = NSMenuItem()
+        appItem.submenu = appMenu
+        main.addItem(appItem)
+
+        let edit = NSMenu(title: de("Bearbeiten", en: "Edit"))
+        edit.addItem(withTitle: de("Widerrufen", en: "Undo"), action: Selector(("undo:")), keyEquivalent: "z")
+        edit.addItem(withTitle: de("Wiederholen", en: "Redo"), action: Selector(("redo:")), keyEquivalent: "z")
+            .keyEquivalentModifierMask = [.command, .shift]
+        edit.addItem(.separator())
+        edit.addItem(withTitle: de("Ausschneiden", en: "Cut"), action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        edit.addItem(withTitle: de("Kopieren", en: "Copy"), action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: de("Einsetzen", en: "Paste"), action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        edit.addItem(withTitle: de("Alles auswählen", en: "Select All"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        let editItem = NSMenuItem()
+        editItem.submenu = edit
+        main.addItem(editItem)
+        return main
     }
 
     private func argument(after flag: String) -> String? {
