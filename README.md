@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/hero.png" alt="satz. Sprechen statt Tippen. A dark card with dictated text above a waveform." width="100%">
+<img src="assets/hero.png" alt="satz, dictation for macOS: a sound wave flowing into the satz card, which shows the dictated text." width="100%">
 
 [![License](https://img.shields.io/badge/license-MIT-ff6100)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-ff6100)](#requirements)
