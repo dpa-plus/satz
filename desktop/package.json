@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit",
     "start": "npm run build && electron .",
     "dist:win": "npm run build && electron-builder --win zip --arm64 --x64",
-    "dist:linux": "npm run build && electron-builder --linux AppImage tar.gz --arm64 --x64"
+    "dist:linux": "npm run build && electron-builder --linux deb tar.gz --arm64 --x64"
   },
   "dependencies": {
     "uiohook-napi": "^1.5.5"
@@ -49,12 +49,29 @@
     "linux": {
       "category": "Utility",
       "artifactName": "satz-${version}-linux-${arch}.${ext}",
-      "icon": "assets/icon.png"
+      "icon": "assets/icon.png",
+      "maintainer": "DPA+ <eli@dpa.plus>",
+      "synopsis": "Dictation: talk, see the text, paste it where you were typing."
     },
-    "npmRebuild": false
+    "npmRebuild": false,
+    "afterPack": "build/after-pack.cjs",
+    "deb": {
+      "depends": [
+        "libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libuuid1",
+        "libsecret-1-0"
+      ]
+    }
   },
   "allowScripts": {
     "electron@44.5.1": true,
     "esbuild@0.28.2": true
-  }
+  },
+  "homepage": "https://github.com/dpa-plus/satz"
 }

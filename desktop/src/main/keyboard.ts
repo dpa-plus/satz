@@ -24,20 +24,30 @@ interface Handlers {
 }
 
 export async function startKeyboard(handlers: Handlers): Promise<Keyboard> {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { uIOhook, UiohookKey } = require('uiohook-napi') as typeof import('uiohook-napi')
-  const paste = () => uIOhook.keyTap(UiohookKey.V, [UiohookKey.Ctrl])
+  const noKeystrokes = () => { throw new Error('this system takes no keystrokes from satz') }
 
   if (isWayland()) {
+    // Under Wayland libuiohook sees nothing and its keystrokes reach no one:
+    // not even loaded (paste.ts uses ydotool or the clipboard there).
     const devices = keyboardDevices()
     if (devices.length > 0) {
       for (const device of devices) readEvdev(device, handlers)
-      return { description: `right Ctrl twice (keyboard devices: ${devices.length})`, paste }
+      return { description: `right Ctrl twice (keyboard devices: ${devices.length})`, paste: noKeystrokes }
     }
     handlers.log('Wayland without access to /dev/input: the shortcut is "satz --toggle" from a desktop shortcut')
-    return { description: 'Wayland: desktop shortcut running "satz --toggle"', paste }
+    return { description: 'Wayland: desktop shortcut running "satz --toggle"', paste: noKeystrokes }
   }
 
+  let hook: typeof import('uiohook-napi')
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    hook = require('uiohook-napi')
+  } catch (error) {
+    // satz still starts: "satz --toggle" works, texts go to the clipboard.
+    handlers.log(`keyboard hook unavailable: ${(error as Error).message.split('\n')[0]}`)
+    return { description: 'keyboard hook unavailable: desktop shortcut running "satz --toggle"', paste: noKeystrokes }
+  }
+  const { uIOhook, UiohookKey } = hook
   uIOhook.on('keydown', event => {
     if (event.keycode === UiohookKey.CtrlRight) handlers.trigger(true)
     else if (event.keycode === UiohookKey.Escape) { handlers.other(); handlers.escape() }
@@ -47,7 +57,7 @@ export async function startKeyboard(handlers: Handlers): Promise<Keyboard> {
     if (event.keycode === UiohookKey.CtrlRight) handlers.trigger(false)
   })
   uIOhook.start()
-  return { description: 'right Ctrl twice', paste }
+  return { description: 'right Ctrl twice', paste: () => uIOhook.keyTap(UiohookKey.V, [UiohookKey.Ctrl]) }
 }
 
 // MARK: - Linux evdev

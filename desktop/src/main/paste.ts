@@ -1,5 +1,6 @@
 import { clipboard, ClipboardItem } from 'electron'
 import { execFile } from 'node:child_process'
+import fs from 'node:fs'
 import { de } from '../core/language'
 
 /**
@@ -37,19 +38,31 @@ function which(command: string): Promise<boolean> {
   return new Promise(resolve => execFile('sh', ['-c', `command -v ${command}`], error => resolve(!error)))
 }
 
-function ydotoolPaste(): Promise<boolean> {
-  // Left Ctrl (29) down, V (47) down and up, Ctrl up: Linux input event codes.
-  return new Promise(resolve => execFile('ydotool', ['key', '29:1', '47:1', '47:0', '29:0'], error => resolve(!error)))
+/** Where ydotoold listens: its own default depends on who started it, so look. */
+function ydotoolSocket(): string | undefined {
+  if (process.env.YDOTOOL_SOCKET) return process.env.YDOTOOL_SOCKET
+  const candidates = [`${process.env.XDG_RUNTIME_DIR ?? ''}/.ydotool_socket`, '/tmp/.ydotool_socket', '/run/ydotoold/socket']
+  return candidates.find(path => { try { return fs.statSync(path).isSocket() } catch { return false } })
 }
 
-export async function deliver(text: string, keyTap: KeyTap): Promise<{ pasted: boolean; reason?: string }> {
+function ydotoolPaste(log?: (message: string) => void): Promise<boolean> {
+  const socket = ydotoolSocket()
+  const env = socket ? { ...process.env, YDOTOOL_SOCKET: socket } : process.env
+  // Left Ctrl (29) down, V (47) down and up, Ctrl up: Linux input event codes.
+  return new Promise(resolve => execFile('ydotool', ['key', '29:1', '47:1', '47:0', '29:0'], { env }, (error, _out, stderr) => {
+    if (error) log?.(`ydotool: ${(stderr || error.message).trim().split('\n')[0]}`)
+    resolve(!error)
+  }))
+}
+
+export async function deliver(text: string, keyTap: KeyTap, log?: (message: string) => void): Promise<{ pasted: boolean; reason?: string }> {
   if (!text) return { pasted: true }
   const previous = await save()
   await clipboard.writeText(text)
 
   let pasted = false
   if (isWayland()) {
-    if (await which('ydotool')) pasted = await ydotoolPaste()
+    if (await which('ydotool')) pasted = await ydotoolPaste(log)
     if (!pasted) {
       // Leave the transcript on the clipboard: it is the fallback.
       return { pasted: false, reason: de('Auf der Zwischenablage. Mit Strg+V einfügen.', 'On the clipboard. Paste with Ctrl+V.') }

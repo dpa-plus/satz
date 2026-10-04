@@ -56,7 +56,8 @@ function render() {
       ? t('Rechte Strg-Taste zweimal tippen: starten, nochmal: einfügen', 'Tap right Ctrl twice to start, again to paste')
       : t('Rechte Strg-Taste zweimal tippen und halten: sprechen, loslassen: einfügen', 'Tap right Ctrl twice and hold to talk, let go to paste') }),
       select(p.triggerMode, [['tap', t('Tippen', 'Tap')], ['hold', t('Halten', 'Hold')]], v => update({ triggerMode: v }))))
-  const shortcutHint = el('div', { className: 'hint', textContent: info.keyboard ?? '' })
+  // Only worth a line when something is missing.
+  const shortcutHint = el('div', { className: 'hint', textContent: '' })
   if (info.wayland && info.keyboard?.startsWith('Wayland')) {
     shortcutHint.textContent = t(
       'Wayland lässt Apps die Tastatur nicht mitlesen. Entweder in den System-Einstellungen eine Tastenkombination anlegen, die „satz --toggle“ ausführt, oder einmal „sudo usermod -aG input $USER“ ausführen und neu anmelden.',

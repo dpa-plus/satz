@@ -13,6 +13,8 @@ export const PILL_WIDTH = 200
 const ROW = 40
 const MAX_TEXT = 5 * 20 + 18
 export const SIZE = { width: CARD_WIDTH + 2 * MARGIN, height: MAX_TEXT + 1 + ROW + 2 * MARGIN }
+/** Linux takes clicks through a window shape instead of switching them on and off. */
+const shaped = process.platform === 'linux'
 
 export class CardWindow {
   readonly window: BrowserWindow
@@ -47,11 +49,21 @@ export class CardWindow {
     })
     this.window.setAlwaysOnTop(true, 'screen-saver')
     this.window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-    // Everything is see-through until the pointer is over the card itself.
-    this.window.setIgnoreMouseEvents(true, { forward: true })
+    if (shaped) {
+      // Linux: the window's shape follows the card, so outside it there is
+      // no window to click. Through XWayland satz does not even learn where
+      // the pointer is while it is over other apps, so it cannot switch.
+      this.window.setShape([{ x: 0, y: 0, width: 1, height: 1 }])
+    } else {
+      // Everything is see-through until the pointer is over the card itself.
+      this.window.setIgnoreMouseEvents(true, { forward: true })
+    }
     this.window.loadFile(path.join(__dirname, 'card.html'))
 
-    ipcMain.on('card:rect', (_e, rect: { x: number; y: number; width: number; height: number }) => { this.cardRect = rect })
+    ipcMain.on('card:rect', (_e, rect: { x: number; y: number; width: number; height: number }) => {
+      this.cardRect = rect
+      if (shaped && rect.width > 0 && rect.height > 0) this.window.setShape([rect])
+    })
     // Windows and macOS also forward the pointer entering the card: clickable at once.
     ipcMain.on('card:pointer-inside', () => this.setClickable(true))
     ipcMain.on('card:drag', (_e, phase: 'start' | 'move' | 'end') => this.drag(phase))
@@ -80,7 +92,7 @@ export class CardWindow {
    * there a jump of the pointer straight onto a button was missed.
    */
   private watchPointer() {
-    if (this.watcher) return
+    if (this.watcher || shaped) return
     this.watcher = setInterval(() => {
       if (this.window.isDestroyed() || !this.window.isVisible()) return
       const point = screen.getCursorScreenPoint()

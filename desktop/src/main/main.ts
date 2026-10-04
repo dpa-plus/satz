@@ -94,7 +94,7 @@ async function start() {
       }
       // A moment for the shortcut's own keys to come up before Ctrl+V.
       await new Promise(resolve => setTimeout(resolve, 120))
-      const outcome = await deliver(text, () => keyboard?.paste())
+      const outcome = await deliver(text, () => keyboard?.paste(), log)
       log(`paste: ${outcome.pasted ? 'sent Ctrl+V' : 'clipboard only'}, ${text.length} characters`)
       store.addHistory(text, outcome.pasted)
       delivered.push(text)
@@ -178,6 +178,7 @@ async function start() {
     if (settings && !settings.isDestroyed()) { settings.show(); settings.focus(); return }
     settings = new BrowserWindow({
       width: 560, height: 760, title: de('satz Einstellungen', 'satz Settings'), autoHideMenuBar: true,
+      icon: path.join(__dirname, '..', 'assets', 'icon.png'),
       backgroundColor: '#16303C',
       webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
     })
@@ -204,6 +205,10 @@ async function start() {
     startAtLogin.set(true)
     store.update({ startAtLoginDefaulted: true })
     log(`start at login: ${startAtLogin.get() ? 'on' : 'could not be switched on'}`)
+  } else if (!testMode && startAtLogin.get()) {
+    // Written again on every start, so it follows satz when it moves (from
+    // an unpacked folder to the installed package, say).
+    startAtLogin.set(true)
   }
 
   if (!store.hasKey() && !testMode) {
@@ -225,7 +230,9 @@ const startAtLogin = {
     if (process.platform === 'linux') {
       const file = this.desktopFile()
       if (!on) { try { fs.rmSync(file) } catch { /* gone */ } return }
-      const exec = process.env.APPIMAGE ?? process.execPath
+      // The start script, not satz-bin behind it: only the script starts satz
+      // the way Linux needs (see build/after-pack.cjs).
+      const exec = process.env.APPIMAGE ?? process.execPath.replace(/-bin$/, '')
       fs.mkdirSync(path.dirname(file), { recursive: true })
       fs.writeFileSync(file, `[Desktop Entry]\nType=Application\nName=satz\nExec="${exec}"\nX-GNOME-Autostart-enabled=true\n`)
       return
@@ -262,7 +269,9 @@ function startDevControl(port: number, session: Session, card: CardWindow, deliv
         body = { path: target }
         break
       }
-      case 'js': body = { result: await card.window.webContents.executeJavaScript(url.searchParams.get('code') ?? '') }; break
+      case 'js':
+        try { body = { result: await card.window.webContents.executeJavaScript(url.searchParams.get('code') ?? '') } } catch (error) { body = { error: String(error) } }
+        break
       case 'quit': app.quit(); break
       case 'state':
       default:
