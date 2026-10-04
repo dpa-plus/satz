@@ -20,6 +20,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var setupWindow: AppWindow!
     private var devControl: DevControl?
 
+    private func quitOtherCopies() {
+        let me = NSRunningApplication.current
+        let others = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "plus.dpa.satz")
+            .filter { $0.processIdentifier != me.processIdentifier }
+        guard !others.isEmpty else { return }
+        Log.note("quitting \(others.count) other satz copy")
+        for other in others { other.terminate() }
+        // One that does not quit when asked is stopped.
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            for other in others where !other.isTerminated { other.forceTerminate() }
+        }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         Typography.registerBundledFonts()
         NSApp.mainMenu = Self.mainMenu()
@@ -43,6 +57,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try? HeroRenderer.write(to: path)
             NSApp.terminate(nil)
             return
+        }
+        // One satz at a time. Two copies (an old one still running after an
+        // update, or one opened from Downloads next to the one in
+        // Applications) both heard the shortcut, and every text was pasted
+        // twice. The newest one takes over. A test copy leaves the real one be.
+        if argument(after: "--dev-control") == nil {
+            quitOtherCopies()
         }
 
         session = Session(preferences: preferences, history: history, discarded: discarded)
