@@ -37,22 +37,24 @@ struct SettingsView: View {
 
     private var content: some View {
             VStack(alignment: .leading, spacing: 26) {
-                Text("Einstellungen")
+                Text(de("Einstellungen", en: "Settings"))
                     .font(Typography.display(26))
                     .foregroundStyle(theme.ink)
-                Block(title: "Kurzbefehl") {
+                Block(title: de("Kurzbefehl", en: "Shortcut")) {
                     ShortcutChoice(preferences: preferences, setup: setup, shortcut: shortcut)
                 }
                 MicrophoneBlock(preferences: preferences)
                 ProviderBlock(preferences: preferences, setup: setup)
                 WordsBlock(preferences: preferences)
                 ReplacementsBlock(preferences: preferences)
-                GeneralBlock(launchAtLogin: launchAtLogin, history: history)
+                GeneralBlock(preferences: preferences, launchAtLogin: launchAtLogin, history: history)
             }
             .padding(.horizontal, 32)
             .padding(.top, 34)
             .padding(.bottom, 32)
             .frame(width: 520, alignment: .leading)
+            // Every label is read again when the language changes.
+            .id(preferences.language)
     }
 }
 
@@ -65,13 +67,13 @@ private struct MicrophoneBlock: View {
     @State private var devices: [InputDevice] = []
 
     var body: some View {
-        Block(title: "Mikrofon") {
+        Block(title: de("Mikrofon", en: "Microphone")) {
             HStack(spacing: 12) {
                 if isSnapshot {
                     deviceLabel
                 } else {
                     Menu {
-                        Button("Wie in macOS") { preferences.inputDeviceUID = nil }
+                        Button(de("Wie in macOS", en: "Same as macOS")) { preferences.inputDeviceUID = nil }
                         Divider()
                         ForEach(devices) { device in
                             Button(device.name) { preferences.inputDeviceUID = device.uid }
@@ -107,8 +109,8 @@ private struct MicrophoneBlock: View {
         if let uid = preferences.inputDeviceUID, let device = devices.first(where: { $0.uid == uid }) {
             return device.name
         }
-        if isSnapshot { return "MacBook Pro-Mikrofon" }
-        return InputDevices.systemDefault()?.name ?? "Wie in macOS"
+        if isSnapshot { return de("MacBook Pro-Mikrofon", en: "MacBook Pro Microphone") }
+        return InputDevices.systemDefault()?.name ?? de("Wie in macOS", en: "Same as macOS")
     }
 }
 
@@ -136,7 +138,7 @@ private struct LevelMeter: View {
         }
         .buttonStyle(.plain)
         .disabled(testing)
-        .help("Testen")
+        .help(de("Testen", en: "Test"))
     }
 
     private func test() {
@@ -166,18 +168,18 @@ private struct ProviderBlock: View {
     @Environment(\.theme) private var theme
 
     var body: some View {
-        Block(title: "Anbieter") {
+        Block(title: de("Anbieter", en: "Provider")) {
             VStack(spacing: 0) {
                 Segmented(options: Provider.allCases.map { (value: $0, label: $0.name) }, selection: $preferences.provider)
                     .padding(10)
                 Rule()
                 KeyRow(setup: setup, provider: preferences.provider)
                 Rule()
-                FieldRow(label: "Modell", text: $preferences.model, prompt: preferences.provider.defaultModel)
+                FieldRow(label: de("Modell", en: "Model"), text: $preferences.model, prompt: preferences.provider.defaultModel)
                 // Only MAI-Transcribe has a clean mode; elsewhere the switch would do nothing.
                 if preferences.model.contains("mai-transcribe") {
                     Rule()
-                    Toggle(isOn: $preferences.removesFillers) { Text("Füllwörter weglassen") }
+                    Toggle(isOn: $preferences.removesFillers) { Text(de("Füllwörter weglassen", en: "Remove filler words")) }
                         .toggleStyle(AccentToggleStyle())
                         .font(Typography.text(15))
                         .foregroundStyle(theme.ink)
@@ -186,7 +188,7 @@ private struct ProviderBlock: View {
                 }
                 if preferences.provider == .custom {
                     Rule()
-                    FieldRow(label: "Adresse", text: $preferences.customBaseURL, prompt: "https://…/v1")
+                    FieldRow(label: de("Adresse", en: "Address"), text: $preferences.customBaseURL, prompt: "https://…/v1")
                 }
             }
             .surface(radius: 16)
@@ -221,13 +223,13 @@ private struct KeyRow: View {
                         .onSubmit(save)
                 }
                 Spacer()
-                Button("Sichern", action: save)
+                Button(de("Sichern", en: "Save"), action: save)
                     .buttonStyle(.outlineCompact)
                     .disabled(input.trimmingCharacters(in: .whitespaces).isEmpty)
             } else {
-                Text("Schlüssel")
+                Text(de("Schlüssel", en: "Key"))
                 Spacer()
-                Button("Ändern") { editing = true }.buttonStyle(.outlineCompact)
+                Button(de("Ändern", en: "Change")) { editing = true }.buttonStyle(.outlineCompact)
             }
         }
         .font(Typography.text(15))
@@ -300,7 +302,7 @@ private struct WordsBlock: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        Block(title: "Wortschatz") {
+        Block(title: de("Wortschatz", en: "Vocabulary")) {
             FlowLayout(spacing: 8) {
                 ForEach(preferences.words, id: \.self) { word in
                     HStack(spacing: 6) {
@@ -309,7 +311,7 @@ private struct WordsBlock: View {
                             Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
                         }
                         .buttonStyle(.plain)
-                        .help("Entfernen")
+                        .help(de("Entfernen", en: "Remove"))
                     }
                     .foregroundStyle(theme.ink)
                     .padding(.leading, 12)
@@ -328,7 +330,7 @@ private struct WordsBlock: View {
     @ViewBuilder
     private var addChip: some View {
         if adding && !isSnapshot {
-            TextField("", text: $newWord, prompt: Text("Wort").foregroundStyle(theme.inkOnCard))
+            TextField("", text: $newWord, prompt: Text(de("Wort", en: "Word")).foregroundStyle(theme.inkOnCard))
                 .textFieldStyle(.plain)
                 .font(Typography.text(14))
                 .focused($focused)
@@ -341,7 +343,7 @@ private struct WordsBlock: View {
                 .onChange(of: focused) { _, isFocused in if !isFocused { add() } }
         } else {
             Button { adding = true } label: {
-                Text("+ Wort")
+                Text(de("+ Wort", en: "+ Word"))
                     .font(Typography.text(14))
                     .foregroundStyle(theme.inkSecondary)
                     .padding(.horizontal, 12)
@@ -373,7 +375,7 @@ private struct ReplacementsBlock: View {
     @State private var written = ""
 
     var body: some View {
-        Block(title: "Ersetzungen") {
+        Block(title: de("Ersetzungen", en: "Replacements")) {
             VStack(alignment: .leading, spacing: 10) {
                 FlowLayout(spacing: 8) {
                     ForEach(preferences.replacements.filter(\.isOn)) { rule in
@@ -386,7 +388,7 @@ private struct ReplacementsBlock: View {
                                 Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
                             }
                             .buttonStyle(.plain)
-                            .help("Entfernen")
+                            .help(de("Entfernen", en: "Remove"))
                         }
                         .foregroundStyle(theme.ink)
                         .padding(.leading, 12)
@@ -396,7 +398,7 @@ private struct ReplacementsBlock: View {
                     }
                     if !adding || isSnapshot {
                         Button { adding = true } label: {
-                            Text("+ Ersetzung")
+                            Text(de("+ Ersetzung", en: "+ Replacement"))
                                 .font(Typography.text(14))
                                 .foregroundStyle(theme.inkSecondary)
                                 .padding(.horizontal, 12)
@@ -409,11 +411,11 @@ private struct ReplacementsBlock: View {
                 }
                 if adding && !isSnapshot {
                     HStack(spacing: 8) {
-                        TextField("", text: $spoken, prompt: Text("gesagt, z. B. XX").foregroundStyle(theme.inkOnCard))
+                        TextField("", text: $spoken, prompt: Text(de("gesagt, z. B. XX", en: "spoken, e.g. XX")).foregroundStyle(theme.inkOnCard))
                         Image(systemName: "arrow.right").font(.system(size: 10, weight: .bold))
-                        TextField("", text: $written, prompt: Text("geschrieben").foregroundStyle(theme.inkOnCard))
+                        TextField("", text: $written, prompt: Text(de("geschrieben", en: "written")).foregroundStyle(theme.inkOnCard))
                             .onSubmit(add)
-                        Button("Hinzufügen", action: add).buttonStyle(.outlineCompact)
+                        Button(de("Hinzufügen", en: "Add"), action: add).buttonStyle(.outlineCompact)
                     }
                     .textFieldStyle(.plain)
                     .font(Typography.text(14))
@@ -457,15 +459,25 @@ private struct ReplacementsBlock: View {
 // MARK: - Allgemein
 
 private struct GeneralBlock: View {
+    @Bindable var preferences: Preferences
     let launchAtLogin: LaunchAtLogin
     let history: History
     @Environment(\.theme) private var theme
 
     var body: some View {
-        Block(title: "Allgemein") {
+        Block(title: de("Allgemein", en: "General")) {
             VStack(spacing: 0) {
+                HStack {
+                    Text(de("Sprache", en: "Language"))
+                    Spacer()
+                    Segmented(options: Language.allCases.map { (value: $0, label: $0.name) }, selection: $preferences.language)
+                        .frame(width: 210)
+                }
+                .padding(.horizontal, 16)
+                .frame(height: 52)
+                Rule()
                 Toggle(isOn: Binding(get: { launchAtLogin.isEnabled }, set: { launchAtLogin.set($0) })) {
-                    Text("Bei Anmeldung starten")
+                    Text(de("Bei Anmeldung starten", en: "Start at login"))
                 }
                 .toggleStyle(AccentToggleStyle())
                 .padding(.horizontal, 16)
@@ -473,9 +485,9 @@ private struct GeneralBlock: View {
                 .help(launchAtLogin.problem ?? "")
                 Rule()
                 HStack {
-                    Text("Verlauf")
+                    Text(de("Verlauf", en: "History"))
                     Spacer()
-                    Button("Leeren", action: history.clear)
+                    Button(de("Leeren", en: "Clear"), action: history.clear)
                         .buttonStyle(.outlineCompact)
                         .disabled(history.entries.isEmpty)
                 }

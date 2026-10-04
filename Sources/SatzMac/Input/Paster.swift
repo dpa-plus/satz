@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import SatzKit
 
 /// Puts the transcript where the user was typing.
 ///
@@ -48,10 +49,10 @@ enum Paster {
     /// nil when a synthesised Command+V will actually arrive somewhere.
     static func whatIsBlockingPaste() -> String? {
         if !AXIsProcessTrusted() {
-            return "Auf der Zwischenablage. satz braucht Bedienungshilfen-Zugriff zum Einfügen."
+            return de("Auf der Zwischenablage. satz braucht Bedienungshilfen-Zugriff zum Einfügen.", en: "On the clipboard. satz needs Accessibility access to paste.")
         }
         if IsSecureEventInputEnabled() {
-            return "Auf der Zwischenablage. Ein Programm blockiert gerade Tastatureingaben."
+            return de("Auf der Zwischenablage. Ein Programm blockiert gerade Tastatureingaben.", en: "On the clipboard. An app is blocking keyboard input right now.")
         }
         return nil
     }

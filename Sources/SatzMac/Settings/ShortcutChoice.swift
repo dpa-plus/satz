@@ -1,4 +1,5 @@
 import SwiftUI
+import SatzKit
 
 /// Picks what starts a dictation: right ⌘ twice, your own keys, or a mouse
 /// button, and whether you tap it or hold it. Used by Settings and Setup.
@@ -19,44 +20,44 @@ struct ShortcutChoice: View {
                     preferences.trigger = .doubleRightCommand
                 } label: {
                     KeyLabel(glyph: "⌘", name: "cmd")
-                    Text("rechts, zweimal")
+                    Text(de("rechts, zweimal", en: "right, twice"))
                 }
                 Rule()
                 OptionRow(selected: isKeys) { record(.keys) } label: {
                     if recording == .keys {
-                        Text("Tasten drücken …").foregroundStyle(theme.inkSecondary)
+                        Text(de("Tasten drücken …", en: "Press keys …")).foregroundStyle(theme.inkSecondary)
                     } else if isKeys {
                         ForEach(Array(preferences.trigger.display.keys.enumerated()), id: \.offset) { _, key in
                             KeyLabel(glyph: key.glyph, name: key.name)
                         }
                     } else {
-                        Text("Eigene Tasten")
+                        Text(de("Eigene Tasten", en: "Own keys"))
                     }
                     Spacer()
-                    Button("Aufnehmen") { record(.keys) }.buttonStyle(.outlineCompact)
+                    Button(de("Aufnehmen", en: "Record")) { record(.keys) }.buttonStyle(.outlineCompact)
                 }
                 Rule()
                 OptionRow(selected: isMouse) { record(.mouse) } label: {
                     if recording == .mouse {
-                        Text("Maustaste drücken …").foregroundStyle(theme.inkSecondary)
+                        Text(de("Maustaste drücken …", en: "Press a mouse button …")).foregroundStyle(theme.inkSecondary)
                     } else {
-                        Text(isMouse ? (preferences.trigger.display.words ?? "Maustaste") : "Maustaste")
+                        Text(isMouse ? (preferences.trigger.display.words ?? de("Maustaste", en: "Mouse button")) : de("Maustaste", en: "Mouse button"))
                     }
                     Spacer()
-                    Button("Aufnehmen") { record(.mouse) }.buttonStyle(.outlineCompact)
+                    Button(de("Aufnehmen", en: "Record")) { record(.mouse) }.buttonStyle(.outlineCompact)
                 }
             }
             .surface(radius: 16)
 
             Segmented(
-                options: [(value: TriggerMode.tap, label: "Tippen"), (value: TriggerMode.hold, label: "Halten")],
+                options: [(value: TriggerMode.tap, label: de("Tippen", en: "Tap")), (value: TriggerMode.hold, label: de("Halten", en: "Hold"))],
                 selection: $preferences.triggerMode
             )
 
             if shortcut.status == .needsAccessibility {
-                Notice(text: "Braucht Bedienungshilfen", action: ("Erlauben", setup.requestPaste))
+                Notice(text: de("Braucht Bedienungshilfen", en: "Needs Accessibility"), action: (de("Erlauben", en: "Allow"), setup.requestPaste))
             } else if shortcut.status == .taken {
-                Notice(text: "Von einem anderen Programm belegt")
+                Notice(text: de("Von einem anderen Programm belegt", en: "Taken by another app"))
             }
         }
         .onDisappear(perform: stopRecording)

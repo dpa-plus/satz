@@ -1,7 +1,8 @@
 import Testing
 @testable import SatzKit
 
-private let standard = Replacements.standard
+private let standard = Replacements.standard(for: .german)
+private let english = Replacements.standard(for: .english)
 
 // The inputs below are what MAI-Transcribe and GPT Transcribe actually sent
 // back for spoken punctuation on 03.10.2026.
@@ -28,7 +29,7 @@ private let standard = Replacements.standard
 
 @Test func englishWorksTheSameWay() {
     let gpt = "Write a function open bracket name close bracket. New line. Done"
-    #expect(Replacements.apply(standard, to: gpt) == "Write a function (name).\nDone")
+    #expect(Replacements.apply(english, to: gpt) == "Write a function (name).\nDone")
 }
 
 @Test func letterCodesMatchHoweverTheModelSpellsThem() {
@@ -74,6 +75,20 @@ private let standard = Replacements.standard
 
 @Test func aTriggerStartingWithPunctuationDoesNotCrash() {
     // The tidying after "Doppelpunkt" skips ": ", which is where this rule matches.
-    let rules = Replacements.standard + [Replacement(spoken: ": Strich", written: "-")]
+    let rules = standard + [Replacement(spoken: ": Strich", written: "-")]
     #expect(!Replacements.apply(rules, to: "Doppelpunkt : Strich weiter").isEmpty)
+}
+
+@Test func eachLanguageHasItsOwnPredefinedRules() {
+    // An English app does not want "Klammer auf", a German one not "open bracket".
+    #expect(standard.contains { $0.spoken == "Klammer auf" })
+    #expect(!standard.contains { $0.spoken == "open bracket" })
+    #expect(english.contains { $0.spoken == "open bracket" })
+    #expect(!english.contains { $0.spoken == "Klammer auf" })
+    #expect(Replacements.apply(english, to: "He said, open quote, not today, close quote.") == "He said \"not today\".")
+}
+
+@Test func freshCopiesOfThePredefinedRulesCountAsTheSame() {
+    #expect(Replacements.sameRules(Replacements.standard(for: .german), Replacements.standard(for: .german)))
+    #expect(!Replacements.sameRules(standard, english))
 }

@@ -22,7 +22,14 @@
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>de</string>
+	</array>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>satz nimmt dein Mikrofon auf, solange du die Aufnahmetaste hältst, und wandelt die Aufnahme in Text um.</string>
+	<string>satz records your microphone while you dictate and turns the recording into text.</string>
 </dict>
 </plist>

@@ -20,7 +20,7 @@ public enum Provider: String, CaseIterable, Identifiable, Sendable {
         case .openAI: "OpenAI"
         case .openRouter: "OpenRouter"
         case .groq: "Groq"
-        case .custom: "Eigener"
+        case .custom: de("Eigener", en: "Custom")
         }
     }
 
@@ -54,7 +54,7 @@ public enum Provider: String, CaseIterable, Identifiable, Sendable {
         case .openAI: "sk-…"
         case .openRouter: "sk-or-…"
         case .groq: "gsk_…"
-        case .custom: "API-Schlüssel"
+        case .custom: de("API-Schlüssel", en: "API key")
         }
     }
 

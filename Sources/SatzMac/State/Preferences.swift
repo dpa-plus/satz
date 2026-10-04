@@ -47,6 +47,18 @@ final class Preferences {
         didSet { defaults?.set(inputDeviceUID, forKey: Key.inputDeviceUID) }
     }
 
+    /// German or English. The predefined Ersetzungen follow it, as long as
+    /// the user has not changed them.
+    var language: Language {
+        didSet {
+            defaults?.set(language.rawValue, forKey: Key.language)
+            Language.current = language
+            if Replacements.sameRules(replacements, Replacements.standard(for: oldValue)) {
+                replacements = Replacements.standard(for: language)
+            }
+        }
+    }
+
     /// Whether the card shows the text while dictating (the eye button).
     var showsText: Bool {
         didSet { defaults?.set(showsText, forKey: Key.showsText) }
@@ -109,6 +121,7 @@ final class Preferences {
         static let trigger = "trigger"
         static let triggerMode = "triggerMode"
         static let inputDeviceUID = "inputDeviceUID"
+        static let language = "language"
         static let showsText = "showsText"
         static let replacements = "replacements"
         static let removesFillers = "removesFillers"
@@ -126,9 +139,12 @@ final class Preferences {
         triggerMode = defaults?.string(forKey: Key.triggerMode).flatMap(TriggerMode.init(rawValue:)) ?? .tap
         inputDeviceUID = defaults?.string(forKey: Key.inputDeviceUID)
         showsText = defaults?.object(forKey: Key.showsText) as? Bool ?? true
+        let language = defaults?.string(forKey: Key.language).flatMap(Language.init(rawValue:)) ?? .system
+        self.language = language
+        Language.current = language
         replacements = defaults?.data(forKey: Key.replacements)
             .flatMap { try? JSONDecoder().decode([Replacement].self, from: $0) }
-            ?? Replacements.standard
+            ?? Replacements.standard(for: language)
         removesFillers = defaults?.object(forKey: Key.removesFillers) as? Bool ?? true
     }
 

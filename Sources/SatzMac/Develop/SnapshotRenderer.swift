@@ -15,17 +15,23 @@ enum SnapshotRenderer {
     static func write(to directory: String) throws {
         let folder = URL(fileURLWithPath: directory, isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let sheets: [(String, AnyView)] = [
-            ("card", AnyView(cardSheet)),
-            ("menu-light", AnyView(menuSheet.environment(\.theme, .light))),
-            ("menu-dark", AnyView(menuSheet.environment(\.theme, .dark))),
-            ("settings-light", AnyView(settingsSheet.environment(\.theme, .light))),
-            ("settings-dark", AnyView(settingsSheet.environment(\.theme, .dark))),
-            ("setup-key", AnyView(setupSheet(.key).environment(\.theme, .light))),
-            ("setup-probe", AnyView(setupSheet(.probe).environment(\.theme, .light))),
+        // German first, then English, each sheet built after its language is
+        // set, since every label reads it when the view is made.
+        let sheets: [(String, Language, () -> AnyView)] = [
+            ("card", .german, { AnyView(cardSheet) }),
+            ("card-en", .english, { AnyView(cardSheet) }),
+            ("menu-light", .german, { AnyView(menuSheet.environment(\.theme, .light)) }),
+            ("menu-dark", .german, { AnyView(menuSheet.environment(\.theme, .dark)) }),
+            ("menu-en", .english, { AnyView(menuSheet.environment(\.theme, .dark)) }),
+            ("settings-light", .german, { AnyView(settingsSheet.environment(\.theme, .light)) }),
+            ("settings-dark", .german, { AnyView(settingsSheet.environment(\.theme, .dark)) }),
+            ("settings-en", .english, { AnyView(settingsSheet.environment(\.theme, .dark)) }),
+            ("setup-key", .german, { AnyView(setupSheet(.key).environment(\.theme, .light)) }),
+            ("setup-probe", .german, { AnyView(setupSheet(.probe).environment(\.theme, .light)) }),
         ]
-        for (name, view) in sheets {
-            try png(of: view.environment(\.isSnapshot, true)).write(to: folder.appendingPathComponent("\(name).png"))
+        for (name, language, view) in sheets {
+            Language.current = language
+            try png(of: view().environment(\.isSnapshot, true)).write(to: folder.appendingPathComponent("\(name).png"))
         }
     }
 
@@ -48,6 +54,7 @@ enum SnapshotRenderer {
     /// In memory: a snapshot must never write to the user's preferences.
     private static var preferences: Preferences {
         let preferences = Preferences(defaults: nil)
+        preferences.language = Language.current
         preferences.provider = .openRouter
         preferences.words = ["ACON", "Immofanten", "Prozesshub"]
         return preferences

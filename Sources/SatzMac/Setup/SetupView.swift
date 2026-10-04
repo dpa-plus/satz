@@ -46,6 +46,7 @@ struct SetupView: View {
             }
             card
         }
+        .id(preferences.language)
         .padding(.horizontal, 32)
         .padding(.top, 46)
         .padding(.bottom, 32)
@@ -156,11 +157,11 @@ private struct StepRail: View {
 
     private func title(_ item: SetupView.Step) -> String {
         switch item {
-        case .key: "Schlüssel"
-        case .microphone: "Mikrofon"
-        case .trigger: "Kurzbefehl"
-        case .paste: "Einfügen"
-        case .probe: "Probesatz"
+        case .key: de("Schlüssel", en: "Key")
+        case .microphone: de("Mikrofon", en: "Microphone")
+        case .trigger: de("Kurzbefehl", en: "Shortcut")
+        case .paste: de("Einfügen", en: "Paste")
+        case .probe: de("Probesatz", en: "Test sentence")
         }
     }
 }
@@ -189,7 +190,7 @@ private struct KeyStep: View {
     @State private var problem: String?
 
     var body: some View {
-        StepTitle(text: "Anbieter und Schlüssel")
+        StepTitle(text: de("Anbieter und Schlüssel", en: "Provider and key"))
         Segmented(options: Provider.allCases.map { (value: $0, label: $0.name) }, selection: $preferences.provider)
 
         HStack(spacing: 10) {
@@ -197,11 +198,11 @@ private struct KeyStep: View {
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(setup.hasKey ? theme.accent : theme.inkOnCard)
             if isSnapshot {
-                Text(setup.hasKey ? "Schlüssel gespeichert" : preferences.provider.keyPlaceholder)
+                Text(setup.hasKey ? de("Schlüssel gespeichert", en: "Key saved") : preferences.provider.keyPlaceholder)
                     .foregroundStyle(theme.inkOnCard)
                 Spacer()
             } else {
-                SecureField("", text: $input, prompt: Text(setup.hasKey ? "Schlüssel gespeichert" : preferences.provider.keyPlaceholder)
+                SecureField("", text: $input, prompt: Text(setup.hasKey ? de("Schlüssel gespeichert", en: "Key saved") : preferences.provider.keyPlaceholder)
                     .foregroundStyle(theme.inkOnCard))
                     .textFieldStyle(.plain)
                     .onSubmit(next)
@@ -237,13 +238,13 @@ private struct KeyStep: View {
         }
 
         HStack {
-            Button("Weiter", action: next)
+            Button(de("Weiter", en: "Continue"), action: next)
                 .buttonStyle(AccentButtonStyle(height: 42))
                 .disabled(!canContinue)
             Spacer()
             if let page = preferences.provider.keyPage {
                 Button { NSWorkspace.shared.open(page) } label: {
-                    Text("Schlüssel holen").font(Typography.text(14)).underline().foregroundStyle(theme.ink)
+                    Text(de("Schlüssel holen", en: "Get a key")).font(Typography.text(14)).underline().foregroundStyle(theme.ink)
                 }
                 .buttonStyle(.plain)
             }
@@ -276,8 +277,8 @@ private struct MicrophoneStep: View {
     let setup: Setup
 
     var body: some View {
-        StepTitle(text: "Mikrofon")
-        Button("Erlauben") { Task { await setup.requestMicrophone() } }
+        StepTitle(text: de("Mikrofon", en: "Microphone"))
+        Button(de("Erlauben", en: "Allow")) { Task { await setup.requestMicrophone() } }
             .buttonStyle(AccentButtonStyle(height: 42))
     }
 }
@@ -289,9 +290,9 @@ private struct TriggerStep: View {
     let onNext: () -> Void
 
     var body: some View {
-        StepTitle(text: "Kurzbefehl")
+        StepTitle(text: de("Kurzbefehl", en: "Shortcut"))
         ShortcutChoice(preferences: preferences, setup: setup, shortcut: shortcut)
-        Button("Weiter", action: onNext)
+        Button(de("Weiter", en: "Continue"), action: onNext)
             .buttonStyle(AccentButtonStyle(height: 42))
     }
 }
@@ -302,15 +303,15 @@ private struct PasteStep: View {
     let onLater: () -> Void
 
     var body: some View {
-        StepTitle(text: "In andere Apps einfügen")
+        StepTitle(text: de("In andere Apps einfügen", en: "Paste into other apps"))
         HStack(spacing: 8) {
-            Button("Erlauben", action: setup.requestPaste)
+            Button(de("Erlauben", en: "Allow"), action: setup.requestPaste)
                 .buttonStyle(AccentButtonStyle(height: 42))
             // Right ⌘ twice and the mouse button need the same permission to
             // work at all, so only a key combination can skip it. The text then
             // lands on the clipboard instead.
             if !preferences.trigger.needsEventTap {
-                Button("Später", action: onLater).buttonStyle(.outline)
+                Button(de("Später", en: "Later"), action: onLater).buttonStyle(.outline)
             }
         }
     }
@@ -329,13 +330,13 @@ private struct ProbeStep: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            StepTitle(text: "Probesatz")
+            StepTitle(text: de("Probesatz", en: "Test sentence"))
             Spacer()
             HStack(spacing: 6) {
                 ForEach(Array(keys.enumerated()), id: \.offset) { _, key in
                     KeyLabel(glyph: key.glyph, name: key.name)
                 }
-                if let words = trigger == .doubleRightCommand ? "rechts" : trigger.display.words {
+                if let words = trigger == .doubleRightCommand ? de("rechts", en: "right") : trigger.display.words {
                     Text(words).font(Typography.text(13)).foregroundStyle(theme.inkOnCard)
                 }
             }
@@ -364,13 +365,13 @@ private struct ProbeStep: View {
                 Image(systemName: "checkmark")
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(theme.accent)
-                Text("Angekommen").font(Typography.text(15, .semibold)).foregroundStyle(theme.ink)
+                Text(de("Angekommen", en: "Arrived")).font(Typography.text(15, .semibold)).foregroundStyle(theme.ink)
             }
             Spacer()
             if arrived {
-                Button("Fertig", action: onDone).buttonStyle(AccentButtonStyle(height: 42))
+                Button(de("Fertig", en: "Done"), action: onDone).buttonStyle(AccentButtonStyle(height: 42))
             } else {
-                Button("Fertig", action: onDone).buttonStyle(.outline)
+                Button(de("Fertig", en: "Done"), action: onDone).buttonStyle(.outline)
             }
         }
         .onAppear {

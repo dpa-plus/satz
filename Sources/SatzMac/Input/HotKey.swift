@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import SatzKit
 
 /// A system-wide key combination, through Carbon's `RegisterEventHotKey`.
 ///
@@ -27,8 +28,8 @@ final class HotKey {
 
         var errorDescription: String? {
             switch self {
-            case .alreadyTaken: "Diese Tasten sind schon von einem anderen Programm belegt."
-            case .noHandler: "Tastenkürzel konnten nicht eingerichtet werden."
+            case .alreadyTaken: de("Diese Tasten sind schon von einem anderen Programm belegt.", en: "Another app already uses these keys.")
+            case .noHandler: de("Tastenkürzel konnten nicht eingerichtet werden.", en: "The shortcut could not be set up.")
             }
         }
     }

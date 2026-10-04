@@ -1,5 +1,6 @@
 import Carbon.HIToolbox
 import Foundation
+import SatzKit
 
 /// What starts and stops a dictation.
 ///
@@ -27,7 +28,7 @@ enum Trigger: Codable, Equatable, Sendable {
     var display: (keys: [(glyph: String, name: String?)], words: String?) {
         switch self {
         case .doubleRightCommand:
-            ([("⌘", "cmd")], "rechts, zweimal")
+            ([("⌘", "cmd")], de("rechts, zweimal", en: "right, twice"))
         case .keys(let keyCode, let modifiers):
             (Self.modifierKeys(modifiers) + [(Self.keyName(keyCode), nil)], nil)
         case .mouseButton(let number):
@@ -51,14 +52,14 @@ enum Trigger: Codable, Equatable, Sendable {
 
     static func keyName(_ keyCode: UInt32) -> String {
         switch Int(keyCode) {
-        case kVK_Space: return "Leertaste"
+        case kVK_Space: return de("Leertaste", en: "Space")
         case kVK_Return: return "Return"
         case kVK_Tab: return "Tab"
         case kVK_Escape: return "Esc"
-        case kVK_Delete: return "Löschen"
+        case kVK_Delete: return de("Löschen", en: "Delete")
         default:
             if let index = functionKeys.firstIndex(of: Int(keyCode)) { return "F\(index + 1)" }
-            return typedCharacter(keyCode)?.uppercased() ?? "Taste \(keyCode)"
+            return typedCharacter(keyCode)?.uppercased() ?? de("Taste \(keyCode)", en: "Key \(keyCode)")
         }
     }
 
@@ -95,10 +96,10 @@ enum Trigger: Codable, Equatable, Sendable {
 
     private static func mouseButtonName(_ number: Int) -> String {
         switch number {
-        case 2: "Mittlere Maustaste"
-        case 3: "Maustaste zurück"
-        case 4: "Maustaste vor"
-        default: "Maustaste \(number + 1)"
+        case 2: de("Mittlere Maustaste", en: "Middle mouse button")
+        case 3: de("Maustaste zurück", en: "Mouse back button")
+        case 4: de("Maustaste vor", en: "Mouse forward button")
+        default: de("Maustaste \(number + 1)", en: "Mouse button \(number + 1)")
         }
     }
 }

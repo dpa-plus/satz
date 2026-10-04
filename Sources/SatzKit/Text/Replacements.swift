@@ -23,27 +23,45 @@ public struct Replacement: Codable, Hashable, Identifiable, Sendable {
 
 public enum Replacements {
 
-    /// Two-word phrases only, so normal speech does not trigger them. Single
-    /// words that are also everyday words ("Punkt", "Komma", "quote") start
-    /// switched off.
-    public static let standard: [Replacement] = [
-        Replacement(spoken: "Klammer auf", written: "("),
-        Replacement(spoken: "Klammer zu", written: ")"),
-        Replacement(spoken: "Zitat Anfang", written: "\""),
-        Replacement(spoken: "Zitat Ende", written: "\""),
-        Replacement(spoken: "neue Zeile", written: "\n"),
-        Replacement(spoken: "neuer Absatz", written: "\n\n"),
-        Replacement(spoken: "Doppelpunkt", written: ":"),
-        Replacement(spoken: "Fragezeichen", written: "?"),
-        Replacement(spoken: "Ausrufezeichen", written: "!"),
-        Replacement(spoken: "Punkt", written: ".", isOn: false),
-        Replacement(spoken: "Komma", written: ",", isOn: false),
-        Replacement(spoken: "open bracket", written: "("),
-        Replacement(spoken: "close bracket", written: ")"),
-        Replacement(spoken: "end quote", written: "\""),
-        Replacement(spoken: "new line", written: "\n"),
-        Replacement(spoken: "new paragraph", written: "\n\n"),
-    ]
+    /// The predefined rules for the app's language. Mostly two-word phrases,
+    /// so normal speech does not trigger them; single words that are also
+    /// everyday words ("Punkt", "comma") start switched off.
+    public static func standard(for language: Language) -> [Replacement] {
+        switch language {
+        case .german: [
+            Replacement(spoken: "Klammer auf", written: "("),
+            Replacement(spoken: "Klammer zu", written: ")"),
+            Replacement(spoken: "Zitat Anfang", written: "\""),
+            Replacement(spoken: "Zitat Ende", written: "\""),
+            Replacement(spoken: "neue Zeile", written: "\n"),
+            Replacement(spoken: "neuer Absatz", written: "\n\n"),
+            Replacement(spoken: "Doppelpunkt", written: ":"),
+            Replacement(spoken: "Fragezeichen", written: "?"),
+            Replacement(spoken: "Ausrufezeichen", written: "!"),
+            Replacement(spoken: "Punkt", written: ".", isOn: false),
+            Replacement(spoken: "Komma", written: ",", isOn: false),
+        ]
+        case .english: [
+            Replacement(spoken: "open bracket", written: "("),
+            Replacement(spoken: "close bracket", written: ")"),
+            Replacement(spoken: "open quote", written: "\""),
+            Replacement(spoken: "close quote", written: "\""),
+            Replacement(spoken: "new line", written: "\n"),
+            Replacement(spoken: "new paragraph", written: "\n\n"),
+            Replacement(spoken: "colon", written: ":"),
+            Replacement(spoken: "question mark", written: "?"),
+            Replacement(spoken: "exclamation mark", written: "!"),
+            Replacement(spoken: "full stop", written: ".", isOn: false),
+            Replacement(spoken: "comma", written: ",", isOn: false),
+        ]
+        }
+    }
+
+    /// Whether two lists say the same, ignoring the ids that make every
+    /// fresh copy of the predefined rules distinct.
+    public static func sameRules(_ a: [Replacement], _ b: [Replacement]) -> Bool {
+        a.map { [$0.spoken, $0.written, "\($0.isOn)"] } == b.map { [$0.spoken, $0.written, "\($0.isOn)"] }
+    }
 
     /// The spoken side of every rule that is on, for the model's word list:
     /// a made-up trigger word only survives transcription if the model was

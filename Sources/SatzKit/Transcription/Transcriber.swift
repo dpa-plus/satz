@@ -73,13 +73,13 @@ public struct Transcriber: Sendable {
         /// Non-optional, so callers never have to invent a fallback string.
         public var message: String {
             switch self {
-            case .noKey: "Kein API-Schlüssel hinterlegt."
-            case .unauthorized: "Der API-Schlüssel wird abgelehnt."
-            case .rateLimited: "Der Anbieter drosselt gerade. Kurz warten."
-            case .offline: "Keine Verbindung zum Anbieter."
-            case .timedOut: "Der Anbieter hat nicht rechtzeitig geantwortet."
-            case .server(let status, let message): message ?? "Der Anbieter antwortete mit \(status)."
-            case .unreadableResponse: "Antwort des Anbieters nicht lesbar."
+            case .noKey: de("Kein API-Schlüssel hinterlegt.", en: "No API key saved.")
+            case .unauthorized: de("Der API-Schlüssel wird abgelehnt.", en: "The API key was rejected.")
+            case .rateLimited: de("Der Anbieter drosselt gerade. Kurz warten.", en: "The provider is throttling. Wait a moment.")
+            case .offline: de("Keine Verbindung zum Anbieter.", en: "No connection to the provider.")
+            case .timedOut: de("Der Anbieter hat nicht rechtzeitig geantwortet.", en: "The provider did not answer in time.")
+            case .server(let status, let message): message ?? de("Der Anbieter antwortete mit \(status).", en: "The provider answered with \(status).")
+            case .unreadableResponse: de("Antwort des Anbieters nicht lesbar.", en: "Could not read the provider's answer.")
             }
         }
 

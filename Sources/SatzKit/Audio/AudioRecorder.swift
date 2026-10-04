@@ -21,11 +21,11 @@ public final class AudioRecorder: @unchecked Sendable {
         public var errorDescription: String? {
             switch self {
             case .microphoneDenied:
-                "satz braucht Zugriff auf das Mikrofon."
+                de("satz braucht Zugriff auf das Mikrofon.", en: "satz needs access to the microphone.")
             case .couldNotConvertAudio:
-                "Das Mikrofon liefert ein Format, das satz nicht lesen kann."
+                de("Das Mikrofon liefert ein Format, das satz nicht lesen kann.", en: "The microphone delivers a format satz cannot read.")
             case .engineFailed(let detail):
-                "Aufnahme fehlgeschlagen: \(detail)"
+                de("Aufnahme fehlgeschlagen: \(detail)", en: "Recording failed: \(detail)")
             }
         }
     }

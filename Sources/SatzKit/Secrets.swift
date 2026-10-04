@@ -23,9 +23,9 @@ public enum Secrets {
             switch self {
             case .keychain(let status):
                 let detail = SecCopyErrorMessageString(status, nil) as String? ?? "\(status)"
-                return "Schlüsselbund: \(detail)"
+                return de("Schlüsselbund: \(detail)", en: "Keychain: \(detail)")
             case .file(let detail):
-                return "Schlüssel nicht gespeichert: \(detail)"
+                return de("Schlüssel nicht gespeichert: \(detail)", en: "Key not saved: \(detail)")
             }
         }
     }

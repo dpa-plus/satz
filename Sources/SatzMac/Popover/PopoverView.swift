@@ -36,6 +36,7 @@ struct PopoverView: View {
 
             Footer(preferences: preferences, actions: actions)
         }
+        .id(preferences.language)
         .padding(12)
         .frame(width: 340)
         // No blue keyboard-focus ring on the copy button when the menu opens.
@@ -50,9 +51,9 @@ struct PopoverView: View {
     @ViewBuilder
     private var problem: some View {
         if !setup.isComplete {
-            ProblemCard(title: "Einrichtung fehlt", primary: ("Einrichten", actions.openSetup))
+            ProblemCard(title: de("Einrichtung fehlt", en: "Setup incomplete"), primary: (de("Einrichten", en: "Set up"), actions.openSetup))
         } else if shortcut.status == .taken {
-            ProblemCard(title: "Tasten belegt", primary: ("Ändern", actions.openSettings))
+            ProblemCard(title: de("Tasten belegt", en: "Keys taken"), primary: (de("Ändern", en: "Change"), actions.openSettings))
         }
     }
 
@@ -118,13 +119,13 @@ private struct DiscardedRow: View {
             HStack(spacing: 10) {
                 Image(systemName: "trash")
                     .font(.system(size: 12, weight: .medium))
-                Text(preview.isEmpty ? "Aufnahme ohne Text" : preview)
+                Text(preview.isEmpty ? de("Aufnahme ohne Text", en: "Recording without text") : preview)
                     .font(Typography.text(14))
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Button(action: restore) {
-                    Label("Zurückholen", systemImage: "arrow.uturn.backward")
+                    Label(de("Zurückholen", en: "Restore"), systemImage: "arrow.uturn.backward")
                         .labelStyle(.titleAndIcon)
                 }
                 .buttonStyle(.outlineCompact)
@@ -166,7 +167,7 @@ private struct LatestCard: View {
 
     private var meta: String {
         let time = entry.date.formatted(date: .omitted, time: .shortened)
-        return "\(entry.pasted ? (entry.app ?? "Eingefügt") : "Zwischenablage") · \(time)"
+        return "\(entry.pasted ? (entry.app ?? de("Eingefügt", en: "Pasted")) : de("Zwischenablage", en: "Clipboard")) · \(time)"
     }
 }
 
@@ -215,7 +216,7 @@ private struct EarlierRow: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .help("Kopieren")
+        .help(de("Kopieren", en: "Copy"))
     }
 
     private func copy() {
@@ -246,7 +247,7 @@ private struct CopyButton: View {
                 .frame(width: 18)
         }
         .buttonStyle(AccentButtonStyle(height: 34, square: true))
-        .help("Kopieren")
+        .help(de("Kopieren", en: "Copy"))
     }
 }
 
@@ -285,14 +286,15 @@ private struct EmptyHint: View {
     }
 
     private var words: String {
-        let act = mode == .hold ? "halten und sprechen" : "sprechen"
+        let act = mode == .hold ? de("halten und sprechen", en: "hold and talk") : de("sprechen", en: "talk")
         switch trigger {
         case .doubleRightCommand:
-            return mode == .hold ? "Rechts zweimal tippen, beim zweiten Mal halten und sprechen" : "Rechts zweimal tippen und sprechen"
+            return mode == .hold ? de("Rechts zweimal tippen, beim zweiten Mal halten und sprechen", en: "Tap right twice, hold the second time and talk") : de("Rechts zweimal tippen und sprechen", en: "Tap right twice and talk")
         case .keys:
-            return mode == .hold ? "Halten und sprechen" : "Drücken und sprechen"
+            return mode == .hold ? de("Halten und sprechen", en: "Hold and talk") : de("Drücken und sprechen", en: "Press and talk")
         case .mouseButton:
-            return "\(trigger.display.words ?? "Maustaste") drücken, \(act)"
+            let button = trigger.display.words ?? de("Maustaste", en: "Mouse button")
+            return de("\(button) drücken, \(act)", en: "Press \(button), \(act)")
         }
     }
 }
@@ -306,7 +308,7 @@ private struct Footer: View {
     var body: some View {
         HStack(spacing: 4) {
             Menu {
-                Choice(title: "Wie in macOS", selected: preferences.inputDeviceUID == nil) {
+                Choice(title: de("Wie in macOS", en: "Same as macOS"), selected: preferences.inputDeviceUID == nil) {
                     preferences.inputDeviceUID = nil
                 }
                 Divider()
@@ -342,13 +344,13 @@ private struct Footer: View {
                 Image(systemName: "gearshape")
             }
             .buttonStyle(.icon)
-            .help("Einstellungen")
+            .help(de("Einstellungen", en: "Settings"))
 
             Button(action: actions.quit) {
                 Image(systemName: "power")
             }
             .buttonStyle(.icon)
-            .help("satz beenden")
+            .help(de("satz beenden", en: "Quit satz"))
         }
     }
 
@@ -356,7 +358,7 @@ private struct Footer: View {
         if let uid = preferences.inputDeviceUID, let device = devices.first(where: { $0.uid == uid }) {
             return device.name
         }
-        return InputDevices.systemDefault()?.name ?? "Mikrofon"
+        return InputDevices.systemDefault()?.name ?? de("Mikrofon", en: "Microphone")
     }
 }
 

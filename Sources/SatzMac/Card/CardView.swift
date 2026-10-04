@@ -1,4 +1,5 @@
 import SwiftUI
+import SatzKit
 
 /// The pill and its text, as one card. The text grows upward from the strip;
 /// the strip's buttons never move.
@@ -33,6 +34,7 @@ struct CardView: View {
             }
             Strip(session: session, preferences: preferences)
         }
+        .id(preferences.language)
         .frame(width: Self.width)
         .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(theme.ground))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(.white.opacity(0.12), lineWidth: 1))
@@ -77,18 +79,18 @@ private struct Strip: View {
         switch session.phase {
         case .idle, .starting, .listening, .paused:
             Waveform(levels: session.levels, live: session.phase == .listening)
-            label(session.phase == .paused ? "Pausiert" : session.phase == .listening ? "Hört zu" : "")
+            label(session.phase == .paused ? de("Pausiert", en: "Paused") : session.phase == .listening ? de("Hört zu", en: "Listening") : "")
             if !session.inFlight.isEmpty { WritingDots() }
         case .finishing:
             WritingDots()
-            label("Schreibt")
+            label(de("Schreibt", en: "Writing"))
         case .failed(let message, let canRetry):
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(theme.accent)
             label(message)
             if canRetry {
-                Button("Nochmal", action: session.retry)
+                Button(de("Nochmal", en: "Retry"), action: session.retry)
                     .buttonStyle(.plain)
                     .font(Typography.text(13, .semibold))
                     .foregroundStyle(theme.accentLabel)
@@ -97,9 +99,9 @@ private struct Strip: View {
                     .background(Capsule().fill(theme.accent))
             }
         case .discarded:
-            label("Verworfen")
+            label(de("Verworfen", en: "Discarded"))
             Button(action: session.undoDiscard) {
-                Text("Rückgängig").underline()
+                Text(de("Rückgängig", en: "Undo")).underline()
             }
             .buttonStyle(.plain)
             .font(Typography.text(13, .semibold))
@@ -108,7 +110,7 @@ private struct Strip: View {
             Image(systemName: "doc.on.clipboard")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(theme.accent)
-            label("Zwischenablage")
+            label(de("Zwischenablage", en: "Clipboard"))
             KeyLabel(glyph: "⌘", name: "V")
         }
     }
@@ -126,7 +128,7 @@ private struct Strip: View {
         }
         .buttonStyle(.plain)
         .disabled(!usable)
-        .help(listening ? "Pause" : "Weitersprechen")
+        .help(listening ? de("Pause", en: "Pause") : de("Weitersprechen", en: "Continue"))
     }
 
     private var eye: some View {
@@ -138,7 +140,7 @@ private struct Strip: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(preferences.showsText ? "Text ausblenden" : "Text zeigen")
+        .help(preferences.showsText ? de("Text ausblenden", en: "Hide text") : de("Text zeigen", en: "Show text"))
     }
 
     private var close: some View {
@@ -151,7 +153,7 @@ private struct Strip: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .help("Verwerfen")
+        .help(de("Verwerfen", en: "Discard"))
     }
 
     private func label(_ text: String) -> some View {

@@ -14,6 +14,7 @@ app:
 	cp Resources/Info.plist "$(APP)/Contents/Info.plist"
 	cp -R Resources/Fonts "$(APP)/Contents/Resources/Fonts"
 	cp Resources/AppIcon.icns "$(APP)/Contents/Resources/AppIcon.icns"
+	cp -R Resources/en.lproj Resources/de.lproj "$(APP)/Contents/Resources/"
 	# This folder is cloud-synced, which stamps extended attributes onto every
 	# file. codesign refuses to sign a bundle carrying them.
 	xattr -cr "$(APP)"

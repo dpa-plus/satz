@@ -61,13 +61,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         shortcut.start()
 
-        settingsWindow = AppWindow(title: "satz Einstellungen") { [unowned self] in
+        settingsWindow = AppWindow(title: de("satz Einstellungen", en: "satz Settings")) { [unowned self] in
             AnyView(SettingsView(
                 preferences: preferences, setup: setup, shortcut: shortcut,
                 launchAtLogin: launchAtLogin, history: history
             ))
         }
-        setupWindow = AppWindow(title: "satz einrichten") { [unowned self] in
+        setupWindow = AppWindow(title: de("satz einrichten", en: "Set up satz")) { [unowned self] in
             AnyView(SetupView(
                 preferences: preferences, setup: setup, shortcut: shortcut, history: history,
                 onDone: { [weak self] in self?.setupWindow.close() }

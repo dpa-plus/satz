@@ -262,7 +262,7 @@ final class Session {
             return
         }
         guard !preferences.isEndpointMissing else {
-            phase = .failed("Adresse fehlt", canRetry: false)
+            phase = .failed(de("Adresse fehlt", en: "Address missing"), canRetry: false)
             onOpen()
             closeLater(after: .seconds(5))
             return
@@ -377,7 +377,7 @@ final class Session {
         let output = plainText().trimmingCharacters(in: .whitespacesAndNewlines)
         guard !output.isEmpty else {
             reset()
-            phase = .failed("Nichts gehört", canRetry: false)
+            phase = .failed(de("Nichts gehört", en: "Nothing heard"), canRetry: false)
             closeLater(after: .seconds(3))
             return
         }
@@ -458,7 +458,7 @@ final class Session {
             case .failure(let error):
                 Log.note("transcription failed: \(error.localizedDescription)")
                 // Kept: the final send at the shortcut tries it again.
-                segments[id]?.failure = (error as? Transcriber.Failure)?.short ?? "Fehler"
+                segments[id]?.failure = (error as? Transcriber.Failure)?.short ?? de("Fehler", en: "Error")
             }
         }
     }
@@ -729,13 +729,13 @@ extension Transcriber.Failure {
     /// Two or three words, for the card and the menu.
     var short: String {
         switch self {
-        case .noKey: "Kein Schlüssel"
-        case .unauthorized: "Schlüssel abgelehnt"
-        case .rateLimited: "Anbieter drosselt"
-        case .offline: "Keine Verbindung"
-        case .timedOut: "Zeitüberschreitung"
-        case .server: "Fehler beim Anbieter"
-        case .unreadableResponse: "Antwort unlesbar"
+        case .noKey: de("Kein Schlüssel", en: "No key")
+        case .unauthorized: de("Schlüssel abgelehnt", en: "Key rejected")
+        case .rateLimited: de("Anbieter drosselt", en: "Provider busy")
+        case .offline: de("Keine Verbindung", en: "No connection")
+        case .timedOut: de("Zeitüberschreitung", en: "Timed out")
+        case .server: de("Fehler beim Anbieter", en: "Provider error")
+        case .unreadableResponse: de("Antwort unlesbar", en: "Unreadable answer")
         }
     }
 }
