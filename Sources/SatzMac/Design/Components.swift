@@ -296,7 +296,7 @@ struct GlassSurface: View {
         if #available(macOS 26.0, *), !snapshot {
             ZStack {
                 Color.clear.glassEffect(.regular.tint(tint), in: shape)
-                shape.fill(tint.opacity(0.74))
+                shape.fill(tint.opacity(0.65))
             }
         } else {
             shape.fill(tint).shadow(color: .black.opacity(0.32), radius: 14, y: 6)
