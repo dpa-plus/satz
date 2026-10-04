@@ -47,9 +47,19 @@ struct CardTextView: NSViewRepresentable {
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
-        // New text at the end stays in view while dictating.
-        if session.phase == .listening || session.phase == .paused {
-            DispatchQueue.main.async { context.coordinator.textView?.scrollToEndOfDocument(nil) }
+        // Where speech goes next stays in view while dictating. Not while the
+        // user types or clicks in the text: scrolling to the end on every
+        // keystroke jumped away from what they were editing.
+        guard session.phase == .listening || session.phase == .paused else { return }
+        let userIsEditing = [.keyDown, .leftMouseDown, .leftMouseUp, .leftMouseDragged].contains(NSApp.currentEvent?.type)
+        guard !userIsEditing else { return }
+        DispatchQueue.main.async {
+            guard let textView = context.coordinator.textView else { return }
+            if let target = session.activeMarkerRange {
+                textView.scrollRangeToVisible(target)
+            } else {
+                textView.scrollToEndOfDocument(nil)
+            }
         }
     }
 

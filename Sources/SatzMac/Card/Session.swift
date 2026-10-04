@@ -104,6 +104,9 @@ final class Session {
         let id: Int
         let recorder: AudioSource
         let start: Int
+        /// Where a new microphone took over, when the user went on talking
+        /// before this one's tail was over.
+        var end: Int?
     }
     @ObservationIgnored private var finishing: Task<Void, Never>?
     @ObservationIgnored private var closingLater: Task<Void, Never>?
@@ -142,8 +145,17 @@ final class Session {
         guard preferences.triggerMode == .hold else { return }
         switch phase {
         case .listening: finish()
-        // Let go before the microphone even opened: nothing was said.
-        case .starting: close()
+        // Let go before the microphone even opened: nothing was said. With
+        // earlier text in the card, that text stays, paused; closing threw
+        // the whole dictation away.
+        case .starting:
+            if hasRealText || segments.values.contains(where: { !$0.audio.isEmpty }) || !stopping.isEmpty {
+                startToken += 1
+                releaseEscape()
+                phase = .paused
+            } else {
+                close()
+            }
         default: break
         }
     }
@@ -178,7 +190,7 @@ final class Session {
         var held = stopping
         if let recorder, let activeID { held.append(Held(id: activeID, recorder: recorder, start: liveStart)) }
         for piece in held where kept[piece.id] != nil {
-            kept[piece.id]?.audio += piece.recorder.samples(from: piece.start, to: piece.recorder.sampleCount)
+            kept[piece.id]?.audio += piece.recorder.samples(from: piece.start, to: piece.end ?? piece.recorder.sampleCount)
         }
         let snapshot = Discarded.Snapshot(
             text: NSAttributedString(attributedString: text),
@@ -323,6 +335,8 @@ final class Session {
                 guard mine == startToken else { return }
                 releaseEscape()
                 phase = .failed(error.localizedDescription, canRetry: false)
+                // Earlier text stays, so the card stays for the shortcut or ×.
+                if !hasRealText { closeLater(after: .seconds(5)) }
                 return
             }
             // Thrown away while the permission dialog was up: close the
@@ -333,6 +347,11 @@ final class Session {
             }
             self.recorder = recorder
             liveStart = 0
+            // A microphone still in its tail from a pause stops counting here,
+            // or the moment both were open would be in the text twice.
+            for index in stopping.indices where stopping[index].end == nil {
+                stopping[index].end = stopping[index].recorder.sampleCount
+            }
             phase = .listening
         }
     }
@@ -351,9 +370,10 @@ final class Session {
             // The tail keeps the last word.
             let samples = await recorder.finishSamples() ?? []
             guard token == sessionToken else { return }
+            let end = stopping.first { $0.recorder === recorder }?.end ?? samples.count
             stopping.removeAll { $0.recorder === recorder }
             tailing.remove(id)
-            append(Array(samples.dropFirst(start)), to: id)
+            append(Array(samples[min(start, end, samples.count) ..< min(end, samples.count)]), to: id)
             send(id)
             removeMarkerIfDone(id)
         })
@@ -451,6 +471,8 @@ final class Session {
         history.add(output, app: origin?.localizedName, pasted: outcome == .pasted)
         if case .clipboardOnly(let reason) = outcome {
             Log.note(reason)
+            // A new dictation started in the moment before: it stays.
+            guard phase == .idle else { return }
             phase = .clipboard
             onOpen()
             closeLater(after: .seconds(3))
@@ -524,6 +546,7 @@ final class Session {
         var attributes = Self.textAttributes
         attributes[.satzSegment] = id
         edit { text.replaceCharacters(in: target, with: NSAttributedString(string: piece, attributes: attributes)) }
+        moveCaret(replacing: target, with: (piece as NSString).length)
         segment.transcribed = count
         segments[id] = segment
         removeMarkerIfDone(id)
@@ -577,7 +600,9 @@ final class Session {
         let id = nextID
         nextID += 1
         segments[id] = Segment()
-        edit { text.insert(Self.marker(for: id), at: location) }
+        let marker = Self.marker(for: id)
+        edit { text.insert(marker, at: location) }
+        moveCaret(replacing: NSRange(location: location, length: 0), with: marker.length)
         return id
     }
 
@@ -610,9 +635,28 @@ final class Session {
         guard id != activeID, !tailing.contains(id), let segment = segments[id], segment.audio.count == segment.transcribed,
               let marker = markerRange(id) else { return }
         edit { text.deleteCharacters(in: marker) }
+        moveCaret(replacing: marker, with: 0)
+    }
+
+    /// Keeps where the user put the caret on the same spot in the text while
+    /// satz changes the text around it. Text arriving before it pushes it
+    /// along; a click right after a pause, before the words came in, ended up
+    /// in the middle of them.
+    private func moveCaret(replacing range: NSRange, with length: Int) {
+        guard let caret else { return }
+        if caret >= NSMaxRange(range) {
+            self.caret = caret + length - range.length
+        } else if caret > range.location {
+            self.caret = range.location + length
+        }
     }
 
     // MARK: - Text queries
+
+    /// The placeholder where the next words will go, for the card to keep in view.
+    var activeMarkerRange: NSRange? {
+        activeID.flatMap(markerRange)
+    }
 
     private func markerRange(_ id: Int) -> NSRange? {
         var found: NSRange?
