@@ -111,6 +111,9 @@ final class CardPanel: NSPanel {
         backgroundColor = .clear
         // The card draws its own shadow, inside the margin.
         hasShadow = false
+        // The card is always the dark surface, so its glass is always the
+        // dark kind too, instead of following the system into light glass.
+        appearance = NSAppearance(named: .darkAqua)
         hidesOnDeactivate = false
         becomesKeyOnlyIfNeeded = true
         isMovableByWindowBackground = false

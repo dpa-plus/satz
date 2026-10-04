@@ -281,6 +281,11 @@ struct Block<Content: View>: View {
 /// with the theme's ground on macOS 26, so the desktop shows through and the
 /// text still reads; the solid ground with a soft shadow before that, and in
 /// snapshots, which cannot draw glass.
+///
+/// Glass alone takes its brightness from whatever is behind it: over a white
+/// page the card came up whitish, then turned green, and changed shade again
+/// as it grew. The theme's colour laid over the glass keeps it one colour
+/// everywhere, with only a little of the desktop showing through.
 struct GlassSurface: View {
     let cornerRadius: CGFloat
     let tint: Color
@@ -289,7 +294,10 @@ struct GlassSurface: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         if #available(macOS 26.0, *), !snapshot {
-            Color.clear.glassEffect(.regular.tint(tint.opacity(0.62)), in: shape)
+            ZStack {
+                Color.clear.glassEffect(.regular.tint(tint), in: shape)
+                shape.fill(tint.opacity(0.74))
+            }
         } else {
             shape.fill(tint).shadow(color: .black.opacity(0.32), radius: 14, y: 6)
         }
