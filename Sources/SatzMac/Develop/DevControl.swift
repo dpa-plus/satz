@@ -5,7 +5,8 @@ import AppKit
 /// Only listens when launched with `--dev-control <state file>`. Commands
 /// arrive as distributed notifications named `plus.dpa.satz.dev`, with the
 /// command as the object: `press`, `release`, `mic`, `discard`, `undo`,
-/// `caret:<index>` (as if clicked there), `dump`, which writes the card's
+/// `caret:<index>` (as if clicked there), `field` (logs where the focused
+/// text field is), `dump`, which writes the card's
 /// phase and text to the state file, and `picture`, which saves the live
 /// card as a PNG next to it.
 @MainActor
@@ -45,6 +46,7 @@ final class DevControl {
         case "discard": session.discard()
         case "undo": session.undoDiscard()
         case "dump": dump()
+        case "field": Log.note("focused field: \(FocusedField.frame().map { NSStringFromRect($0) } ?? "unknown")")
         case "picture":
             try? card.picture()?.write(to: stateFile.deletingPathExtension().appendingPathExtension("png"))
         default:

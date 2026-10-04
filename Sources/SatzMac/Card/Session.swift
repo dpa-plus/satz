@@ -58,6 +58,12 @@ final class Session {
         return text.length > 0
     }
 
+    /// Text that is more than placeholders.
+    var hasRealText: Bool {
+        _ = textVersion
+        return !plainText().trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     /// The card's text. Changed by the user in the text view, by satz in `edit`.
     @ObservationIgnored let text = NSTextStorage()
     /// Where the user last put the caret, nil until they do.
@@ -404,7 +410,11 @@ final class Session {
     }
 
     private func paste(_ output: String, into origin: NSRunningApplication?) {
+        // Which app is in front at the moment of ⌘V tells whether a paste
+        // that did not arrive went to the wrong place or nowhere. Never the text.
+        let front = NSWorkspace.shared.frontmostApplication?.localizedName ?? "?"
         let outcome = Paster.deliver(output, into: origin)
+        Log.note("paste: \(outcome == .pasted ? "sent ⌘V" : "clipboard only") into \(origin?.localizedName ?? "?"), front was \(front), \(output.count) characters")
         history.add(output, app: origin?.localizedName, pasted: outcome == .pasted)
         if case .clipboardOnly(let reason) = outcome {
             Log.note(reason)
@@ -702,9 +712,9 @@ final class Session {
     /// The card's text: Source Sans on petrol, the same in light and dark mode.
     static var textAttributes: [NSAttributedString.Key: Any] {
         let paragraph = NSMutableParagraphStyle()
-        paragraph.lineHeightMultiple = 1.12
+        paragraph.lineHeightMultiple = 1.1
         return [
-            .font: NSFont(name: "SourceSans3-Roman_Regular", size: 15) ?? .systemFont(ofSize: 15),
+            .font: NSFont(name: "SourceSans3-Roman_Regular", size: 14) ?? .systemFont(ofSize: 14),
             .foregroundColor: NSColor(Theme.dark.ink),
             .paragraphStyle: paragraph,
         ]

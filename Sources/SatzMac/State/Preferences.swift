@@ -59,6 +59,18 @@ final class Preferences {
         }
     }
 
+    /// Where the user dragged the card, as an offset from the bottom centre
+    /// of the screen. nil until they move it.
+    var cardOffset: CGPoint? {
+        didSet {
+            if let cardOffset {
+                defaults?.set(["x": cardOffset.x, "y": cardOffset.y], forKey: Key.cardOffset)
+            } else {
+                defaults?.removeObject(forKey: Key.cardOffset)
+            }
+        }
+    }
+
     /// Whether the card shows the text while dictating (the eye button).
     var showsText: Bool {
         didSet { defaults?.set(showsText, forKey: Key.showsText) }
@@ -123,6 +135,7 @@ final class Preferences {
         static let inputDeviceUID = "inputDeviceUID"
         static let language = "language"
         static let showsText = "showsText"
+        static let cardOffset = "cardOffset"
         static let replacements = "replacements"
         static let removesFillers = "removesFillers"
     }
@@ -139,6 +152,8 @@ final class Preferences {
         triggerMode = defaults?.string(forKey: Key.triggerMode).flatMap(TriggerMode.init(rawValue:)) ?? .tap
         inputDeviceUID = defaults?.string(forKey: Key.inputDeviceUID)
         showsText = defaults?.object(forKey: Key.showsText) as? Bool ?? true
+        cardOffset = (defaults?.dictionary(forKey: Key.cardOffset) as? [String: Double])
+            .flatMap { values in values["x"].flatMap { x in values["y"].map { CGPoint(x: x, y: $0) } } }
         let language = defaults?.string(forKey: Key.language).flatMap(Language.init(rawValue:)) ?? .system
         self.language = language
         Language.current = language

@@ -10,14 +10,17 @@ struct CardView: View {
     let session: Session
     @Bindable var preferences: Preferences
     var onSize: (CGSize) -> Void = { _ in }
+    /// Dragging the strip moves the card: true while the drag goes on,
+    /// false once it ends.
+    var onDrag: (Bool) -> Void = { _ in }
 
     @Environment(\.isSnapshot) private var isSnapshot
     @State private var textHeight: CGFloat = 0
     private let theme = Theme.dark
 
-    /// About six lines, then the text scrolls inside the card.
-    static let maxTextHeight: CGFloat = 6 * 21 + CardTextView.inset.height * 2
-    static let width: CGFloat = 460
+    /// About five lines, then the text scrolls inside the card.
+    static let maxTextHeight: CGFloat = 5 * 20 + CardTextView.inset.height * 2
+    static let width: CGFloat = 380
 
     var body: some View {
         VStack(spacing: 0) {
@@ -27,25 +30,26 @@ struct CardView: View {
                         SnapshotText(session: session)
                     } else {
                         CardTextView(session: session, height: $textHeight)
-                            .frame(height: min(max(textHeight, 44), Self.maxTextHeight))
+                            .frame(height: min(max(textHeight, 36), Self.maxTextHeight))
                     }
                 }
                 Rectangle().fill(theme.hairline).frame(height: 1)
             }
-            Strip(session: session, preferences: preferences)
+            Strip(session: session, preferences: preferences, onDrag: onDrag)
         }
         .id(preferences.language)
         .frame(width: Self.width)
-        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(theme.ground))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(.white.opacity(0.12), lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(theme.ground))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(.white.opacity(0.12), lineWidth: 1))
         .environment(\.theme, theme)
         .focusEffectDisabled()
         .fixedSize(horizontal: false, vertical: true)
         .onGeometryChange(for: CGSize.self, of: { $0.size }, action: onSize)
     }
 
+    /// Only once there is text: the placeholder alone is not worth a line.
     private var showsText: Bool {
-        guard preferences.showsText, session.hasText else { return false }
+        guard preferences.showsText, session.hasRealText else { return false }
         switch session.phase {
         case .idle, .discarded, .clipboard: return false
         default: return true
@@ -60,6 +64,7 @@ struct CardView: View {
 private struct Strip: View {
     let session: Session
     @Bindable var preferences: Preferences
+    let onDrag: (Bool) -> Void
     @Environment(\.theme) private var theme
 
     var body: some View {
@@ -70,8 +75,16 @@ private struct Strip: View {
             eye
             close
         }
-        .padding(.horizontal, 8)
-        .frame(height: 44)
+        .padding(.horizontal, 6)
+        .frame(height: 38)
+        // The whole strip is the handle, waveform and labels included; a
+        // plain click on a button still goes to the button.
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 3)
+                .onChanged { _ in onDrag(true) }
+                .onEnded { _ in onDrag(false) }
+        )
     }
 
     @ViewBuilder
@@ -79,7 +92,8 @@ private struct Strip: View {
         switch session.phase {
         case .idle, .starting, .listening, .paused:
             Waveform(levels: session.levels, live: session.phase == .listening)
-            label(session.phase == .paused ? de("Pausiert", en: "Paused") : session.phase == .listening ? de("Hört zu", en: "Listening") : "")
+            // While listening the moving bars say it; only a pause gets a word.
+            if session.phase == .paused { label(de("Pausiert", en: "Paused")) }
             if !session.inFlight.isEmpty { WritingDots() }
         case .finishing:
             WritingDots()
@@ -120,9 +134,9 @@ private struct Strip: View {
         let usable = listening || session.phase == .paused
         return Button(action: session.toggleMicrophone) {
             Image(systemName: listening ? "pause.fill" : "mic.fill")
-                .font(.system(size: 12, weight: .bold))
+                .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(listening ? theme.accentLabel : usable ? theme.accent : theme.inkSecondary)
-                .frame(width: 28, height: 28)
+                .frame(width: 26, height: 26)
                 .background(Circle().fill(listening ? Theme.light.accent : .white.opacity(0.12)))
                 .contentShape(Circle())
         }
@@ -134,9 +148,9 @@ private struct Strip: View {
     private var eye: some View {
         Button { preferences.showsText.toggle() } label: {
             Image(systemName: preferences.showsText ? "eye" : "eye.slash")
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(theme.inkSecondary)
-                .frame(width: 24, height: 24)
+                .frame(width: 22, height: 22)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -146,9 +160,9 @@ private struct Strip: View {
     private var close: some View {
         Button(action: session.discard) {
             Image(systemName: "xmark")
-                .font(.system(size: 10, weight: .bold))
+                .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(theme.ink)
-                .frame(width: 28, height: 28)
+                .frame(width: 24, height: 24)
                 .background(Circle().fill(.white.opacity(0.12)))
                 .contentShape(Circle())
         }
@@ -158,7 +172,7 @@ private struct Strip: View {
 
     private func label(_ text: String) -> some View {
         Text(text)
-            .font(Typography.text(13, .medium))
+            .font(Typography.text(12, .medium))
             .foregroundStyle(theme.inkSecondary)
             .lineLimit(1)
     }
@@ -173,14 +187,14 @@ struct Waveform: View {
     var live = true
     @Environment(\.theme) private var theme
 
-    private let maxHeight: CGFloat = 20
+    private let maxHeight: CGFloat = 16
 
     var body: some View {
-        HStack(alignment: .center, spacing: 3) {
+        HStack(alignment: .center, spacing: 2.5) {
             ForEach(Array(levels.enumerated()), id: \.offset) { _, level in
                 Capsule()
                     .fill(theme.accent.opacity(live ? 1 : 0.45))
-                    .frame(width: 3, height: 3 + (maxHeight - 3) * CGFloat(max(0, min(1, level))))
+                    .frame(width: 2.5, height: 2.5 + (maxHeight - 2.5) * CGFloat(max(0, min(1, level))))
             }
         }
         .frame(height: maxHeight)
@@ -216,7 +230,7 @@ private struct SnapshotText: View {
 
     var body: some View {
         composed
-            .font(Typography.text(15))
+            .font(Typography.text(14))
             .foregroundStyle(theme.ink)
             .lineSpacing(3)
             .padding(.horizontal, CardTextView.inset.width + 5)

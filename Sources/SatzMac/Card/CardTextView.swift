@@ -8,7 +8,7 @@ struct CardTextView: NSViewRepresentable {
     /// The height the text needs, reported back for the card to size itself.
     @Binding var height: CGFloat
 
-    static let inset = NSSize(width: 14, height: 12)
+    static let inset = NSSize(width: 12, height: 9)
 
     func makeCoordinator() -> Coordinator {
         Coordinator(session: session, height: $height)
