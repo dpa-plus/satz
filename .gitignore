@@ -6,3 +6,6 @@ dist/
 *.xcuserdatastate
 xcuserdata/
 .DS_Store
+
+# The Linux packaging hook lives in desktop/build (electron-builder's folder).
+!desktop/build/
