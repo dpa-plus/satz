@@ -92,6 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         watchAttention()
         keepSetupFresh()
+        followColourFamily()
 
         Log.note("setup: provider=\(preferences.provider.rawValue) key=\(setup.hasKey) microphone=\(setup.microphone) paste=\(setup.canPaste)")
 
@@ -117,6 +118,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menuBar.needsAttention = !setup.isComplete || shortcut.status == .taken
         } onChange: { [weak self] in
             Task { @MainActor in self?.watchAttention() }
+        }
+    }
+
+    /// The app icon follows the colour family, at launch and on every change.
+    private func followColourFamily() {
+        withObservationTracking {
+            AppIcon.apply(Look.shared.family)
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.followColourFamily() }
         }
     }
 

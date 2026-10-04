@@ -1,11 +1,13 @@
 import AppKit
 import SwiftUI
 
-/// Renders the app icon: the brand mark in DPA+ orange on a petrol tile.
+/// Renders the app icon: the brand mark on a tile in the colour family's
+/// deep ground. The bundled icon is the DPA+ one:
 ///
 ///     satz --icon <folder>.iconset && iconutil -c icns <folder>.iconset
 ///
-/// `make icon` does both and writes Resources/AppIcon.icns.
+/// `make icon` does both and writes Resources/AppIcon.icns. The other
+/// families are drawn at runtime, see `AppIcon`.
 @MainActor
 enum IconRenderer {
 
@@ -15,7 +17,7 @@ enum IconRenderer {
         for points in [16, 32, 128, 256, 512] {
             for scale in [1, 2] {
                 let suffix = scale == 2 ? "@2x" : ""
-                let renderer = ImageRenderer(content: tile)
+                let renderer = ImageRenderer(content: tile(for: .dpa))
                 renderer.scale = CGFloat(points * scale) / 1024
                 guard let image = renderer.nsImage, let tiff = image.tiffRepresentation,
                       let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:])
@@ -27,14 +29,21 @@ enum IconRenderer {
 
     /// Apple's grid: an 824-point rounded square inside a 1024 canvas, so the
     /// icon sits the same size as every other app in the Dock and Spotlight.
-    private static var tile: some View {
+    static func tile(for family: AppTheme) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: 185, style: .continuous)
-                .fill(Color(hex: 0x16303C))
+                .fill(family.dark.ground)
                 .frame(width: 824, height: 824)
                 .shadow(color: .black.opacity(0.28), radius: 18, y: 10)
-            BrandMark(height: 360, color: Color(hex: 0xFF6100))
+            BrandMark(height: 360, color: family.iconBars)
         }
         .frame(width: 1024, height: 1024)
+    }
+
+    /// The icon as an image, for the Dock and the app's bundle.
+    static func image(for family: AppTheme, pixels: CGFloat = 1024) -> NSImage? {
+        let renderer = ImageRenderer(content: tile(for: family))
+        renderer.scale = pixels / 1024
+        return renderer.nsImage
     }
 }
