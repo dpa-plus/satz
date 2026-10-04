@@ -82,8 +82,8 @@ final class Preferences {
         replacements = Replacements.standard(for: new) + own
     }
 
-    /// Where the user dragged the card, as an offset from the bottom centre
-    /// of the screen. nil until they move it.
+    /// Where the user dragged the card, as an offset from where it starts:
+    /// the pill centred near the bottom of the screen. nil until they move it.
     var cardOffset: CGPoint? {
         didSet {
             if let cardOffset {
@@ -182,7 +182,8 @@ final class Preferences {
         static let spokenLanguage = "spokenLanguage"
         static let showsText = "showsText"
         static let appTheme = "appTheme"
-        static let cardOffset = "cardOffset"
+        /// "cardOffset" before 04.10. measured from another spot; dropped.
+        static let cardOffset = "cardSpot"
         static let replacements = "replacements"
         static let removesFillers = "removesFillers"
         static let usesReplacements = "usesReplacements"
@@ -204,6 +205,7 @@ final class Preferences {
         self.appTheme = appTheme
         cardOffset = (defaults?.dictionary(forKey: Key.cardOffset) as? [String: Double])
             .flatMap { values in values["x"].flatMap { x in values["y"].map { CGPoint(x: x, y: $0) } } }
+        defaults?.removeObject(forKey: "cardOffset")
         let language = defaults?.string(forKey: Key.language).flatMap(Language.init(rawValue:)) ?? .system
         self.language = language
         let spokenChoice = defaults?.string(forKey: Key.spokenLanguage).flatMap(Language.init(rawValue:))

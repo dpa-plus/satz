@@ -60,10 +60,10 @@ final class CardController {
     private func make() -> CardPanel {
         let panel = CardPanel()
         panel.onMoved = { [weak self, weak panel] in
-            // Only a drag by the user is remembered; satz moving the card
-            // above a text field is not.
-            guard let self, let panel, dragging else { return }
-            dragging = false
+            // Every move but satz's own placing is the user's, and is kept.
+            // Waiting for the drag flag lost them: the drag had ended before
+            // the window settled, so nothing was ever saved.
+            guard let self, let panel else { return }
             preferences.cardOffset = panel.offset()
         }
         let view = CardView(session: session, preferences: preferences) { [weak self] dragging in
@@ -97,6 +97,8 @@ final class CardPanel: NSPanel {
     /// Called once the user has finished dragging the card somewhere new.
     var onMoved: () -> Void = {}
     private var settling: Task<Void, Never>?
+    /// True while satz itself puts the window somewhere, which is not a drag.
+    private var placing = false
 
     init() {
         super.init(
@@ -127,6 +129,7 @@ final class CardPanel: NSPanel {
     /// A drag by the window server ends without telling us; the moves stop.
     /// So the new spot is taken a moment after the last one.
     private func moved() {
+        guard !placing else { return }
         settling?.cancel()
         settling = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(300))
@@ -138,10 +141,11 @@ final class CardPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
-    /// Where the window goes by default: the full card centred near the
-    /// bottom of the screen.
+    /// Where the window goes by default: the pill centred near the bottom of
+    /// the screen. The card sits in the window's right corner and grows to
+    /// the left from there, so the buttons stay where they are.
     private static func base(in visible: NSRect) -> NSPoint {
-        NSPoint(x: visible.midX - CardView.width / 2 - margin, y: visible.minY + 96 - margin)
+        NSPoint(x: visible.midX + CardView.pillWidth / 2 + margin - size.width, y: visible.minY + 96 - margin)
     }
 
     /// Near the bottom centre of the screen holding the mouse, which is where
@@ -150,19 +154,23 @@ final class CardPanel: NSPanel {
     /// Never on top of the field being dictated into: a chat box at the bottom
     /// of a window is exactly where the card would otherwise sit. Then it
     /// goes just above the field, where growing upward cannot cover it either.
+    /// Only from the default spot: a place the user dragged it to is theirs,
+    /// and moving it away from there looked like it was never remembered.
     func place(offset: CGPoint?, avoiding field: NSRect?) {
         guard let visible = Self.screen()?.visibleFrame else { return }
         let base = Self.base(in: visible)
         var origin = NSPoint(x: base.x + (offset?.x ?? 0), y: base.y + (offset?.y ?? 0))
         // The card's bottom row, where it first appears.
         let row = NSRect(x: origin.x + Self.margin, y: origin.y + Self.margin, width: CardView.width, height: CardView.rowHeight)
-        if let field, row.insetBy(dx: 0, dy: -8).intersects(field) {
+        if offset == nil, let field, row.insetBy(dx: 0, dy: -8).intersects(field) {
             origin.y = field.maxY + 12 - Self.margin
         }
         // Kept on screen, also when the remembered spot was on a larger display.
         origin.x = min(max(origin.x, visible.minX - Self.margin), visible.maxX - frame.width + Self.margin)
         origin.y = min(max(origin.y, visible.minY - Self.margin), visible.maxY - frame.height + Self.margin)
+        placing = true
         setFrameOrigin(origin)
+        placing = false
     }
 
     /// The card's spot as an offset from the default one, for remembering.
