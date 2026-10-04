@@ -87,10 +87,15 @@ struct CardTextView: NSViewRepresentable {
             textView.typingAttributes = Session.textAttributes
             let selection = textView.selectedRange()
             guard selection.length == 0, textView.window?.isKeyWindow == true else { return }
-            // Only a click moves where speech goes. Typing and the arrow keys
-            // move the caret too, and splitting the recording at every
-            // keystroke would cut it into useless slivers.
-            let clicked = [.leftMouseDown, .leftMouseUp, .leftMouseDragged].contains(NSApp.currentEvent?.type)
+            // Only the user's own moves count. Text arriving moves the caret
+            // as well, and taking that for a click put the next recording in
+            // the middle of the last one.
+            let event = NSApp.currentEvent?.type
+            let clicked = [.leftMouseDown, .leftMouseUp, .leftMouseDragged].contains(event)
+            guard clicked || event == .keyDown else { return }
+            // A click moves where speech goes; typing and arrow keys only
+            // decide where to go on after a pause, since splitting the
+            // recording at every keystroke would cut it into slivers.
             session.userMovedCaret(to: selection.location, byClick: clicked)
         }
 
