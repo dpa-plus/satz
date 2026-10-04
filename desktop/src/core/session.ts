@@ -1,0 +1,572 @@
+import { de } from './language'
+import { Doc, type Range } from './doc'
+import { applyReplacements, type Replacement } from './replacements'
+import { fit } from './textFitting'
+import { TranscriptionFailure } from './transcriber'
+
+/**
+ * One dictation, from the shortcut to the paste. A port of the Mac app's
+ * Session.swift, including its fixes: audio still in the microphone survives a
+ * discard, the caret follows satz's own edits, a quick hold-mode tap after a
+ * pause keeps the text, the tail of a pause never doubles audio, speech never
+ * lands inside a word.
+ *
+ * Audio is never cut automatically: each insertion spot is one recording, a
+ * pause sends the recording so far, and finishing sends the whole of it again.
+ */
+export type Phase =
+  | { kind: 'idle' }
+  | { kind: 'starting' }
+  | { kind: 'listening' }
+  | { kind: 'paused' }
+  | { kind: 'finishing' }
+  | { kind: 'failed'; message: string; canRetry: boolean }
+  | { kind: 'discarded' }
+  | { kind: 'clipboard' }
+
+/** What records: the microphone, or a file in test mode. */
+export interface AudioSource {
+  start(): Promise<void>
+  readonly sampleCount: number
+  samples(from: number, to: number): Float32Array
+  /** Stops after a short tail that keeps the last word; everything since start. */
+  finishSamples(): Promise<Float32Array | null>
+  cancel(): void
+  onLevel?: (level: number) => void
+}
+
+export interface SessionDeps {
+  makeSource(): AudioSource
+  /** The transcript of 16 kHz mono samples. Throws TranscriptionFailure. */
+  transcribe(samples: Float32Array): Promise<string>
+  replacements(): Replacement[]
+  hasKey(): boolean
+  endpointMissing(): boolean
+  triggerMode(): 'tap' | 'hold'
+  /** Pastes; false with a reason when the text only reached the clipboard. */
+  deliver(text: string): Promise<{ pasted: boolean; reason?: string }>
+  log?(message: string): void
+  /** Sample rate of everything the sources produce. */
+  sampleRate?: number
+}
+
+interface Segment { audio: Float32Array; transcribed: number; failure?: string }
+interface Held { id: number; source: AudioSource; start: number; end?: number }
+
+export interface Snapshot {
+  doc: Doc
+  segments: Map<number, Segment>
+  activeID: number | null
+  nextID: number
+  preview: string
+}
+
+const concat = (a: Float32Array, b: Float32Array) => {
+  if (b.length === 0) return a
+  const out = new Float32Array(a.length + b.length)
+  out.set(a); out.set(b, a.length)
+  return out
+}
+
+export const MARKER = ' …'
+
+export class Session {
+  phase: Phase = { kind: 'idle' }
+  /** Enough history to fill the full card's waveform; the pill shows the end. */
+  levels: number[] = new Array(32).fill(0)
+  readonly doc = new Doc()
+  /** The last dictation thrown away, for Rückgängig and the tray's restore. */
+  discarded: Snapshot | null = null
+
+  onChange: () => void = () => {}
+  onOpen: () => void = () => {}
+  onClose: () => void = () => {}
+
+  private segments = new Map<number, Segment>()
+  private activeID: number | null = null
+  private nextID = 1
+  private source: AudioSource | null = null
+  private liveStart = 0
+  private caret: number | null = null
+  private sends = new Map<number, { promise: Promise<void>; covers: number; gen: number }>()
+  private sendGen = 0
+  private tailing = new Set<number>()
+  private tails: Promise<void>[] = []
+  private stopping: Held[] = []
+  private sessionToken = 0
+  private startToken = 0
+  private closeTimer: ReturnType<typeof setTimeout> | null = null
+  private breathTimer: ReturnType<typeof setInterval> | null = null
+  breathBright = true
+
+  constructor(private deps: SessionDeps) {}
+
+  private get rate() { return this.deps.sampleRate ?? 16_000 }
+  private changed() { this.onChange() }
+  private log(message: string) { this.deps.log?.(message) }
+
+  // MARK: - State for the card
+
+  get hasRealText() { return this.doc.plain().trim() !== '' }
+  get inFlight() { return this.sends.size }
+  get canRestore() { return ['idle', 'discarded', 'clipboard'].includes(this.phase.kind) }
+  get activeMarkerRange(): Range | null { return this.activeID ? this.doc.rangeOf('mark', this.activeID) : null }
+  plainText() { return this.doc.plain() }
+
+  // MARK: - Shortcut
+
+  /** The shortcut went down. */
+  press() {
+    const mode = this.deps.triggerMode(), p = this.phase
+    if (p.kind === 'idle' || p.kind === 'discarded' || p.kind === 'clipboard') return this.begin()
+    if (mode === 'tap' && (p.kind === 'listening' || p.kind === 'paused')) return this.finish()
+    if (p.kind === 'failed') {
+      // Nothing kept to send ("Kein Schlüssel", "Nichts gehört"): start over.
+      if (p.canRetry || [...this.segments.values()].some(s => s.audio.length > 0)) return this.finish()
+      return this.begin()
+    }
+    if (mode === 'hold' && p.kind === 'paused') return this.resume()
+  }
+
+  /** The shortcut came up. Only meaningful while holding to talk. */
+  release() {
+    if (this.deps.triggerMode() !== 'hold') return
+    if (this.phase.kind === 'listening') return this.finish()
+    if (this.phase.kind === 'starting') {
+      // Let go before the microphone opened. Earlier text stays, paused.
+      if (this.hasRealText || [...this.segments.values()].some(s => s.audio.length > 0) || this.stopping.length > 0) {
+        this.startToken++
+        this.phase = { kind: 'paused' }
+        this.changed()
+      } else {
+        this.close()
+      }
+    }
+  }
+
+  // MARK: - Card buttons
+
+  toggleMicrophone() {
+    if (this.phase.kind === 'listening') this.pause()
+    else if (this.phase.kind === 'paused') this.resume()
+  }
+
+  /** × and Escape. Recoverable: see undoDiscard and restore. */
+  discard() {
+    const p = this.phase.kind
+    if (p === 'idle') return
+    if (p === 'discarded' || p === 'clipboard') return this.close()
+    this.log(`discarded while ${p}`)
+    // What was said is kept too, also the part still in the microphone.
+    const kept = new Map<number, Segment>()
+    for (const [id, s] of this.segments) kept.set(id, { audio: s.audio, transcribed: s.transcribed })
+    const held = [...this.stopping]
+    if (this.source && this.activeID) held.push({ id: this.activeID, source: this.source, start: this.liveStart })
+    for (const piece of held) {
+      const segment = kept.get(piece.id)
+      if (segment) segment.audio = concat(segment.audio, piece.source.samples(piece.start, piece.end ?? piece.source.sampleCount))
+    }
+    const snapshot: Snapshot = { doc: this.doc.clone(), segments: kept, activeID: this.activeID, nextID: this.nextID, preview: this.doc.plain() }
+    this.stopEverything()
+    this.reset()
+    const hasContent = snapshot.preview.trim() !== '' || [...kept.values()].some(s => s.audio.length > 0)
+    if (!hasContent) return this.close()
+    this.discarded = snapshot
+    this.phase = { kind: 'discarded' }
+    this.changed()
+    this.closeLater(5000)
+  }
+
+  /** "Rückgängig", while the card says "Verworfen". */
+  undoDiscard() {
+    if (this.phase.kind !== 'discarded' || !this.discarded) return
+    const snapshot = this.discarded
+    this.discarded = null
+    this.restore(snapshot)
+  }
+
+  /** The tray's restore: only takes the snapshot when it can come back. */
+  restoreLast() {
+    if (!this.canRestore || !this.discarded) return
+    const snapshot = this.discarded
+    this.discarded = null
+    this.restore(snapshot)
+  }
+
+  restore(snapshot: Snapshot) {
+    if (!this.canRestore) return
+    this.cancelClose()
+    this.stopEverything()
+    this.reset()
+    this.doc.setFrom(snapshot.doc)
+    this.segments = new Map(snapshot.segments)
+    this.activeID = snapshot.activeID
+    this.nextID = snapshot.nextID
+    if (this.activeID && !this.doc.rangeOf('mark', this.activeID)) this.activeID = this.newSegment(this.doc.length)
+    this.phase = { kind: 'paused' }
+    this.onOpen()
+    this.breathe()
+    this.changed()
+    // Anything that was on its way when it was thrown away goes again.
+    for (const [id, s] of this.segments) if (s.audio.length > s.transcribed) this.send(id)
+  }
+
+  /** "Nochmal" after a failure. */
+  retry() {
+    if (this.phase.kind === 'failed' && this.phase.canRetry) this.finish()
+  }
+
+  // MARK: - Clicks in the text
+
+  /** A click while listening moves where speech goes; any click counts for after a pause. */
+  userMovedCaret(location: number) {
+    this.caret = location
+    if (this.phase.kind !== 'listening' || !this.source || !this.activeID || this.isAtMarker(location, this.activeID)) return
+    const id = this.activeID
+    const end = this.source.sampleCount
+    this.append(this.source.samples(this.liveStart, end), id)
+    this.liveStart = end
+    this.activeID = this.newSegment(location)
+    this.caret = null
+    this.send(id)
+    this.removeMarkerIfDone(id)
+    this.changed()
+  }
+
+  // MARK: - Steps
+
+  private begin() {
+    this.cancelClose()
+    this.stopEverything()
+    this.reset()
+    if (!this.deps.hasKey()) {
+      this.phase = { kind: 'failed', message: new TranscriptionFailure('noKey').short, canRetry: false }
+      this.onOpen(); this.changed(); this.closeLater(5000)
+      return
+    }
+    if (this.deps.endpointMissing()) {
+      this.phase = { kind: 'failed', message: de('Adresse fehlt', 'Address missing'), canRetry: false }
+      this.onOpen(); this.changed(); this.closeLater(5000)
+      return
+    }
+    this.activeID = this.newSegment(0)
+    this.log('dictation started')
+    this.onOpen()
+    this.breathe()
+    this.startRecording()
+  }
+
+  private startRecording() {
+    const mine = ++this.startToken
+    this.phase = { kind: 'starting' }
+    this.levels = this.levels.map(() => 0)
+    this.changed()
+    const source = this.deps.makeSource()
+    source.onLevel = level => this.push(level)
+    source.start().then(() => {
+      // Thrown away while starting: close the microphone that just opened.
+      if (mine !== this.startToken || this.phase.kind !== 'starting') { source.cancel(); return }
+      this.source = source
+      this.liveStart = 0
+      // A microphone still in its tail from a pause stops counting here.
+      for (const held of this.stopping) if (held.end === undefined) held.end = held.source.sampleCount
+      this.phase = { kind: 'listening' }
+      this.changed()
+    }, error => {
+      if (mine !== this.startToken) return
+      this.phase = { kind: 'failed', message: String((error as Error)?.message ?? error), canRetry: false }
+      if (!this.hasRealText) this.closeLater(5000)
+      this.changed()
+    })
+  }
+
+  private pause() {
+    const source = this.source, id = this.activeID
+    if (this.phase.kind !== 'listening' || !source || !id) return
+    this.source = null
+    this.phase = { kind: 'paused' }
+    this.levels = this.levels.map(() => 0)
+    const start = this.liveStart, token = this.sessionToken
+    this.tailing.add(id)
+    const held: Held = { id, source, start }
+    this.stopping.push(held)
+    this.changed()
+    this.tails.push((async () => {
+      const samples = (await source.finishSamples()) ?? new Float32Array(0)
+      if (token !== this.sessionToken) return
+      const end = Math.min(held.end ?? samples.length, samples.length)
+      this.stopping = this.stopping.filter(h => h !== held)
+      this.tailing.delete(id)
+      this.append(samples.subarray(Math.min(start, end), end), id)
+      this.send(id)
+      this.removeMarkerIfDone(id)
+      this.changed()
+    })())
+  }
+
+  private resume() {
+    if (this.phase.kind !== 'paused') return
+    if (this.caret !== null && this.activeID && !this.isAtMarker(this.caret, this.activeID)) {
+      const old = this.activeID
+      this.activeID = this.newSegment(this.caret)
+      this.removeMarkerIfDone(old)
+    } else if (!this.activeID || !this.doc.rangeOf('mark', this.activeID)) {
+      this.activeID = this.newSegment(this.caret ?? this.doc.length)
+    }
+    this.caret = null
+    this.startRecording()
+  }
+
+  private finish() {
+    const p = this.phase.kind
+    if (p !== 'listening' && p !== 'paused' && p !== 'failed') return
+    this.phase = { kind: 'finishing' }
+    this.changed()
+    const source = this.source, id = this.activeID, start = this.liveStart, pending = this.tails, token = this.sessionToken
+    this.source = null
+    this.tails = []
+    const held: Held | null = source && id ? { id, source, start } : null
+    if (held) this.stopping.push(held)
+    ;(async () => {
+      for (const tail of pending) await tail
+      if (held && source && id) {
+        const samples = (await source.finishSamples()) ?? new Float32Array(0)
+        if (token !== this.sessionToken) return
+        this.stopping = this.stopping.filter(h => h !== held)
+        this.append(samples.subarray(Math.min(start, samples.length)), id)
+      }
+      if (token !== this.sessionToken) return
+      for (const [segmentID, s] of this.segments) if (s.audio.length > s.transcribed || s.failure) this.send(segmentID)
+      while (this.sends.size > 0) {
+        await [...this.sends.values()][0].promise
+        if (token !== this.sessionToken) return
+      }
+      const failure = [...this.segments.values()].find(s => s.failure)?.failure
+      if (failure) {
+        this.phase = { kind: 'failed', message: failure, canRetry: true }
+        this.changed()
+        return
+      }
+      await this.deliver()
+    })()
+  }
+
+  private async deliver() {
+    const output = this.doc.plain().trim()
+    if (output === '') {
+      const seconds = [...this.segments.values()].reduce((sum, s) => sum + s.audio.length, 0) / this.rate
+      this.log(`nothing heard in ${seconds.toFixed(1)} s of audio`)
+      this.reset()
+      this.phase = { kind: 'failed', message: de('Nichts gehört', 'Nothing heard'), canRetry: false }
+      this.changed()
+      this.closeLater(3000)
+      return
+    }
+    // Gone before pasting, so the keyboard is back with the app it belongs to.
+    this.close()
+    const outcome = await this.deps.deliver(output)
+    if (!outcome.pasted) {
+      this.log(outcome.reason ?? 'clipboard only')
+      // A new dictation started in the meantime: it stays.
+      if (this.phase.kind !== 'idle') return
+      this.phase = { kind: 'clipboard' }
+      this.onOpen()
+      this.changed()
+      this.closeLater(4000)
+    }
+  }
+
+  // MARK: - Sending
+
+  private send(id: number) {
+    const segment = this.segments.get(id)
+    if (!segment || segment.audio.length === 0 || !(segment.audio.length > segment.transcribed || segment.failure)) return
+    const running = this.sends.get(id)
+    // Already on its way with exactly this audio: let it arrive.
+    if (running && running.covers === segment.audio.length && !segment.failure) return
+    segment.failure = undefined
+    const audio = segment.audio, covered = audio.length, token = this.sessionToken, gen = ++this.sendGen
+    const rules = this.deps.replacements()
+    const started = Date.now()
+    const promise = (async () => {
+      let raw: string | null = null, failure: string | null = null
+      try {
+        raw = await this.deps.transcribe(audio)
+      } catch (error) {
+        failure = error instanceof TranscriptionFailure ? error.short : de('Fehler', 'Error')
+        this.log(`transcription failed: ${(error as Error).message}`)
+      }
+      if (token !== this.sessionToken || this.sends.get(id)?.gen !== gen) return
+      this.sends.delete(id)
+      this.log(`sent ${(covered / this.rate).toFixed(1)} s of audio, answer after ${((Date.now() - started) / 1000).toFixed(1)} s`)
+      if (raw !== null) this.apply(applyReplacements(rules, raw), id, covered)
+      else { const s = this.segments.get(id); if (s) s.failure = failure ?? undefined }
+      this.changed()
+    })()
+    this.sends.set(id, { promise, covers: covered, gen })
+    this.changed()
+  }
+
+  /** A recording's text goes over its previous text, or at its placeholder. */
+  private apply(transcript: string, id: number, count: number) {
+    const segment = this.segments.get(id)
+    if (!segment) return
+    const existing = this.doc.rangeOf('seg', id)
+    const marker = this.doc.rangeOf('mark', id)
+    const target: Range = existing ?? (marker ? { location: marker.location, length: 0 } : { location: this.doc.length, length: 0 })
+    const skip = marker && marker.location === target.location + target.length ? marker.length : 0
+    const piece = fit(transcript, this.doc.text(), target, skip)
+    this.doc.replace(target, piece, { seg: id })
+    this.moveCaret(target, piece.length)
+    segment.transcribed = count
+    this.removeMarkerIfDone(id)
+  }
+
+  // MARK: - Segments
+
+  private newSegment(at: number) {
+    let location = this.wordEdge(Math.min(Math.max(0, at), this.doc.length))
+    // Never inside another placeholder: right after it instead.
+    const inside = this.markerContaining(location)
+    if (inside) location = inside.location + inside.length
+    // A new spot inside another recording's text splits it.
+    for (const id of this.segments.keys()) if (this.isStrictlyInside(location, id)) this.freeze(id)
+    const id = this.nextID++
+    this.segments.set(id, { audio: new Float32Array(0), transcribed: 0 })
+    this.doc.insert(location, MARKER, { mark: id })
+    this.moveCaret({ location, length: 0 }, MARKER.length)
+    return id
+  }
+
+  /** Its text becomes plain text; only audio not yet transcribed is still sent. */
+  private freeze(id: number) {
+    const segment = this.segments.get(id)
+    if (!segment) return
+    const range = this.doc.rangeOf('seg', id)
+    if (range) this.doc.clearSeg(range)
+    segment.audio = segment.audio.subarray(segment.transcribed)
+    segment.transcribed = 0
+    if (this.sends.has(id)) {
+      this.sends.delete(id)
+      if (!(id === this.activeID && this.phase.kind === 'listening')) this.send(id)
+    }
+  }
+
+  private append(samples: Float32Array, id: number) {
+    const segment = this.segments.get(id)
+    if (samples.length === 0 || !segment) return
+    segment.audio = concat(segment.audio, samples)
+  }
+
+  private removeMarkerIfDone(id: number) {
+    const segment = this.segments.get(id)
+    const marker = this.doc.rangeOf('mark', id)
+    if (id === this.activeID || this.tailing.has(id) || !segment || segment.audio.length !== segment.transcribed || !marker) return
+    this.doc.delete(marker)
+    this.moveCaret(marker, 0)
+  }
+
+  /** Keeps the user's caret on the same spot while satz changes the text around it. */
+  private moveCaret(range: Range, length: number) {
+    if (this.caret === null) return
+    if (this.caret >= range.location + range.length) this.caret += length - range.length
+    else if (this.caret > range.location) this.caret = range.location + length
+  }
+
+  /** A click between two letters goes to the nearer end of the word. */
+  private wordEdge(location: number) {
+    const text = this.doc.text()
+    const word = (i: number) => i >= 0 && i < text.length && /[\p{L}\p{N}]/u.test(text[i])
+    if (!word(location - 1) || !word(location)) return location
+    let start = location, end = location
+    while (word(start - 1)) start--
+    while (word(end)) end++
+    return location - start <= end - location ? start : end
+  }
+
+  private markerContaining(location: number): Range | null {
+    if (location <= 0 || location >= this.doc.length) return null
+    const id = this.doc.markAt(location)
+    if (!id) return null
+    const marker = this.doc.rangeOf('mark', id)
+    return marker && location > marker.location ? marker : null
+  }
+
+  private isAtMarker(location: number, id: number) {
+    const marker = this.doc.rangeOf('mark', id)
+    return !!marker && location >= marker.location && location <= marker.location + marker.length
+  }
+
+  private isStrictlyInside(location: number, id: number) {
+    const range = this.doc.rangeOf('seg', id)
+    return !!range && location > range.location && location < range.location + range.length
+  }
+
+  // MARK: - Housekeeping
+
+  private push(level: number) {
+    if (this.phase.kind !== 'listening') return
+    this.levels = [...this.levels.slice(1), level]
+    this.changed()
+  }
+
+  private breathe() {
+    if (this.breathTimer) return
+    this.breathTimer = setInterval(() => {
+      if (this.phase.kind === 'idle') { clearInterval(this.breathTimer!); this.breathTimer = null; return }
+      this.breathBright = !this.breathBright
+      this.changed()
+    }, 600)
+  }
+
+  private stopEverything() {
+    this.sessionToken++
+    this.startToken++
+    this.source?.cancel()
+    this.source = null
+    this.sends.clear()
+    this.tails = []
+    this.tailing.clear()
+    this.stopping = []
+    this.levels = this.levels.map(() => 0)
+  }
+
+  private reset() {
+    this.doc.clear()
+    this.segments.clear()
+    this.activeID = null
+    this.caret = null
+    this.liveStart = 0
+  }
+
+  private close() {
+    this.cancelClose()
+    this.stopEverything()
+    this.reset()
+    this.phase = { kind: 'idle' }
+    this.changed()
+    this.onClose()
+  }
+
+  private closeLater(ms: number) {
+    this.cancelClose()
+    const shown = this.phase.kind
+    this.closeTimer = setTimeout(() => {
+      this.closeTimer = null
+      if (this.phase.kind === shown) this.close()
+    }, ms)
+  }
+
+  private cancelClose() {
+    if (this.closeTimer) clearTimeout(this.closeTimer)
+    this.closeTimer = null
+  }
+
+  /** Stops timers, for tests and quitting. */
+  dispose() {
+    this.cancelClose()
+    if (this.breathTimer) clearInterval(this.breathTimer)
+    this.breathTimer = null
+    this.stopEverything()
+  }
+}

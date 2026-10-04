@@ -1,0 +1,57 @@
+{
+  "name": "satz",
+  "productName": "satz",
+  "version": "0.1.0",
+  "description": "Dictation for Windows and Linux: talk, see the text, paste it where you were typing.",
+  "author": "DPA+",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "start": "npm run build && electron .",
+    "dist:win": "npm run build && electron-builder --win zip --arm64 --x64",
+    "dist:linux": "npm run build && electron-builder --linux AppImage tar.gz --arm64 --x64"
+  },
+  "dependencies": {
+    "uiohook-napi": "^1.5.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
+  },
+  "build": {
+    "appId": "plus.dpa.satz",
+    "productName": "satz",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "assets/**",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/uiohook-napi/**"
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "artifactName": "satz-${version}-windows-${arch}.${ext}"
+    },
+    "linux": {
+      "category": "Utility",
+      "artifactName": "satz-${version}-linux-${arch}.${ext}",
+      "icon": "assets/icon.png"
+    }
+  },
+  "allowScripts": {
+    "electron@44.5.1": true,
+    "esbuild@0.28.2": true
+  }
+}
