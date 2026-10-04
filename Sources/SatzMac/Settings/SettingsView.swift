@@ -208,6 +208,24 @@ private struct KeyRow: View {
     @State private var problem: String?
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            row
+                .frame(height: 48)
+            // Said where it happened, not in a tooltip nobody hovers.
+            if let problem {
+                Text(problem)
+                    .font(Typography.text(12))
+                    .foregroundStyle(theme.accent)
+                    .padding(.bottom, 12)
+            }
+        }
+        .font(Typography.text(15))
+        .foregroundStyle(theme.ink)
+        .padding(.horizontal, 16)
+        .onChange(of: provider) { close() }
+    }
+
+    private var row: some View {
         HStack(spacing: 10) {
             Image(systemName: "lock")
                 .font(.system(size: 13, weight: .medium))
@@ -221,23 +239,30 @@ private struct KeyRow: View {
                         .textFieldStyle(.plain)
                         .font(Typography.mono(13))
                         .onSubmit(save)
+                        // Escape keeps the key that is there.
+                        .onExitCommand(perform: close)
                 }
                 Spacer()
                 Button(de("Sichern", en: "Save"), action: save)
                     .buttonStyle(.outlineCompact)
                     .disabled(input.trimmingCharacters(in: .whitespaces).isEmpty)
+                // "Ändern" can be taken back: the stored key stays.
+                if editing && setup.hasKey {
+                    Button(action: close) {
+                        Image(systemName: "xmark").font(.system(size: 10, weight: .bold))
+                            .frame(width: 22, height: 22)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(theme.inkSecondary)
+                    .help(de("Abbrechen", en: "Cancel"))
+                }
             } else {
                 Text(de("Schlüssel", en: "Key"))
                 Spacer()
                 Button(de("Ändern", en: "Change")) { editing = true }.buttonStyle(.outlineCompact)
             }
         }
-        .font(Typography.text(15))
-        .foregroundStyle(theme.ink)
-        .padding(.horizontal, 16)
-        .frame(height: 48)
-        .onChange(of: provider) { close() }
-        .help(problem ?? "")
     }
 
     private func save() {
@@ -255,6 +280,7 @@ private struct KeyRow: View {
     private func close() {
         input = ""
         editing = false
+        problem = nil
     }
 }
 
