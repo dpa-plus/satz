@@ -7,8 +7,9 @@ import AppKit
 /// command as the object: `press`, `release`, `mic`, `discard`, `undo`,
 /// `caret:<index>` (as if clicked there), `field` (logs where the focused
 /// text field is), `dump`, which writes the card's
-/// phase and text to the state file, and `picture`, which saves the live
-/// card as a PNG next to it.
+/// phase and text to the state file, `picture`, which saves the live
+/// card as a PNG next to it, and `film`, which toggles the eye and saves a
+/// picture of every step of the animation.
 @MainActor
 final class DevControl {
 
@@ -52,9 +53,22 @@ final class DevControl {
         case "field": Log.note("focused field: \(FocusedField.frame().map { NSStringFromRect($0) } ?? "unknown")")
         case "picture":
             try? card.picture()?.write(to: stateFile.deletingPathExtension().appendingPathExtension("png"))
+        case "film": film()
         default:
             if command.hasPrefix("caret:"), let index = Int(command.dropFirst(6)) {
                 session.userMovedCaret(to: index)
+            }
+        }
+    }
+
+    /// Toggles the eye and saves a picture every 40 ms while the card
+    /// animates (state-film-0.png, -1, ...), to see each step of it.
+    private func film() {
+        toggleEye()
+        let base = stateFile.deletingPathExtension().path
+        for step in 0 ..< 12 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(step * 40)) { [card] in
+                try? card.picture()?.write(to: URL(fileURLWithPath: "\(base)-film-\(step).png"))
             }
         }
     }
