@@ -92,3 +92,17 @@ private let english = Replacements.standard(for: .english)
     #expect(Replacements.sameRules(Replacements.standard(for: .german), Replacements.standard(for: .german)))
     #expect(!Replacements.sameRules(standard, english))
 }
+
+@Test func germanLowAndHighQuotesPairUp() {
+    let rules = [
+        Replacement(spoken: "Zitat Anfang", written: "„"),
+        Replacement(spoken: "Zitat Ende", written: "“"),
+    ]
+    let mai = "Er hat gesagt, Zitat Anfang, wir liefern am Freitag, Zitat Ende."
+    #expect(Replacements.apply(rules, to: mai) == "Er hat gesagt „wir liefern am Freitag“.")
+}
+
+@Test func aNewLineStartsWithACapital() {
+    let mai = "Erste Zeile, neue Zeile, zweite Zeile, Fragezeichen, und dann?"
+    #expect(Replacements.apply(standard, to: mai) == "Erste Zeile\nZweite Zeile? Und dann?")
+}

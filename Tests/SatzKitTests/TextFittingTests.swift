@@ -52,3 +52,11 @@ private func insert(_ transcript: String, into text: String, after anchor: Strin
     // because the emoji is not a sentence end.
     #expect(piece == " und Pasta.")
 }
+
+@Test func aLineBreakAtTheEdgeOfARecordingSurvives() {
+    // "Neue Zeile, zweiter Punkt." said after a pause, after the replacements.
+    let piece = Replacements.apply(Replacements.standard(for: .german), to: "Neue Zeile, zweiter Punkt.")
+    #expect(insert(piece, into: "Erster Punkt.", after: "Erster Punkt.") == "Erster Punkt.\nZweiter Punkt.")
+    let ending = Replacements.apply(Replacements.standard(for: .german), to: "Erster Punkt, neuer Absatz.")
+    #expect(TextFitting.fit(ending, into: "" as NSString, at: NSRange(location: 0, length: 0)) == "Erster Punkt\n\n")
+}

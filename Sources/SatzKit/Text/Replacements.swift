@@ -78,12 +78,23 @@ public enum Replacements {
         var output = ""
         var cursor = 0
         var quoteIsOpen = false
+        // After a line break or a spoken "?" a new sentence starts, but the
+        // model wrote what follows in lower case, as the middle of one.
+        var capitalizeNext = false
+        func addText(_ piece: String) {
+            guard capitalizeNext, let first = piece.firstIndex(where: { !$0.isWhitespace && !"\"„“”‚‘’»«".contains($0) }) else {
+                output += piece
+                return
+            }
+            capitalizeNext = false
+            output += piece[..<first] + piece[first].uppercased() + piece[piece.index(after: first)...]
+        }
 
         for match in matches(of: rules, in: text) {
             // The tidying after the last match may have eaten into this one
             // (only possible with a trigger that starts with punctuation).
             guard match.range.location >= cursor else { continue }
-            output += source.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
+            addText(source.substring(with: NSRange(location: cursor, length: match.range.location - cursor)))
             var after = match.range.location + match.range.length
             let written = match.rule.written
 
@@ -101,16 +112,19 @@ public enum Replacements {
                 output += written
                 after = source.skip(" ,.;:", from: after)
                 if after < source.length, !source.hasNewline(at: after) { output += " " }
+                capitalizeNext = ".!?".contains(written)
             case .lineBreak:
                 output.trimTrailing(" ,")
                 output += written
                 after = source.skip(" ,.;:", from: after)
+                capitalizeNext = true
             case .plain:
                 output += written
+                capitalizeNext = false
             }
             cursor = after
         }
-        output += source.substring(from: cursor)
+        addText(source.substring(from: cursor))
         return output
     }
 
@@ -163,7 +177,11 @@ public enum Replacements {
 
         init(_ written: String, quoteIsOpen: inout Bool) {
             switch written {
-            case "(", "[", "{", "„", "‚": self = .opener
+            case "(", "[", "{": self = .opener
+            // German quotes open low and close high: the next “ closes.
+            case "„", "‚":
+                self = .opener
+                quoteIsOpen = true
             case ")", "]", "}": self = .closer
             // The same mark opens and closes, so alternate.
             case "\"", "'", "“", "”", "‘", "’", "«", "»", "‹", "›":

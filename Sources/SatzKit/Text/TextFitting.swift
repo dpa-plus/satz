@@ -14,14 +14,17 @@ public enum TextFitting {
     /// - Parameter skip: characters right after `range` that are not part of
     ///   the text (satz's placeholder), to look past.
     public static func fit(_ transcript: String, into text: NSString, at range: NSRange, skipping skip: Int = 0) -> String {
-        var result = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Spaces only: a line break at either end was said ("neue Zeile").
+        var result = transcript.trimmingCharacters(in: .whitespaces)
         guard !result.isEmpty else { return "" }
+        let startsLine = result.first?.isNewline == true
+        let endsLine = result.last?.isNewline == true
 
         let before = previousVisible(in: text, before: range.location)
         let afterIndex = NSMaxRange(range) + skip
         let after = afterIndex < text.length ? character(in: text, at: afterIndex) : nil
 
-        let midSentence = before.map { !".!?…:\n".contains($0) } ?? false
+        let midSentence = !startsLine && (before.map { !".!?…:\n".contains($0) } ?? false)
         if midSentence { result = lowerFirstWordIfSafe(result, context: text as String) }
 
         let next = nextVisible(in: text, from: afterIndex)
@@ -30,11 +33,11 @@ public enum TextFitting {
             result.removeLast()
         }
 
-        if range.location > 0 {
+        if range.location > 0, !startsLine {
             let previous = character(in: text, at: range.location - 1)
             if !previous.isWhitespace, !"([{„\"“".contains(previous) { result = " " + result }
         }
-        if let after, after.isLetter || after.isNumber { result += " " }
+        if let after, after.isLetter || after.isNumber, !endsLine { result += " " }
         return result
     }
 
