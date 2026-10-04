@@ -30,16 +30,26 @@ struct CardView: View {
                 // Always there while dictating, folded to nothing when hidden,
                 // so showing and hiding is one smooth change of height
                 // instead of a view appearing and disappearing.
-                Group {
-                    if isSnapshot {
-                        SnapshotText(session: session)
-                    } else {
-                        CardTextView(session: session, version: session.textVersion)
+                //
+                // The text itself is always laid out at the full card width
+                // and pinned to the card's bottom right, and the card's edges
+                // only uncover it. Text that rewrapped at every step of the
+                // card widening jumped from line to line.
+                let height = CardTextView.height(of: session.text, version: session.textVersion)
+                Color.clear
+                    .frame(height: showsText ? height : 0)
+                    .overlay(alignment: .bottomTrailing) {
+                        Group {
+                            if isSnapshot {
+                                SnapshotText(session: session)
+                            } else {
+                                CardTextView(session: session, version: session.textVersion)
+                            }
+                        }
+                        .frame(width: Self.width, height: height)
                     }
-                }
-                .frame(height: showsText ? nil : 0, alignment: .top)
-                .opacity(showsText ? 1 : 0)
-                .clipped()
+                    .clipped()
+                    .opacity(showsText ? 1 : 0)
                 // Above the line: text to click and select. Below: the handle.
                 Rectangle().fill(theme.hairline)
                     .frame(height: showsText ? 1 : 0)
@@ -136,11 +146,17 @@ private struct Strip: View {
         case .idle, .starting, .listening, .paused:
             // While listening the moving bars say it; only a pause gets a word.
             if session.phase == .paused { label(de("Pausiert", en: "Paused")) }
-            Waveform(levels: wide ? session.levels : Array(session.levels.suffix(12)),
-                     live: session.phase == .listening, spread: true)
-                // Long and short waves cross-fade instead of reshuffling bars.
-                .id(wide)
-                .transition(.opacity)
+            // Long and short waves cross-fade instead of reshuffling bars,
+            // on top of each other: side by side in the row, both would
+            // squeeze in for a moment and shove the row about.
+            ZStack(alignment: .trailing) {
+                Waveform(levels: wide ? session.levels : Array(session.levels.suffix(12)),
+                         live: session.phase == .listening, spread: true)
+                    .id(wide)
+                    .transition(.opacity)
+            }
+            // The long wave is laid out at the full width straight away.
+            .clipped()
         case .finishing:
             WritingDots()
             label(de("Schreibt", en: "Writing"))

@@ -53,19 +53,19 @@ struct CardTextView: NSViewRepresentable {
         }
     }
 
-    /// As tall as the text needs at the width offered, up to about five
+    /// As tall as the text needs at the full card width, up to about five
     /// lines, then it scrolls. Measured from the text itself rather than read
     /// back from the view, which lagged a line behind and cut text off.
-    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSScrollView, context: Context) -> CGSize? {
-        let width = proposal.width ?? CardView.width
+    /// `version` is only there so a caller redraws when the text changes.
+    static func height(of text: NSAttributedString, version: Int) -> CGFloat {
         // The inset on both sides, plus the text container's own padding.
-        let available = max(1, width - 2 * (Self.inset.width + 5))
-        let bounds = session.text.boundingRect(
+        let available = CardView.width - 2 * (inset.width + 5)
+        let bounds = text.boundingRect(
             with: NSSize(width: available, height: .greatestFiniteMagnitude),
             options: [.usesLineFragmentOrigin, .usesFontLeading]
         )
-        let height = ceil(bounds.height) + Self.inset.height * 2
-        return CGSize(width: width, height: min(max(height, 36), CardView.maxTextHeight))
+        let height = ceil(bounds.height) + inset.height * 2
+        return min(max(height, 36), CardView.maxTextHeight)
     }
 
     static func dismantleNSView(_ scroll: NSScrollView, coordinator: Coordinator) {
