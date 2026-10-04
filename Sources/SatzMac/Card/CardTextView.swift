@@ -27,7 +27,7 @@ struct CardTextView: NSViewRepresentable {
         textView.isRichText = false
         textView.allowsUndo = true
         textView.textContainerInset = Self.inset
-        textView.insertionPointColor = NSColor(Theme.light.accent)
+        textView.insertionPointColor = NSColor(Theme.dark.signal)
         textView.typingAttributes = Session.textAttributes
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false

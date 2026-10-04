@@ -37,7 +37,11 @@ final class MenuBarItem {
     }
 
     var needsAttention = false {
-        didSet { dot.isHidden = !needsAttention }
+        didSet {
+            dot.isHidden = !needsAttention
+            // The dot takes the current colour family's accent.
+            dot.layer?.backgroundColor = NSColor(Theme.light.accent).cgColor
+        }
     }
 
     @objc func toggle() {

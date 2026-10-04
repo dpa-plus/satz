@@ -53,8 +53,8 @@ struct SettingsView: View {
             .padding(.top, 34)
             .padding(.bottom, 32)
             .frame(width: 520, alignment: .leading)
-            // Every label is read again when the language changes.
-            .id(preferences.language)
+            // Every label and colour is read again when language or theme changes.
+            .id(preferences.lookKey)
     }
 }
 
@@ -458,6 +458,31 @@ private struct ReplacementsBlock: View {
 
 // MARK: - Allgemein
 
+/// One swatch per colour family: its accent on its own ground.
+private struct ThemePicker: View {
+    @Binding var selection: AppTheme
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ForEach(AppTheme.allCases, id: \.self) { family in
+                Button { selection = family } label: {
+                    ZStack {
+                        Circle().fill(family.dark.ground)
+                        Circle().fill(family.dark.signal).padding(6)
+                    }
+                    .frame(width: 26, height: 26)
+                    .overlay(Circle().strokeBorder(family == selection ? theme.ink : theme.hairline,
+                                                   lineWidth: family == selection ? 2 : 1).padding(-3))
+                    .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help(family.name)
+            }
+        }
+    }
+}
+
 private struct GeneralBlock: View {
     @Bindable var preferences: Preferences
     let launchAtLogin: LaunchAtLogin
@@ -472,6 +497,14 @@ private struct GeneralBlock: View {
                     Spacer()
                     Segmented(options: Language.allCases.map { (value: $0, label: $0.name) }, selection: $preferences.language)
                         .frame(width: 210)
+                }
+                .padding(.horizontal, 16)
+                .frame(height: 52)
+                Rule()
+                HStack {
+                    Text(de("Farbe", en: "Colour"))
+                    Spacer()
+                    ThemePicker(selection: $preferences.appTheme)
                 }
                 .padding(.horizontal, 16)
                 .frame(height: 52)

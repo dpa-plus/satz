@@ -46,7 +46,7 @@ struct SetupView: View {
             }
             card
         }
-        .id(preferences.language)
+        .id(preferences.lookKey)
         .padding(.horizontal, 32)
         .padding(.top, 46)
         .padding(.bottom, 32)

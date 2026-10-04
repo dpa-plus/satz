@@ -31,8 +31,26 @@ enum SnapshotRenderer {
         ]
         for (name, language, view) in sheets {
             Language.current = language
+            AppTheme.current = .dpa
             try png(of: view().environment(\.isSnapshot, true)).write(to: folder.appendingPathComponent("\(name).png"))
         }
+        // Every colour family, light and dark, on one sheet each.
+        for family in AppTheme.allCases {
+            Language.current = .english
+            AppTheme.current = family
+            let sheet = HStack(alignment: .top, spacing: 24) {
+                VStack(spacing: 18) {
+                    card(.listening, text: "Thanks for the update. Thursday works for me. ", marker: true)
+                    card(.listening, marker: true)
+                    card(.paused, text: "Thanks for the update.")
+                }
+                menuSheet.environment(\.theme, .light)
+            }
+            .padding(28)
+            .background(Color(hex: 0xC9D4D8))
+            try png(of: sheet.environment(\.isSnapshot, true)).write(to: folder.appendingPathComponent("theme-\(family.rawValue).png"))
+        }
+        AppTheme.current = .dpa
     }
 
     static func png(of view: some View) throws -> Data {

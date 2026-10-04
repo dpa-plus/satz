@@ -71,6 +71,14 @@ final class Preferences {
         }
     }
 
+    /// The colour family: DPA+, forest, lavender or light blue.
+    var appTheme: AppTheme {
+        didSet {
+            defaults?.set(appTheme.rawValue, forKey: Key.appTheme)
+            AppTheme.current = appTheme
+        }
+    }
+
     /// Whether the card shows the text while dictating (the eye button).
     var showsText: Bool {
         didSet { defaults?.set(showsText, forKey: Key.showsText) }
@@ -123,6 +131,10 @@ final class Preferences {
     /// nil keeps everything in memory, for fixtures that must not touch disk.
     private let defaults: UserDefaults?
 
+    /// Changes whenever something that every label or colour depends on
+    /// does, for `.id(...)` at the root of each window.
+    var lookKey: String { "\(language.rawValue)-\(appTheme.rawValue)" }
+
     private enum Key {
         static let provider = "provider"
         static let models = "models"
@@ -135,6 +147,7 @@ final class Preferences {
         static let inputDeviceUID = "inputDeviceUID"
         static let language = "language"
         static let showsText = "showsText"
+        static let appTheme = "appTheme"
         static let cardOffset = "cardOffset"
         static let replacements = "replacements"
         static let removesFillers = "removesFillers"
@@ -152,15 +165,22 @@ final class Preferences {
         triggerMode = defaults?.string(forKey: Key.triggerMode).flatMap(TriggerMode.init(rawValue:)) ?? .tap
         inputDeviceUID = defaults?.string(forKey: Key.inputDeviceUID)
         showsText = defaults?.object(forKey: Key.showsText) as? Bool ?? true
+        let appTheme = defaults?.string(forKey: Key.appTheme).flatMap(AppTheme.init(rawValue:)) ?? .dpa
+        self.appTheme = appTheme
         cardOffset = (defaults?.dictionary(forKey: Key.cardOffset) as? [String: Double])
             .flatMap { values in values["x"].flatMap { x in values["y"].map { CGPoint(x: x, y: $0) } } }
         let language = defaults?.string(forKey: Key.language).flatMap(Language.init(rawValue:)) ?? .system
         self.language = language
-        Language.current = language
         replacements = defaults?.data(forKey: Key.replacements)
             .flatMap { try? JSONDecoder().decode([Replacement].self, from: $0) }
             ?? Replacements.standard(for: language)
         removesFillers = defaults?.object(forKey: Key.removesFillers) as? Bool ?? true
+        // Only the real, stored preferences set the app-wide language and
+        // colours; a fixture made for a snapshot must not reset them.
+        if defaults != nil {
+            Language.current = language
+            AppTheme.current = appTheme
+        }
     }
 
     /// The vocabulary used to be one comma-separated field.

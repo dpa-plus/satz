@@ -37,13 +37,15 @@ struct CardView: View {
             }
             Strip(session: session, preferences: preferences, onDrag: onDrag)
         }
-        .id(preferences.language)
-        .frame(width: Self.width)
+        .id(preferences.lookKey)
+        // Full width only with text to show; otherwise a compact pill, since
+        // an empty middle is just wasted space.
+        .frame(width: showsText ? Self.width : nil)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(theme.ground))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(.white.opacity(0.12), lineWidth: 1))
         .environment(\.theme, theme)
         .focusEffectDisabled()
-        .fixedSize(horizontal: false, vertical: true)
+        .fixedSize(horizontal: !showsText, vertical: true)
         .onGeometryChange(for: CGSize.self, of: { $0.size }, action: onSize)
     }
 
@@ -71,7 +73,7 @@ private struct Strip: View {
         HStack(spacing: 10) {
             microphone
             middle
-            Spacer(minLength: 0)
+            Spacer(minLength: 6)
             eye
             close
         }
@@ -137,7 +139,7 @@ private struct Strip: View {
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(listening ? theme.accentLabel : usable ? theme.accent : theme.inkSecondary)
                 .frame(width: 26, height: 26)
-                .background(Circle().fill(listening ? Theme.light.accent : .white.opacity(0.12)))
+                .background(Circle().fill(listening ? theme.signal : .white.opacity(0.12)))
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
