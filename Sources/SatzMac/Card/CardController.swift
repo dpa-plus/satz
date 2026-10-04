@@ -85,6 +85,7 @@ final class CardPanel: NSPanel {
     /// Called once the user has finished dragging the card somewhere new.
     var onMoved: () -> Void = {}
     private var settling: Task<Void, Never>?
+    private var settlingSize: Task<Void, Never>?
 
     init() {
         super.init(
@@ -165,22 +166,35 @@ final class CardPanel: NSPanel {
     /// Taller or shorter with the text, bottom edge fixed; wider or narrower
     /// from the right edge, so the eye and x stay under the mouse that just
     /// clicked them.
+    ///
+    /// One animation only, SwiftUI's, moves the card. The window first makes
+    /// room for both the old and the new size, the card animates inside it,
+    /// and only then does the window take the new size. Animating the window
+    /// as well, on its own clock, made the text and "Paused" drift around.
     func resize(to size: CGSize) {
         guard size.width > 0, size.height > 0 else { return }
-        let target = NSRect(origin: NSPoint(x: (right ?? frame.maxX) - size.width, y: bottom ?? frame.minY), size: size)
-        guard target != frame else { return }
         guard isVisible else {
-            setFrame(target, display: true)
+            setFrame(anchored(size), display: true)
             return
         }
-        // Grows and shrinks over a quarter second instead of jumping.
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.24
-            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            animator().setFrame(target, display: true)
-        } completionHandler: { [weak self] in
-            self?.invalidateShadow()
+        let room = CGSize(width: max(frame.width, size.width), height: max(frame.height, size.height))
+        if room != frame.size { setFrame(anchored(room), display: true) }
+        settlingSize?.cancel()
+        guard room != size else {
+            invalidateShadow()
+            return
         }
+        settlingSize = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(320))
+            guard let self, !Task.isCancelled else { return }
+            setFrame(anchored(size), display: true)
+            invalidateShadow()
+        }
+    }
+
+    /// A frame of `size` with the bottom and right edges where they belong.
+    private func anchored(_ size: CGSize) -> NSRect {
+        NSRect(x: (right ?? frame.maxX) - size.width, y: bottom ?? frame.minY, width: size.width, height: size.height)
     }
 }
 

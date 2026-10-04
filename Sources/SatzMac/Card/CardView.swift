@@ -118,6 +118,9 @@ private struct Strip: View {
             if session.phase == .paused { label(de("Pausiert", en: "Paused")) }
             Waveform(levels: wide ? session.levels : Array(session.levels.suffix(14)),
                      live: session.phase == .listening, spread: wide)
+                // Long and short waves cross-fade instead of reshuffling bars.
+                .id(wide)
+                .transition(.opacity)
         case .finishing:
             WritingDots()
             label(de("Schreibt", en: "Writing"))
