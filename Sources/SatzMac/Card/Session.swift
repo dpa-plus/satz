@@ -438,7 +438,7 @@ final class Session {
         let audio = segment.audio
         let covered = audio.count
         let settings = preferences.transcriberSettings
-        let rules = preferences.replacements
+        let rules = preferences.activeReplacements
         let provider = preferences.provider
         let token = sessionToken
         inFlight.insert(id)
@@ -705,6 +705,21 @@ final class Session {
         for (index, level) in zip(levels.indices, levelValues) {
             levels[index] = level
         }
+    }
+
+    /// After another colour family is picked: the text already in the card
+    /// takes the new colours too.
+    func recolor() {
+        let all = NSRange(location: 0, length: text.length)
+        isEditing = true
+        text.beginEditing()
+        text.addAttribute(.foregroundColor, value: NSColor(Theme.dark.ink), range: all)
+        text.enumerateAttribute(.satzMarker, in: all) { value, range, _ in
+            if value != nil { text.addAttribute(.foregroundColor, value: NSColor(Theme.dark.accent), range: range) }
+        }
+        text.endEditing()
+        isEditing = false
+        textVersion += 1
     }
 
     // MARK: - Styling

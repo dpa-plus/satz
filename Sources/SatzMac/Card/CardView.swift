@@ -16,7 +16,8 @@ struct CardView: View {
 
     @Environment(\.isSnapshot) private var isSnapshot
     @State private var textHeight: CGFloat = 0
-    private let theme = Theme.dark
+    /// Read on every draw, so a newly picked colour shows at once.
+    private var theme: Theme { Look.shared.family.dark }
 
     /// About five lines, then the text scrolls inside the card.
     static let maxTextHeight: CGFloat = 5 * 20 + CardTextView.inset.height * 2
@@ -47,6 +48,7 @@ struct CardView: View {
         .focusEffectDisabled()
         .fixedSize(horizontal: !showsText, vertical: true)
         .onGeometryChange(for: CGSize.self, of: { $0.size }, action: onSize)
+        .onChange(of: Look.shared.family) { session.recolor() }
     }
 
     /// Only once there is text: the placeholder alone is not worth a line.

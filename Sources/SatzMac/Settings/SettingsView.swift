@@ -404,74 +404,91 @@ private struct ReplacementsBlock: View {
 
     var body: some View {
         Block(title: de("Ersetzungen", en: "Replacements")) {
-            VStack(alignment: .leading, spacing: 10) {
-                FlowLayout(spacing: 8) {
-                    ForEach(preferences.replacements.filter(\.isOn)) { rule in
-                        HStack(spacing: 6) {
-                            Text(rule.spoken).font(Typography.text(14))
-                            Image(systemName: "arrow.right").font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(theme.inkSecondary)
-                            Text(Self.shown(rule.written)).font(Typography.mono(13, .medium))
-                            Button { remove(rule) } label: {
-                                Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
-                            }
-                            .buttonStyle(.plain)
-                            .help(de("Entfernen", en: "Remove"))
-                        }
-                        .foregroundStyle(theme.ink)
-                        .padding(.leading, 12)
-                        .padding(.trailing, 9)
-                        .frame(height: 28)
-                        .overlay(Capsule().strokeBorder(theme.cardBorder, lineWidth: 1.5))
-                    }
-                    if !adding || isSnapshot {
-                        Button { adding = true } label: {
-                            Text(de("+ Ersetzung", en: "+ Replacement"))
-                                .font(Typography.text(14))
-                                .foregroundStyle(theme.inkSecondary)
-                                .padding(.horizontal, 12)
-                                .frame(height: 28)
-                                .overlay(Capsule().strokeBorder(theme.control, style: StrokeStyle(lineWidth: 1.5, dash: [4, 3])))
-                                .contentShape(Capsule())
-                        }
-                        .buttonStyle(.plain)
-                    }
+            VStack(alignment: .leading, spacing: 0) {
+                Toggle(isOn: $preferences.usesReplacements) {
+                    Text(de("Gesprochene Zeichen ersetzen", en: "Replace spoken symbols"))
                 }
-                if adding && !isSnapshot {
-                    HStack(spacing: 8) {
-                        TextField("", text: $spoken, prompt: Text(de("gesagt, z. B. XX", en: "spoken, e.g. XX")).foregroundStyle(theme.inkOnCard))
-                        Image(systemName: "arrow.right").font(.system(size: 10, weight: .bold))
-                        TextField("", text: $written, prompt: Text(de("geschrieben", en: "written")).foregroundStyle(theme.inkOnCard))
-                            .onSubmit(add)
-                        Button(de("Hinzufügen", en: "Add"), action: add).buttonStyle(.outlineCompact)
-                        Button(action: cancel) {
-                            Image(systemName: "xmark").font(.system(size: 10, weight: .bold))
-                                .frame(width: 22, height: 22)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .help(de("Schließen", en: "Close"))
-                    }
-                    // Escape closes the row without adding anything.
-                    .onExitCommand(perform: cancel)
-                    .textFieldStyle(.plain)
-                    .font(Typography.text(14))
-                    .foregroundStyle(theme.ink)
-                    .padding(.horizontal, 12)
-                    .frame(height: 34)
-                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(theme.control, lineWidth: 1.5))
-                }
-                if let removed {
-                    UndoLine(label: de("„\(removed.rule.spoken)“ entfernt", en: "Removed “\(removed.rule.spoken)”")) {
-                        preferences.replacements.insert(removed.rule, at: min(removed.index, preferences.replacements.count))
-                        self.removed = nil
-                    }
+                .toggleStyle(AccentToggleStyle())
+                .font(Typography.text(15))
+                .foregroundStyle(theme.ink)
+                .padding(.horizontal, 16)
+                .frame(height: 48)
+                if preferences.usesReplacements {
+                    Rule()
+                    rules
                 }
             }
-            .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .surface(radius: 16)
         }
+    }
+
+    private var rules: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            FlowLayout(spacing: 8) {
+                ForEach(preferences.replacements.filter(\.isOn)) { rule in
+                    HStack(spacing: 6) {
+                        Text(rule.spoken).font(Typography.text(14))
+                        Image(systemName: "arrow.right").font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(theme.inkSecondary)
+                        Text(Self.shown(rule.written)).font(Typography.mono(13, .medium))
+                        Button { remove(rule) } label: {
+                            Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
+                        }
+                        .buttonStyle(.plain)
+                        .help(de("Entfernen", en: "Remove"))
+                    }
+                    .foregroundStyle(theme.ink)
+                    .padding(.leading, 12)
+                    .padding(.trailing, 9)
+                    .frame(height: 28)
+                    .overlay(Capsule().strokeBorder(theme.cardBorder, lineWidth: 1.5))
+                }
+                if !adding || isSnapshot {
+                    Button { adding = true } label: {
+                        Text(de("+ Ersetzung", en: "+ Replacement"))
+                            .font(Typography.text(14))
+                            .foregroundStyle(theme.inkSecondary)
+                            .padding(.horizontal, 12)
+                            .frame(height: 28)
+                            .overlay(Capsule().strokeBorder(theme.control, style: StrokeStyle(lineWidth: 1.5, dash: [4, 3])))
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            if adding && !isSnapshot {
+                HStack(spacing: 8) {
+                    TextField("", text: $spoken, prompt: Text(de("gesagt, z. B. XX", en: "spoken, e.g. XX")).foregroundStyle(theme.inkOnCard))
+                    Image(systemName: "arrow.right").font(.system(size: 10, weight: .bold))
+                    TextField("", text: $written, prompt: Text(de("geschrieben", en: "written")).foregroundStyle(theme.inkOnCard))
+                        .onSubmit(add)
+                    Button(de("Hinzufügen", en: "Add"), action: add).buttonStyle(.outlineCompact)
+                    Button(action: cancel) {
+                        Image(systemName: "xmark").font(.system(size: 10, weight: .bold))
+                            .frame(width: 22, height: 22)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(de("Schließen", en: "Close"))
+                }
+                // Escape closes the row without adding anything.
+                .onExitCommand(perform: cancel)
+                .textFieldStyle(.plain)
+                .font(Typography.text(14))
+                .foregroundStyle(theme.ink)
+                .padding(.horizontal, 12)
+                .frame(height: 34)
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(theme.control, lineWidth: 1.5))
+            }
+            if let removed {
+                UndoLine(label: de("„\(removed.rule.spoken)“ entfernt", en: "Removed “\(removed.rule.spoken)”")) {
+                    preferences.replacements.insert(removed.rule, at: min(removed.index, preferences.replacements.count))
+                    self.removed = nil
+                }
+            }
+        }
+        .padding(12)
     }
 
     /// Line breaks and spaces are invisible, so they get a sign.

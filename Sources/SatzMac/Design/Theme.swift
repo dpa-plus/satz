@@ -34,10 +34,10 @@ struct Theme {
     let signal: Color
 
     /// The current family's light and dark appearance.
-    static var light: Theme { AppTheme.current.light }
-    static var dark: Theme { AppTheme.current.dark }
+    @MainActor static var light: Theme { AppTheme.current.light }
+    @MainActor static var dark: Theme { AppTheme.current.dark }
 
-    static func `for`(_ scheme: ColorScheme) -> Theme {
+    @MainActor static func `for`(_ scheme: ColorScheme) -> Theme {
         scheme == .dark ? .dark : .light
     }
 
@@ -72,8 +72,12 @@ enum AppTheme: String, CaseIterable, Codable, Sendable {
     case lavender
     case sky
 
-    /// Set by the app from its preference; read by every view.
-    nonisolated(unsafe) static var current: AppTheme = .dpa
+    /// Set by the app from its preference. Observable through `Look`, so a
+    /// view that reads it redraws the moment another colour is picked.
+    @MainActor static var current: AppTheme {
+        get { Look.shared.family }
+        set { Look.shared.family = newValue }
+    }
 
     var name: String {
         switch self {
@@ -98,8 +102,8 @@ enum AppTheme: String, CaseIterable, Codable, Sendable {
                 accentLabel: Color(hex: 0x16303C), signal: Color(hex: 0xFF6100)
             )
         case .forest:
-            .light(ground: 0xEDF3EC, ink: 0x1E3A2B, secondary: 0x3E5A4A, onCard: 0x56705F,
-                   accent: 0x2E7D4F, accentLabel: 0xFFFFFF, signal: 0x3FA066)
+            .light(ground: 0xEAF0EA, ink: 0x163024, secondary: 0x3A5546, onCard: 0x52695B,
+                   accent: 0x1F5A3A, accentLabel: 0xFFFFFF, signal: 0x2A7047)
         case .lavender:
             .light(ground: 0xF3EFFA, ink: 0x2E2445, secondary: 0x54496B, onCard: 0x6B6182,
                    accent: 0x7454BE, accentLabel: 0xFFFFFF, signal: 0x9B7BE3)
@@ -114,7 +118,7 @@ enum AppTheme: String, CaseIterable, Codable, Sendable {
         case .dpa:
             .dark(ground: 0x16303C, ink: 0xEEF4F6, secondary: 0xA9C0C8, accent: 0xFFB27A, signal: 0xFF6100)
         case .forest:
-            .dark(ground: 0x15281E, ink: 0xE8F1EA, secondary: 0xA7C2B0, accent: 0x8AD6A4, signal: 0x3FA066)
+            .dark(ground: 0x10211A, ink: 0xE6EFE8, secondary: 0xA3BDAC, accent: 0x7DBE95, signal: 0x2A7047)
         case .lavender:
             .dark(ground: 0x241D36, ink: 0xEEEAF7, secondary: 0xB7AED0, accent: 0xC6B4F2, signal: 0x9B7BE3)
         case .sky:
@@ -123,8 +127,17 @@ enum AppTheme: String, CaseIterable, Codable, Sendable {
     }
 }
 
+/// The chosen colour family, observable, so every view that reads it is
+/// redrawn as soon as it changes.
+@MainActor
+@Observable
+final class Look {
+    static let shared = Look()
+    var family: AppTheme = .dpa
+}
+
 extension EnvironmentValues {
-    @Entry var theme: Theme = .light
+    @Entry var theme: Theme = AppTheme.dpa.light
 }
 
 extension View {
@@ -139,7 +152,9 @@ private struct Themed: ViewModifier {
     @Environment(\.colorScheme) private var scheme
 
     func body(content: Content) -> some View {
-        content.environment(\.theme, .for(scheme))
+        // Reading the family here makes the whole window follow a change.
+        let family = Look.shared.family
+        return content.environment(\.theme, scheme == .dark ? family.dark : family.light)
     }
 }
 

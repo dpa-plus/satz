@@ -49,6 +49,8 @@ enum SnapshotRenderer {
             .padding(28)
             .background(Color(hex: 0xC9D4D8))
             try png(of: sheet.environment(\.isSnapshot, true)).write(to: folder.appendingPathComponent("theme-\(family.rawValue).png"))
+            try png(of: settingsSheet.environment(\.theme, family.dark).environment(\.isSnapshot, true))
+                .write(to: folder.appendingPathComponent("settings-\(family.rawValue).png"))
         }
         AppTheme.current = .dpa
     }

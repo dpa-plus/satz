@@ -112,6 +112,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The orange dot on the menu bar icon: something needs the user.
     private func watchAttention() {
         withObservationTracking {
+            // The family is read too, so the dot takes a newly picked colour.
+            _ = Look.shared.family
             menuBar.needsAttention = !setup.isComplete || shortcut.status == .taken
         } onChange: { [weak self] in
             Task { @MainActor in self?.watchAttention() }

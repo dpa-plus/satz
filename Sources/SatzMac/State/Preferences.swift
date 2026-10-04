@@ -89,6 +89,16 @@ final class Preferences {
         didSet { defaults?.set(try? JSONEncoder().encode(replacements), forKey: Key.replacements) }
     }
 
+    /// Whether Ersetzungen are applied at all. Off keeps the list for later.
+    var usesReplacements: Bool {
+        didSet { defaults?.set(usesReplacements, forKey: Key.usesReplacements) }
+    }
+
+    /// The rules to apply now: the list, or nothing while switched off.
+    var activeReplacements: [Replacement] {
+        usesReplacements ? replacements : []
+    }
+
     /// MAI-Transcribe's clean mode: no "ähm", no stutters, no false starts.
     var removesFillers: Bool {
         didSet { defaults?.set(removesFillers, forKey: Key.removesFillers) }
@@ -104,7 +114,7 @@ final class Preferences {
         )
         // Trigger words go in too: a made-up one only survives transcription
         // if the model was told to expect it.
-        settings.vocabulary = words + Replacements.phrases(replacements)
+        settings.vocabulary = words + Replacements.phrases(activeReplacements)
         settings.removesFillers = removesFillers
         return settings
     }
@@ -151,6 +161,7 @@ final class Preferences {
         static let cardOffset = "cardOffset"
         static let replacements = "replacements"
         static let removesFillers = "removesFillers"
+        static let usesReplacements = "usesReplacements"
     }
 
     init(defaults: UserDefaults? = .standard) {
@@ -175,6 +186,7 @@ final class Preferences {
             .flatMap { try? JSONDecoder().decode([Replacement].self, from: $0) }
             ?? Replacements.standard(for: language)
         removesFillers = defaults?.object(forKey: Key.removesFillers) as? Bool ?? true
+        usesReplacements = defaults?.object(forKey: Key.usesReplacements) as? Bool ?? true
         // Only the real, stored preferences set the app-wide language and
         // colours; a fixture made for a snapshot must not reset them.
         if defaults != nil {

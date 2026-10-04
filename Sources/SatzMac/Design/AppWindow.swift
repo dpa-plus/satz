@@ -67,7 +67,7 @@ final class AppWindow: NSObject, NSWindowDelegate {
     /// Sand or petrol, resolved live when the Mac switches appearance.
     private static let ground = NSColor(name: nil) { appearance in
         appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            ? NSColor(Theme.dark.ground)
-            : NSColor(Theme.light.ground)
+            ? NSColor(MainActor.assumeIsolated { Theme.dark.ground })
+            : NSColor(MainActor.assumeIsolated { Theme.light.ground })
     }
 }
