@@ -7,7 +7,7 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let preferences = Preferences()
-    private let history = History()
+    private let history = History(file: History.standardFile)
     private let discarded = Discarded()
     private let launchAtLogin = LaunchAtLogin()
     private lazy var setup = Setup(preferences: preferences)
