@@ -1,8 +1,10 @@
 import SwiftUI
 import SatzKit
 
-/// The pill and its text, as one card. The text grows upward from the strip;
-/// the strip's buttons never move.
+/// The pill and its text, as one card: the text on top, and under it one row
+/// with the waveform filling the space up to the buttons at the right. The
+/// text grows upward and the card widens and narrows from its right edge, so
+/// the buttons never move from under the mouse.
 ///
 /// Always petrol, in light and dark mode alike: it floats over whatever is
 /// behind it, and the dark brand surface reads against all of it.
@@ -34,10 +36,12 @@ struct CardView: View {
                             .frame(height: min(max(textHeight, 36), Self.maxTextHeight))
                     }
                 }
-                Rectangle().fill(theme.hairline).frame(height: 1)
+                .transition(.opacity)
             }
-            Strip(session: session, preferences: preferences, onDrag: onDrag)
+            Strip(session: session, preferences: preferences, wide: showsText, onDrag: onDrag)
         }
+        .animation(.smooth(duration: 0.24), value: showsText)
+        .animation(.smooth(duration: 0.2), value: textHeight)
         .id(preferences.lookKey)
         // Full width only with text to show; otherwise a compact pill, since
         // an empty middle is just wasted space.
@@ -49,6 +53,9 @@ struct CardView: View {
         .fixedSize(horizontal: !showsText, vertical: true)
         .onGeometryChange(for: CGSize.self, of: { $0.size }, action: onSize)
         .onChange(of: Look.shared.family) { session.recolor() }
+        // Pinned to the window's bottom right while the window animates to
+        // its new size, matching how the window itself is anchored.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
     }
 
     /// Only once there is text: the placeholder alone is not worth a line.
@@ -63,24 +70,27 @@ struct CardView: View {
 
 // MARK: - Strip
 
-/// Microphone on the left, eye and × on the right, always in the same place.
-/// Only the middle changes with the state.
+/// Status or waveform on the left, then microphone, eye and × together at the
+/// right, always in the same place. Only the left part changes with the state.
 private struct Strip: View {
     let session: Session
     @Bindable var preferences: Preferences
+    /// Full card: the waveform spreads over all the room there is. Pill: a
+    /// short waveform, so the pill stays small.
+    let wide: Bool
     let onDrag: (Bool) -> Void
     @Environment(\.theme) private var theme
 
     var body: some View {
-        HStack(spacing: 10) {
-            microphone
+        HStack(spacing: 8) {
             middle
-            Spacer(minLength: 6)
+            microphone
             eye
             close
         }
-        .padding(.horizontal, 6)
-        .frame(height: 38)
+        .padding(.leading, 14)
+        .padding(.trailing, 7)
+        .frame(height: 40)
         // The whole strip is the handle, waveform and labels included; a
         // plain click on a button still goes to the button.
         .contentShape(Rectangle())
@@ -95,13 +105,14 @@ private struct Strip: View {
     private var middle: some View {
         switch session.phase {
         case .idle, .starting, .listening, .paused:
-            Waveform(levels: session.levels, live: session.phase == .listening)
             // While listening the moving bars say it; only a pause gets a word.
             if session.phase == .paused { label(de("Pausiert", en: "Paused")) }
-            if !session.inFlight.isEmpty { WritingDots() }
+            Waveform(levels: wide ? session.levels : Array(session.levels.suffix(14)),
+                     live: session.phase == .listening, spread: wide)
         case .finishing:
             WritingDots()
             label(de("Schreibt", en: "Writing"))
+            if wide { Spacer(minLength: 0) }
         case .failed(let message, let canRetry):
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 13, weight: .medium))
@@ -116,6 +127,7 @@ private struct Strip: View {
                     .frame(height: 26)
                     .background(Capsule().fill(theme.accent))
             }
+            if wide { Spacer(minLength: 0) }
         case .discarded:
             label(de("Verworfen", en: "Discarded"))
             Button(action: session.undoDiscard) {
@@ -124,12 +136,14 @@ private struct Strip: View {
             .buttonStyle(.plain)
             .font(Typography.text(13, .semibold))
             .foregroundStyle(theme.accent)
+            Spacer(minLength: 4)
         case .clipboard:
             Image(systemName: "doc.on.clipboard")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(theme.accent)
             label(de("Zwischenablage", en: "Clipboard"))
             KeyLabel(glyph: "⌘", name: "V")
+            Spacer(minLength: 4)
         }
     }
 
@@ -185,22 +199,25 @@ private struct Strip: View {
 // MARK: - Pieces
 
 /// Bars driven by microphone loudness, newest on the right. Flat and dimmed
-/// while paused.
+/// while paused. Spread, the bars share out all the width they are given.
 struct Waveform: View {
     let levels: [Float]
     var live = true
+    var spread = false
     @Environment(\.theme) private var theme
 
     private let maxHeight: CGFloat = 16
 
     var body: some View {
-        HStack(alignment: .center, spacing: 2.5) {
+        HStack(alignment: .center, spacing: spread ? 0 : 2.5) {
             ForEach(Array(levels.enumerated()), id: \.offset) { _, level in
                 Capsule()
                     .fill(theme.accent.opacity(live ? 1 : 0.45))
-                    .frame(width: 2.5, height: 2.5 + (maxHeight - 2.5) * CGFloat(max(0, min(1, level))))
+                    .frame(width: 2.5, height: 2.5 + (maxHeight - 2.5) * CGFloat(max(0, min(1, live ? level : 0))))
+                    .frame(maxWidth: spread ? .infinity : nil)
             }
         }
+        .frame(maxWidth: spread ? .infinity : nil)
         .frame(height: maxHeight)
         // Each new level animates into place, which is what turns a row of
         // rectangles into something that reads as sound.

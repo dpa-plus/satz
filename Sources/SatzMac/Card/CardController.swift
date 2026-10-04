@@ -9,8 +9,8 @@ final class CardController {
     private let session: Session
     private let preferences: Preferences
     private var panel: CardPanel?
-    /// Where the window and the mouse were when a drag began.
-    private var dragStart: (window: NSPoint, mouse: NSPoint)?
+    /// True from the first movement of a drag until the window has settled.
+    private var dragging = false
 
     init(session: Session, preferences: Preferences) {
         self.session = session
@@ -38,23 +38,29 @@ final class CardController {
         return bitmap.representation(using: .png, properties: [:])
     }
 
-    /// Follows the mouse in screen coordinates rather than the gesture's own,
-    /// which move with the window being dragged and would make it jitter.
-    private func drag(_ dragging: Bool) {
+    /// Hands the drag to the window server, the way a title bar moves a
+    /// window: smooth at any size. Moving the window ourselves on every mouse
+    /// event stuttered once the card held text.
+    private func drag(_ isDragging: Bool) {
         guard let panel else { return }
-        guard dragging else {
-            dragStart = nil
-            preferences.cardOffset = panel.offset()
+        guard isDragging else {
+            dragging = false
             return
         }
-        let mouse = NSEvent.mouseLocation
-        if dragStart == nil { dragStart = (panel.frame.origin, mouse) }
-        guard let start = dragStart else { return }
-        panel.move(to: NSPoint(x: start.window.x + mouse.x - start.mouse.x, y: start.window.y + mouse.y - start.mouse.y))
+        guard !dragging, let event = NSApp.currentEvent else { return }
+        dragging = true
+        panel.performDrag(with: event)
     }
 
     private func make() -> CardPanel {
         let panel = CardPanel()
+        panel.onMoved = { [weak self, weak panel] in
+            // Only a drag by the user is remembered; satz moving the card
+            // above a text field is not.
+            guard let self, let panel, dragging else { return }
+            dragging = false
+            preferences.cardOffset = panel.offset()
+        }
         let view = CardView(
             session: session, preferences: preferences,
             onSize: { [weak panel] size in panel?.resize(to: size) },
@@ -73,8 +79,12 @@ final class CardController {
 /// the card leaves the app they were typing in focused.
 final class CardPanel: NSPanel {
 
-    /// Where the bottom edge sits, kept while the card grows.
+    /// Where the bottom and right edges sit, kept while the card changes size.
     private var bottom: CGFloat?
+    private var right: CGFloat?
+    /// Called once the user has finished dragging the card somewhere new.
+    var onMoved: () -> Void = {}
+    private var settling: Task<Void, Never>?
 
     init() {
         super.init(
@@ -93,6 +103,22 @@ final class CardPanel: NSPanel {
         isMovableByWindowBackground = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         animationBehavior = .none
+        NotificationCenter.default.addObserver(forName: NSWindow.didMoveNotification, object: self, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.moved() }
+        }
+    }
+
+    /// A drag by the window server ends without telling us; the moves stop.
+    /// So the new spot is taken a moment after the last one.
+    private func moved() {
+        bottom = frame.minY
+        right = frame.maxX
+        settling?.cancel()
+        settling = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled, NSEvent.pressedMouseButtons == 0 else { return }
+            self?.onMoved()
+        }
     }
 
     override var canBecomeKey: Bool { true }
@@ -116,11 +142,13 @@ final class CardPanel: NSPanel {
         origin.x = min(max(origin.x, visible.minX + 8), visible.maxX - frame.width - 8)
         origin.y = min(max(origin.y, visible.minY + 8), visible.maxY - frame.height - 8)
         bottom = origin.y
+        right = origin.x + frame.width
         setFrameOrigin(origin)
     }
 
     func move(to origin: NSPoint) {
         bottom = origin.y
+        right = origin.x + frame.width
         setFrameOrigin(origin)
     }
 
@@ -139,9 +167,20 @@ final class CardPanel: NSPanel {
     /// clicked them.
     func resize(to size: CGSize) {
         guard size.width > 0, size.height > 0 else { return }
-        let origin = NSPoint(x: frame.maxX - size.width, y: bottom ?? frame.minY)
-        setFrame(NSRect(origin: origin, size: size), display: true)
-        invalidateShadow()
+        let target = NSRect(origin: NSPoint(x: (right ?? frame.maxX) - size.width, y: bottom ?? frame.minY), size: size)
+        guard target != frame else { return }
+        guard isVisible else {
+            setFrame(target, display: true)
+            return
+        }
+        // Grows and shrinks over a quarter second instead of jumping.
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.24
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            animator().setFrame(target, display: true)
+        } completionHandler: { [weak self] in
+            self?.invalidateShadow()
+        }
     }
 }
 

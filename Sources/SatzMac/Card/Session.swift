@@ -46,7 +46,8 @@ final class Session {
     }
 
     private(set) var phase: Phase = .idle
-    private(set) var levels = Array(repeating: Float(0), count: 12)
+    /// Enough history to fill the full card's waveform; the pill shows the end.
+    private(set) var levels = Array(repeating: Float(0), count: 32)
     /// Recordings on their way to the provider.
     private(set) var inFlight: Set<Int> = []
     /// Changes whenever the text does, so the card re-measures.
@@ -102,6 +103,7 @@ final class Session {
     @ObservationIgnored private var startToken = 0
     @ObservationIgnored private var origin: NSRunningApplication?
     @ObservationIgnored private var escape: HotKey?
+    @ObservationIgnored private var breathing: Task<Void, Never>?
 
     init(preferences: Preferences, history: History, discarded: Discarded) {
         self.preferences = preferences
@@ -203,6 +205,7 @@ final class Session {
         }
         phase = .paused
         onOpen()
+        breathe()
         // Anything that was on its way when it was thrown away goes again.
         for (id, segment) in segments where segment.audio.count > segment.transcribed {
             send(id)
@@ -275,6 +278,7 @@ final class Session {
         }
         activeID = newSegment(at: 0)
         onOpen()
+        breathe()
         startRecording()
     }
 
@@ -494,6 +498,40 @@ final class Session {
         segment.transcribed = count
         segments[id] = segment
         removeMarkerIfDone(id)
+        fadeIn(id)
+    }
+
+    /// New text arrives in the accent colour and settles into the text colour
+    /// over a third of a second, instead of popping in.
+    private func fadeIn(_ id: Int) {
+        let token = sessionToken
+        Task {
+            let from = NSColor(Theme.dark.accent), to = NSColor(Theme.dark.ink)
+            for step in 0 ... 8 {
+                guard token == sessionToken, let range = segmentRange(id) else { return }
+                let color = from.blended(withFraction: CGFloat(step) / 8, of: to) ?? to
+                text.addAttribute(.foregroundColor, value: color, range: range)
+                try? await Task.sleep(for: .milliseconds(40))
+            }
+        }
+    }
+
+    /// The "…" placeholders breathe while the card is open, so it reads as
+    /// working rather than stuck.
+    private func breathe() {
+        guard breathing == nil else { return }
+        breathing = Task {
+            var bright = true
+            while !Task.isCancelled, phase != .idle {
+                bright.toggle()
+                let color = NSColor(Theme.dark.accent).withAlphaComponent(bright ? 1 : 0.35)
+                text.enumerateAttribute(.satzMarker, in: NSRange(location: 0, length: text.length)) { value, range, _ in
+                    if value != nil { text.addAttribute(.foregroundColor, value: color, range: range) }
+                }
+                try? await Task.sleep(for: .milliseconds(600))
+            }
+            breathing = nil
+        }
     }
 
     // MARK: - Segments
@@ -702,8 +740,9 @@ final class Session {
             if marker { text.append(Self.marker(for: 1)) }
         }
         self.phase = phase
-        for (index, level) in zip(levels.indices, levelValues) {
-            levels[index] = level
+        guard !levelValues.isEmpty else { return }
+        for index in levels.indices {
+            levels[index] = levelValues[index % levelValues.count]
         }
     }
 
