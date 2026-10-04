@@ -95,6 +95,16 @@ final class Session {
     @ObservationIgnored private var tailing: Set<Int> = []
     /// Stopping the microphone keeps it open for a short tail; these are those.
     @ObservationIgnored private var tails: [Task<Void, Never>] = []
+    /// Microphones that are stopping but have not handed over their audio
+    /// yet, so a discard in that moment can still keep what they hold.
+    @ObservationIgnored private var stopping: [Held] = []
+
+    /// Audio still in a microphone that belongs to a recording.
+    private struct Held {
+        let id: Int
+        let recorder: AudioSource
+        let start: Int
+    }
     @ObservationIgnored private var finishing: Task<Void, Never>?
     @ObservationIgnored private var closingLater: Task<Void, Never>?
     /// Bumped whenever the whole session is thrown away, so late answers drop.
@@ -158,13 +168,21 @@ final class Session {
             return
         default: break
         }
+        // What was said is kept too, also the part still in the microphone:
+        // while listening, everything since the last pause is only there.
+        var kept = segments.mapValues { segment in
+            var kept = segment
+            kept.failure = nil
+            return kept
+        }
+        var held = stopping
+        if let recorder, let activeID { held.append(Held(id: activeID, recorder: recorder, start: liveStart)) }
+        for piece in held where kept[piece.id] != nil {
+            kept[piece.id]?.audio += piece.recorder.samples(from: piece.start, to: piece.recorder.sampleCount)
+        }
         let snapshot = Discarded.Snapshot(
             text: NSAttributedString(attributedString: text),
-            segments: segments.mapValues { segment in
-                var kept = segment
-                kept.failure = nil
-                return kept
-            },
+            segments: kept,
             activeID: activeID,
             nextID: nextID,
             origin: origin,
@@ -322,10 +340,12 @@ final class Session {
         let start = liveStart
         let token = sessionToken
         tailing.insert(id)
+        stopping.append(Held(id: id, recorder: recorder, start: start))
         tails.append(Task {
             // The tail keeps the last word.
             let samples = await recorder.finishSamples() ?? []
             guard token == sessionToken else { return }
+            stopping.removeAll { $0.recorder === recorder }
             tailing.remove(id)
             append(Array(samples.dropFirst(start)), to: id)
             send(id)
@@ -360,11 +380,14 @@ final class Session {
         let pending = tails
         tails = []
         let token = sessionToken
+        if let recorder, let id { stopping.append(Held(id: id, recorder: recorder, start: start)) }
 
         finishing = Task {
             for tail in pending { await tail.value }
             if let recorder, let id {
                 let samples = await recorder.finishSamples() ?? []
+                guard token == sessionToken else { return }
+                stopping.removeAll { $0.recorder === recorder }
                 append(Array(samples.dropFirst(start)), to: id)
             }
             guard token == sessionToken else { return }
@@ -686,6 +709,7 @@ final class Session {
         inFlight = []
         tails = []
         tailing = []
+        stopping = []
         finishing?.cancel()
         finishing = nil
         releaseEscape()
