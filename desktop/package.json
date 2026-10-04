@@ -35,7 +35,9 @@
     "files": [
       "dist/**",
       "assets/**",
-      "package.json"
+      "package.json",
+      "node_modules/uiohook-napi/**",
+      "node_modules/node-gyp-build/**"
     ],
     "asarUnpack": [
       "node_modules/uiohook-napi/**"
@@ -48,7 +50,8 @@
       "category": "Utility",
       "artifactName": "satz-${version}-linux-${arch}.${ext}",
       "icon": "assets/icon.png"
-    }
+    },
+    "npmRebuild": false
   },
   "allowScripts": {
     "electron@44.5.1": true,

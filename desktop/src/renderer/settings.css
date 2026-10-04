@@ -1,0 +1,23 @@
+:root { --ground: #16303c; --card: rgba(238,244,246,.06); --ink: #eef4f6; --secondary: #a9c0c8; --accent: #ffb27a; --line: rgba(238,244,246,.12); --control: rgba(238,244,246,.4); }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--ground); color: var(--ink); font: 14px/1.45 "Segoe UI", "Noto Sans", Ubuntu, sans-serif; }
+main { max-width: 520px; margin: 0 auto; padding: 24px 20px 40px; display: flex; flex-direction: column; gap: 22px; }
+h1 { font-size: 24px; margin: 0; font-weight: 600; }
+h2 { font-size: 16px; margin: 0 0 8px; font-weight: 600; }
+section { display: flex; flex-direction: column; }
+.box { background: var(--card); border: 1px solid var(--control); border-radius: 14px; overflow: hidden; }
+.row { display: flex; align-items: center; gap: 10px; min-height: 46px; padding: 6px 14px; border-top: 1px solid var(--line); }
+.row:first-child { border-top: none; }
+.row > .grow { flex: 1; }
+.hint { color: var(--secondary); font-size: 12.5px; padding: 0 14px 10px; }
+input[type=text], input[type=password], select { background: rgba(0,0,0,.18); color: var(--ink); border: 1px solid var(--control); border-radius: 8px; padding: 6px 9px; font: inherit; min-width: 0; }
+input.grow { flex: 1; }
+button { background: none; color: var(--ink); border: 1px solid var(--control); border-radius: 8px; padding: 5px 12px; font: inherit; cursor: pointer; }
+button.accent { background: var(--accent); color: var(--ground); border-color: var(--accent); font-weight: 600; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 14px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--control); border-radius: 14px; padding: 2px 4px 2px 10px; }
+.chip button { border: none; padding: 0 6px; color: var(--secondary); }
+.chip code { font-family: ui-monospace, Consolas, monospace; }
+.error { color: var(--accent); font-size: 12.5px; padding: 0 14px 10px; }
+label.switch { display: flex; align-items: center; gap: 10px; width: 100%; cursor: pointer; }
+label.switch input { margin-left: auto; width: 18px; height: 18px; accent-color: var(--accent); }
