@@ -6,9 +6,9 @@ The Mac app's dictation for Windows and Linux, on Electron: tap **right Ctrl twi
 
 | System | File | How |
 |---|---|---|
-| Windows 11 (ARM or Intel/AMD) | `satz-0.1.0-windows-arm64.zip` / `-x64.zip` | Unzip anywhere, run `satz.exe`. Not signed yet, so SmartScreen may ask once ("More info", "Run anyway"). |
-| Ubuntu / Debian | `satz-0.1.0-linux-arm64.deb` / `-amd64.deb` | `sudo apt install ./satz-…deb`, then start "satz" from the app menu. |
-| Other Linux | `satz-0.1.0-linux-…tar.gz` | Unpack, run `./satz`. |
+| Windows (ARM or Intel/AMD) | `satz-windows-arm64.zip` / `satz-windows-x64.zip` | Unzip anywhere, run `satz.exe`. Not signed yet, so SmartScreen may ask once ("More info", "Run anyway"). |
+| Ubuntu / Debian | `satz-linux-arm64.deb` / `satz-linux-amd64.deb` | `sudo apt install ./satz-linux-…deb`, then start "satz" from the app menu. |
+| Other Linux | `satz-linux-arm64.tar.gz` / `satz-linux-x64.tar.gz` | Unpack, run `./satz`. |
 
 On first start satz opens its settings for the API key, and switches on start at login (it can be switched off there).
 
@@ -41,7 +41,7 @@ In a Windows 11 ARM VM and an Ubuntu 26.04 ARM VM (GNOME on Wayland), with real 
 
 - **Shortcut:** real right-Ctrl taps start and finish a dictation. Escape discards while recording. Ctrl+C with the right Ctrl does not trigger.
 - **Card:** the mic button pauses and continues, the eye hides and shows the text, × discards and Undo brings it back. The card stops at the screen edge and remembers where it was put.
-- **Paste:** the text goes into Notepad (Windows) and into GNOME Text Editor through ydotool. Without ydotool it falls back to the clipboard. The clipboard is handed back afterwards.
+- **Paste:** the text goes into Notepad (Windows) and into GNOME Text Editor through ydotool. Without ydotool it falls back to the clipboard. The clipboard is handed back afterwards, or keeps the text when "Keep text on the clipboard" is on (checked both ways in the Ubuntu VM, 05.10.).
 - **Start at login:** satz starts by itself after signing in, on both. Settings save. "No microphone" is said plainly.
 
 Not verified: a real microphone (the VMs have none; test mode feeds files into the same path), and the x64 builds, which have no VM. On ARM Linux under X11 the keyboard library's prebuilt binary is actually x86-64 (an upstream packaging error); satz then starts without the hook and uses `satz --toggle`.

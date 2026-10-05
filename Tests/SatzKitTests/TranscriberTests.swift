@@ -31,13 +31,13 @@ import Testing
 
 @Test func vocabularyIsSentOnlyWhenItHasContent() throws {
     var withWords = Transcriber.Settings()
-    withWords.vocabulary = ["ACON", "Immofanten", "Prozesshub"]
+    withWords.vocabulary = ["Kubernetes", "Grafana", "Figma"]
     let filled = String(
         decoding: try #require(Transcriber(settings: withWords).makeRequest(wav: Data(), apiKey: "k").httpBody),
         as: UTF8.self
     )
     #expect(filled.contains("name=\"prompt\""))
-    #expect(filled.contains("ACON, Immofanten, Prozesshub"))
+    #expect(filled.contains("Kubernetes, Grafana, Figma"))
 
     let empty = String(
         decoding: try #require(Transcriber().makeRequest(wav: Data(), apiKey: "k").httpBody),
@@ -127,12 +127,12 @@ private func azure(_ json: [String: Any]) -> [String: Any]? {
     var settings = Transcriber.Settings(provider: .openRouter)
     #expect(azure(try openRouterJSON(settings))?["phraseList"] == nil)
 
-    settings.vocabulary = ["ACON", "XX"]
+    settings.vocabulary = ["Kubernetes", "XX"]
     let json = try openRouterJSON(settings)
     let phrases = (azure(json)?["phraseList"] as? [String: Any])?["phrases"] as? [String]
-    #expect(phrases == ["ACON", "XX"])
+    #expect(phrases == ["Kubernetes", "XX"])
     // And as a prompt, for models on OpenRouter that are not MAI.
-    #expect(json["prompt"] as? String == "ACON, XX")
+    #expect(json["prompt"] as? String == "Kubernetes, XX")
 }
 
 @Test func longRecordingsGetMoreTime() {

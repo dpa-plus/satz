@@ -69,6 +69,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
+        if let path = argument(after: "--showcase") {
+            try? SnapshotRenderer.writeShowcase(to: path)
+            NSApp.terminate(nil)
+            return
+        }
         // One satz at a time. Two copies (an old one still running after an
         // update, or one opened from Downloads next to the one in
         // Applications) both heard the shortcut, and every text was pasted

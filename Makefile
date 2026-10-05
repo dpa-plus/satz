@@ -6,7 +6,7 @@ BIN     := $(SCRATCH)/release/SatzMac
 
 UNIVERSAL ?= $(HOME)/Library/Caches/satz-universal
 
-.PHONY: app bundle share run test hero icon clean
+.PHONY: app bundle share run test hero showcase icon clean
 
 app:
 	swift build -c release --scratch-path "$(SCRATCH)"
@@ -53,6 +53,10 @@ test:
 hero: app
 	"$(APP)/Contents/MacOS/satz" --hero assets/hero.png
 	@echo "rendered assets/hero.png"
+
+showcase: app
+	"$(APP)/Contents/MacOS/satz" --showcase assets/showcase.png
+	@echo "rendered assets/showcase.png"
 
 # The icon is drawn by the app itself from the brand mark, then packed.
 icon: app

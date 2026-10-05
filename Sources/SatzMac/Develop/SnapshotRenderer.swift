@@ -63,6 +63,33 @@ enum SnapshotRenderer {
         try png(of: icons).write(to: folder.appendingPathComponent("icons.png"))
     }
 
+    /// The README's picture: the card while talking, and the menu with what
+    /// was dictated. In English and made up, never anyone's real text.
+    static func writeShowcase(to path: String) throws {
+        Language.current = .english
+        AppTheme.current = .dpa
+        let history = History()
+        let base = Date(timeIntervalSince1970: 1_791_000_000)
+        history.add("The test is red, please don't merge yet.", app: "Slack", pasted: true, at: base)
+        history.add("Let's move the call with Lena to Thursday at two.", app: "Mail", pasted: true, at: base + 600)
+        history.add("Write a function that reads every invoice in the Accounting folder and adds up the totals per customer.",
+                    app: "Claude", pasted: true, at: base + 1200)
+        let sheet = HStack(alignment: .center, spacing: 40) {
+            VStack(alignment: .trailing, spacing: 28) {
+                card(.listening, text: "Thanks for the update. Thursday at two works for me, and I'll bring the slides. ", marker: true)
+                card(.listening, marker: true)
+            }
+            PopoverView(history: history, discarded: Discarded(), setup: Setup(hasKey: true, microphone: .allowed, canPaste: true),
+                        shortcut: shortcut, preferences: preferences, actions: PopoverActions())
+                .environment(\.theme, .light)
+        }
+        .padding(.horizontal, 56)
+        .padding(.vertical, 44)
+        // Rounded like the hero above it in the README.
+        .background(Color(hex: 0xE9DDD2), in: RoundedRectangle(cornerRadius: 32, style: .continuous))
+        try png(of: sheet.environment(\.isSnapshot, true)).write(to: URL(fileURLWithPath: path))
+    }
+
     static func png(of view: some View) throws -> Data {
         let renderer = ImageRenderer(content: view)
         renderer.scale = 2
@@ -84,7 +111,7 @@ enum SnapshotRenderer {
         let preferences = Preferences(defaults: nil)
         preferences.language = Language.current
         preferences.provider = .openRouter
-        preferences.words = ["ACON", "Immofanten", "Prozesshub"]
+        preferences.words = ["Kubernetes", "Grafana", "Figma"]
         return preferences
     }
 
@@ -92,7 +119,7 @@ enum SnapshotRenderer {
         let history = History()
         let base = Date(timeIntervalSince1970: 1_791_000_000)
         history.add("Der Test ist rot, bitte nicht mergen.", app: "Slack", pasted: true, at: base)
-        history.add("Termin mit ACON auf Donnerstag 14 Uhr verschieben.", app: "Mail", pasted: true, at: base + 600)
+        history.add("Termin mit Lena auf Donnerstag 14 Uhr verschieben.", app: "Mail", pasted: true, at: base + 600)
         history.add("Kannst du mir eine Funktion schreiben, die alle Rechnungen aus dem Ordner Buchhaltung liest und die Beträge pro Kunde summiert?",
                     app: "Claude", pasted: true, at: base + 1200)
         return history

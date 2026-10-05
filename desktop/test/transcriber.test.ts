@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { makeRequest, openRouterBody, retryDelay, transcribe, TranscriptionFailure, type TranscriberSettings } from '../src/core/transcriber'
 import { encodeWAV, decodeWAV, resample, level } from '../src/core/wav'
 
-const openrouter: TranscriberSettings = { provider: 'openrouter', model: '', vocabulary: ['ACON', 'Klammer auf'], removesFillers: true }
+const openrouter: TranscriberSettings = { provider: 'openrouter', model: '', vocabulary: ['Kubernetes', 'Klammer auf'], removesFillers: true }
 const wav = encodeWAV(new Float32Array(16_000))
 
 test('OpenRouter gets JSON with clean mode and the phrase list', () => {
@@ -11,7 +11,7 @@ test('OpenRouter gets JSON with clean mode and the phrase list', () => {
   assert.equal(body.model, 'microsoft/mai-transcribe-2')
   assert.equal(body.input_audio.format, 'wav')
   assert.equal(body.provider.options.azure.enhancedMode.modelOptions.transcribeStyle, 'clean')
-  assert.deepEqual(body.provider.options.azure.phraseList.phrases, ['ACON', 'Klammer auf'])
+  assert.deepEqual(body.provider.options.azure.phraseList.phrases, ['Kubernetes', 'Klammer auf'])
   const request = makeRequest(openrouter, wav, 'k')
   assert.equal(request.url, 'https://openrouter.ai/api/v1/audio/transcriptions')
   assert.equal(request.headers.Authorization, 'Bearer k')
