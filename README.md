@@ -49,7 +49,7 @@ All files are on the [releases page](https://github.com/dpa-plus/satz/releases/l
 
 ## Get started
 
-1. **Get a key.** Create one at [openrouter.ai/keys](https://openrouter.ai/keys) and add a few dollars of credit. Five dollars lasts a long time. OpenAI and Groq keys work too.
+1. **Get a key.** Create one at [openrouter.ai/keys](https://openrouter.ai/keys) and add a few dollars of credit. With MAI-Transcribe 2 an hour of talking costs about 10 cents, so five dollars lasts a long time. OpenAI and Groq keys work too.
 2. **Open satz.** Setup asks for the key, the microphone, and on the Mac for permission to paste. It ends with a test sentence.
 3. **Dictate.** Click into any text field and tap the shortcut twice:
 
@@ -109,7 +109,7 @@ Each provider keeps its own key and model, so you can switch back and forth.
 
 ## Questions
 
-**Is it free?** satz is free and open source (MIT). You pay the transcription provider for what you use; an hour of talking costs well under a dollar.
+**Is it free?** satz is free and open source (MIT). You pay the transcription provider for what you use: about 10 cents per hour of talking with MAI-Transcribe 2 on OpenRouter.
 
 **Does it work offline?** No. Transcription happens at the provider.
 
