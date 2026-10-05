@@ -94,7 +94,7 @@ async function start() {
       }
       // A moment for the shortcut's own keys to come up before Ctrl+V.
       await new Promise(resolve => setTimeout(resolve, 120))
-      const outcome = await deliver(text, () => keyboard?.paste(), log)
+      const outcome = await deliver(text, () => keyboard?.paste(), store.prefs.keepsOnClipboard, log)
       log(`paste: ${outcome.pasted ? 'sent Ctrl+V' : 'clipboard only'}, ${text.length} characters`)
       store.addHistory(text, outcome.pasted)
       delivered.push(text)

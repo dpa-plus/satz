@@ -474,7 +474,7 @@ final class Session {
         // Which app is in front at the moment of ⌘V tells whether a paste
         // that did not arrive went to the wrong place or nowhere. Never the text.
         let front = NSWorkspace.shared.frontmostApplication?.localizedName ?? "?"
-        let outcome = Paster.deliver(output, into: origin)
+        let outcome = Paster.deliver(output, into: origin, keepsOnClipboard: preferences.keepsOnClipboard)
         Log.note("paste: \(outcome == .pasted ? "sent ⌘V" : "clipboard only") into \(origin?.localizedName ?? "?"), front was \(front), \(output.count) characters")
         history.add(output, app: origin?.localizedName, pasted: outcome == .pasted)
         if case .clipboardOnly(let reason) = outcome {

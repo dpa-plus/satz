@@ -6,7 +6,8 @@ import { de } from '../core/language'
 /**
  * Puts the transcript where the user was typing: on the clipboard, then
  * Ctrl+V. The card never takes the keyboard, so the app the user was in still
- * has it. The clipboard is handed back afterwards, in every form it held.
+ * has it. The clipboard is handed back afterwards, in every form it held,
+ * unless the user wants the transcript to stay there.
  *
  * Linux under Wayland lets no app send keystrokes to other apps; there satz
  * uses ydotool when it is installed, and otherwise leaves the text on the
@@ -55,7 +56,7 @@ function ydotoolPaste(log?: (message: string) => void): Promise<boolean> {
   }))
 }
 
-export async function deliver(text: string, keyTap: KeyTap, log?: (message: string) => void): Promise<{ pasted: boolean; reason?: string }> {
+export async function deliver(text: string, keyTap: KeyTap, keepsOnClipboard: boolean, log?: (message: string) => void): Promise<{ pasted: boolean; reason?: string }> {
   if (!text) return { pasted: true }
   const previous = await save()
   await clipboard.writeText(text)
@@ -77,6 +78,6 @@ export async function deliver(text: string, keyTap: KeyTap, log?: (message: stri
   }
   // Handed back once the paste has been taken, and only while the transcript
   // is still what is there: something copied in the meantime stays.
-  setTimeout(async () => { if ((await clipboard.readText()) === text) await restore(previous) }, 600)
+  if (!keepsOnClipboard) setTimeout(async () => { if ((await clipboard.readText()) === text) await restore(previous) }, 600)
   return { pasted }
 }

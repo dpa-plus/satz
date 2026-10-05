@@ -23,6 +23,8 @@ export interface Preferences {
   replacements: Replacement[]
   usesReplacements: boolean
   removesFillers: boolean
+  /** The transcript stays on the clipboard after pasting, instead of what was copied before. */
+  keepsOnClipboard: boolean
   showsText: boolean
   /** Where the user dragged the card, from its starting spot. */
   cardSpot: { x: number; y: number } | null
@@ -64,6 +66,7 @@ export class Store {
       replacements: standardReplacements(stored.spokenLanguage ?? stored.language ?? language),
       usesReplacements: true,
       removesFillers: true,
+      keepsOnClipboard: false,
       showsText: true,
       cardSpot: null,
       startAtLoginDefaulted: false,

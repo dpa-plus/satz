@@ -122,6 +122,12 @@ final class Preferences {
         usesReplacements ? replacements : []
     }
 
+    /// The dictated text stays on the clipboard after pasting, instead of
+    /// what was copied before coming back.
+    var keepsOnClipboard: Bool {
+        didSet { defaults?.set(keepsOnClipboard, forKey: Key.keepsOnClipboard) }
+    }
+
     /// MAI-Transcribe's clean mode: no "ähm", no stutters, no false starts.
     var removesFillers: Bool {
         didSet { defaults?.set(removesFillers, forKey: Key.removesFillers) }
@@ -187,6 +193,7 @@ final class Preferences {
         static let replacements = "replacements"
         static let removesFillers = "removesFillers"
         static let usesReplacements = "usesReplacements"
+        static let keepsOnClipboard = "keepsOnClipboard"
     }
 
     init(defaults: UserDefaults? = .standard) {
@@ -215,6 +222,7 @@ final class Preferences {
             ?? Replacements.standard(for: spokenChoice ?? language)
         removesFillers = defaults?.object(forKey: Key.removesFillers) as? Bool ?? true
         usesReplacements = defaults?.object(forKey: Key.usesReplacements) as? Bool ?? true
+        keepsOnClipboard = defaults?.bool(forKey: Key.keepsOnClipboard) ?? false
         // Only the real, stored preferences set the app-wide language and
         // colours; a fixture made for a snapshot must not reset them.
         if defaults != nil {

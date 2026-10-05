@@ -23,11 +23,14 @@ enum Paster {
         case clipboardOnly(String)
     }
 
-    /// - Parameter origin: the application the user was typing in when they
-    ///   started speaking. An upload takes seconds, and people switch windows
-    ///   while they wait, so the transcript is sent back where it was meant to
-    ///   go rather than wherever happens to be frontmost now.
-    static func deliver(_ text: String, into origin: NSRunningApplication?) -> Outcome {
+    /// - Parameters:
+    ///   - origin: the application the user was typing in when they started
+    ///     speaking. An upload takes seconds, and people switch windows while
+    ///     they wait, so the transcript is sent back where it was meant to go
+    ///     rather than wherever happens to be frontmost now.
+    ///   - keepsOnClipboard: the transcript stays on the clipboard afterwards,
+    ///     instead of what was copied before.
+    static func deliver(_ text: String, into origin: NSRunningApplication?, keepsOnClipboard: Bool = false) -> Outcome {
         guard !text.isEmpty else { return .pasted }
 
         let pasteboard = NSPasteboard.general
@@ -43,9 +46,11 @@ enum Paster {
 
         restoreFocus(to: origin)
         sendCommandV()
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(400))
-            putBack(previous, on: pasteboard, ifStill: ours)
+        if !keepsOnClipboard {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(400))
+                putBack(previous, on: pasteboard, ifStill: ours)
+            }
         }
         return .pasted
     }

@@ -663,6 +663,14 @@ private struct GeneralBlock: View {
                 .frame(height: 48)
                 .help(launchAtLogin.problem ?? "")
                 Rule()
+                // Off: whatever was copied before comes back after pasting.
+                Toggle(isOn: $preferences.keepsOnClipboard) {
+                    Text(de("Text in der Zwischenablage behalten", en: "Keep text on the clipboard"))
+                }
+                .toggleStyle(AccentToggleStyle())
+                .padding(.horizontal, 16)
+                .frame(height: 48)
+                Rule()
                 HStack {
                     Text(de("Verlauf", en: "History"))
                     Spacer()
