@@ -386,7 +386,10 @@ private struct WordsBlock: View {
                 .padding(.horizontal, 12)
                 .frame(height: 28)
                 .overlay(Capsule().strokeBorder(theme.control, lineWidth: 1.5))
-                .onAppear { focused = true }
+                // Asked for once the field is in the window. Asked for as it
+                // appeared, the request was dropped, and the typing went to
+                // the field that still had the keyboard: the model.
+                .task { focused = true }
                 .onChange(of: focused) { _, isFocused in if !isFocused { add() } }
                 // Escape closes the field without adding anything.
                 .onExitCommand {
@@ -427,6 +430,7 @@ private struct ReplacementsBlock: View {
     @State private var written = ""
     @State private var removed: (index: Int, rule: Replacement)?
     @State private var forgetting: Task<Void, Never>?
+    @FocusState private var typing: Bool
 
     var body: some View {
         Block(title: de("Ersetzungen", en: "Replacements")) {
@@ -500,6 +504,7 @@ private struct ReplacementsBlock: View {
             if adding && !isSnapshot {
                 HStack(spacing: 8) {
                     TextField("", text: $spoken, prompt: Text(de("gesagt, z. B. XX", en: "spoken, e.g. XX")).foregroundStyle(theme.inkOnCard))
+                        .focused($typing)
                     Image(systemName: "arrow.right").font(.system(size: 10, weight: .bold))
                     TextField("", text: $written, prompt: Text(de("geschrieben", en: "written")).foregroundStyle(theme.inkOnCard))
                         .onSubmit(add)
@@ -512,6 +517,8 @@ private struct ReplacementsBlock: View {
                     .buttonStyle(.plain)
                     .help(de("Schließen", en: "Close"))
                 }
+                // The first field takes the keyboard, as in the Wortschatz.
+                .task { typing = true }
                 // Escape closes the row without adding anything.
                 .onExitCommand(perform: cancel)
                 .textFieldStyle(.plain)

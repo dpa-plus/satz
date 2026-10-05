@@ -99,7 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         if devControl == nil { shortcut.start() }
 
-        settingsWindow = AppWindow(title: de("satz Einstellungen", en: "satz Settings")) { [unowned self] in
+        settingsWindow = AppWindow(title: de("satz Einstellungen", en: "satz Settings"), startsWithoutFocus: true) { [unowned self] in
             AnyView(SettingsView(
                 preferences: preferences, setup: setup, shortcut: shortcut,
                 launchAtLogin: launchAtLogin, history: history
@@ -130,6 +130,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             ))
         }
+        devControl?.open = { [weak self] which in
+            switch which {
+            case "settings": self?.settingsWindow.show()
+            case "setup": self?.setupWindow.show()
+            case "close": self?.settingsWindow.close(); self?.setupWindow.close()
+            default: self?.menuBar.open()
+            }
+        }
         watchAttention()
         keepSetupFresh()
         followColourFamily()
@@ -148,6 +156,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         settingsWindow.show()
         return true
+    }
+
+    /// Quitting with a window open: the app the user came from gets the focus
+    /// back, not whichever app macOS picks.
+    func applicationWillTerminate(_ notification: Notification) {
+        AppWindow.handBack()
     }
 
     /// The orange dot on the menu bar icon: something needs the user.

@@ -21,6 +21,8 @@ final class DevControl {
     private var delivered: [String] = []
     /// The eye button, from the app's preferences.
     var toggleEye: () -> Void = {}
+    /// Opens satz's own windows: "settings", "setup", "menu"; "close" closes them.
+    var open: (String) -> Void = { _ in }
 
     init(session: Session, card: CardController, stateFile: URL) {
         self.session = session
@@ -51,6 +53,7 @@ final class DevControl {
         case "undo": session.undoDiscard()
         case "dump": dump()
         case "eye": toggleEye()
+        case "settings", "setup", "menu", "close": open(command)
         case "field": Log.note("focused field: \(FocusedField.frame().map { NSStringFromRect($0) } ?? "unknown")")
         case "picture":
             try? card.picture()?.write(to: stateFile.deletingPathExtension().appendingPathExtension("png"))
