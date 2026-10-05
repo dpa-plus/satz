@@ -20,6 +20,10 @@ const app = document.getElementById('app')!
 let info: Info
 let editingKey = false
 let keyProblem = ''
+/** Focus the key field: on the first look without a key, and after "Change". */
+let wantsKeyFocus = true
+/** The field to put the cursor in after the next drawing, by id. */
+let focusNext: string | null = null
 
 const t = (de: string, en: string) => (info.prefs.language === 'de' ? de : en)
 const defaults: Record<Provider, string> = { openai: 'gpt-transcribe', openrouter: 'microsoft/mai-transcribe-2', groq: 'whisper-large-v3-turbo', custom: '' }
@@ -68,7 +72,7 @@ function render() {
   // Provider and key
   const keyRow = el('div', { className: 'row' })
   if (editingKey || !info.hasKey) {
-    const input = el('input', { type: 'password', className: 'grow', placeholder: p.provider === 'openrouter' ? 'sk-or-…' : p.provider === 'groq' ? 'gsk_…' : 'sk-…' })
+    const input = el('input', { type: 'password', id: 'key', className: 'grow', placeholder: p.provider === 'openrouter' ? 'sk-or-…' : p.provider === 'groq' ? 'gsk_…' : 'sk-…' })
     const save = el('button', { className: 'accent', textContent: t('Sichern', 'Save') })
     const commit = async () => {
       if (!input.value.trim()) return
@@ -81,13 +85,15 @@ function render() {
     input.onkeydown = e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape' && info.hasKey) { editingKey = false; render() } }
     keyRow.append(el('span', { textContent: t('Schlüssel', 'Key') }), input, save)
     if (info.hasKey) { const cancel = el('button', { textContent: '×', title: t('Abbrechen', 'Cancel') }); cancel.onclick = () => { editingKey = false; render() }; keyRow.append(cancel) }
-    setTimeout(() => input.focus())
+    // Only when asked for: on every drawing it took the cursor out of
+    // whatever field the user was typing in.
+    if (wantsKeyFocus) { wantsKeyFocus = false; focusNext = 'key' }
   } else {
     const change = el('button', { textContent: t('Ändern', 'Change') })
-    change.onclick = () => { editingKey = true; render() }
+    change.onclick = () => { editingKey = true; wantsKeyFocus = true; render() }
     keyRow.append(el('span', { className: 'grow', textContent: t('Schlüssel gesichert', 'Key saved') }), change)
   }
-  const model = el('input', { type: 'text', className: 'grow', value: p.models[p.provider] ?? '', placeholder: defaults[p.provider] })
+  const model = el('input', { type: 'text', id: 'model', className: 'grow', value: p.models[p.provider] ?? '', placeholder: defaults[p.provider] })
   model.onchange = () => update({ models: { ...p.models, [p.provider]: model.value.trim() } })
   const providerBox = el('div', { className: 'box' },
     el('div', { className: 'row' }, el('span', { className: 'grow', textContent: t('Anbieter', 'Provider') }),
@@ -95,7 +101,7 @@ function render() {
     keyRow,
     el('div', { className: 'row' }, el('span', { textContent: t('Modell', 'Model') }), model))
   if (p.provider === 'custom') {
-    const url = el('input', { type: 'text', className: 'grow', value: p.customBaseURL, placeholder: 'https://…/v1' })
+    const url = el('input', { type: 'text', id: 'custom-url', className: 'grow', value: p.customBaseURL, placeholder: 'https://…/v1' })
     url.onchange = () => update({ customBaseURL: url.value.trim() })
     providerBox.append(el('div', { className: 'row' }, el('span', { textContent: t('Adresse', 'Address') }), url))
   }
@@ -112,7 +118,7 @@ function render() {
     remove.onclick = () => update({ words: p.words.filter(w => w !== word) })
     words.append(el('span', { className: 'chip' }, word, remove))
   }
-  const newWord = el('input', { type: 'text', placeholder: t('+ Wort', '+ Word') })
+  const newWord = el('input', { type: 'text', id: 'new-word', placeholder: t('+ Wort', '+ Word') })
   newWord.onkeydown = e => {
     if (e.key === 'Enter' && newWord.value.trim() && !p.words.some(w => w.toLowerCase() === newWord.value.trim().toLowerCase())) update({ words: [...p.words, newWord.value.trim()] })
     if (e.key === 'Escape') newWord.value = ''
@@ -132,13 +138,15 @@ function render() {
       remove.onclick = () => update({ replacements: p.replacements.filter(r => r.id !== rule.id) })
       chips.append(el('span', { className: 'chip' }, `${rule.spoken} → `, el('code', { textContent: shown(rule.written) }), remove))
     }
-    const spoken = el('input', { type: 'text', placeholder: t('gesprochen', 'spoken') })
-    const written = el('input', { type: 'text', placeholder: t('wird zu', 'becomes'), size: 6 })
+    const spoken = el('input', { type: 'text', id: 'new-spoken', placeholder: t('gesprochen', 'spoken') })
+    const written = el('input', { type: 'text', id: 'new-written', placeholder: t('wird zu', 'becomes'), size: 6 })
     const add = el('button', { textContent: '+' })
     add.onclick = () => {
       if (!spoken.value.trim() || !written.value) return
+      focusNext = 'new-spoken'
       update({ replacements: [...p.replacements, { id: `u${Date.now()}`, spoken: spoken.value.trim(), written: written.value, isOn: true }] })
     }
+    written.onkeydown = e => { if (e.key === 'Enter') add.click() }
     chips.append(spoken, written, add)
     replacementBox.append(chips)
   }
@@ -158,6 +166,9 @@ function render() {
     el('div', { className: 'row' }, el('label', { className: 'switch' }, t('Text in der Zwischenablage behalten', 'Keep text on the clipboard'), keepBox)),
     el('div', { className: 'row' }, el('span', { className: 'grow', textContent: t('Verlauf', 'History') }), clear))
 
+  // The page is drawn anew after every change; the cursor stays in the field
+  // it was in, so several words can be typed one after the other.
+  const focused = (document.activeElement as HTMLElement | null)?.id || null
   app.replaceChildren(
     el('h1', { textContent: t('Einstellungen', 'Settings') }),
     section(t('Kurzbefehl', 'Shortcut'), shortcut, shortcutHint),
@@ -166,6 +177,9 @@ function render() {
     section(t('Ersetzungen', 'Replacements'), replacementBox),
     section(t('Allgemein', 'General'), general),
   )
+  const target = focusNext ?? focused
+  focusNext = null
+  if (target) (document.getElementById(target) as HTMLInputElement | null)?.focus()
 }
 
 async function load() {
