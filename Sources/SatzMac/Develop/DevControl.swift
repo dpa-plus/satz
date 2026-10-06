@@ -9,8 +9,10 @@ import AppKit
 /// text field is), `dump`, which writes the card's
 /// phase and text to the state file, `picture`, which saves the live
 /// card as a PNG next to it, `film`, which toggles the eye and saves a
-/// picture of every step of the animation, and `clipboard`, which checks on
-/// a private pasteboard that a paste hands every kind of content back.
+/// picture of every step of the animation, `clipboard`, which checks on
+/// a private pasteboard that a paste hands every kind of content back,
+/// `strand`, which leaves the card's window on one other desktop, and
+/// `settings`, `setup`, `menu` and `close` for satz's own windows.
 @MainActor
 final class DevControl {
 
@@ -54,6 +56,7 @@ final class DevControl {
         case "dump": dump()
         case "eye": toggleEye()
         case "settings", "setup", "menu", "close": open(command)
+        case "strand": strand()
         case "field": Log.note("focused field: \(FocusedField.frame().map { NSStringFromRect($0) } ?? "unknown")")
         case "picture":
             try? card.picture()?.write(to: stateFile.deletingPathExtension().appendingPathExtension("png"))
@@ -103,6 +106,28 @@ final class DevControl {
         Paster.putBack(saved, on: board, ifStill: copiedLater)
         Log.note("clipboard: types back \(before == after) (\(after.count) of \(before.count)), text \(restored), newer kept \(board.string(forType: .string) == "newer")")
         board.releaseGlobally()
+    }
+
+    /// Leaves the card's window on one desktop the user is not on, the state
+    /// it was found in after a night's sleep, so `press` can show that satz
+    /// gets out of it. Through the window server's private calls, which only
+    /// the window's own app may make on it.
+    private func strand() {
+        typealias Connection = @convention(c) () -> Int32
+        typealias Spaces = @convention(c) (Int32, Int32, CFArray) -> Unmanaged<CFArray>?
+        typealias Active = @convention(c) (Int32) -> UInt64
+        typealias Remove = @convention(c) (Int32, CFArray, CFArray) -> Void
+        guard let number = card.windowNumber,
+              let sky = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_NOW),
+              let c = dlsym(sky, "SLSMainConnectionID"), let s = dlsym(sky, "SLSCopySpacesForWindows"),
+              let a = dlsym(sky, "SLSGetActiveSpace"), let r = dlsym(sky, "SLSRemoveWindowsFromSpaces")
+        else { return Log.note("strand: no card window yet") }
+        let connection = unsafeBitCast(c, to: Connection.self)()
+        let spacesOf = { (unsafeBitCast(s, to: Spaces.self)(connection, 7, [number] as CFArray)?.takeRetainedValue() as? [UInt64]) ?? [] }
+        let active = unsafeBitCast(a, to: Active.self)(connection)
+        guard let keep = spacesOf().first(where: { $0 != active }) else { return Log.note("strand: only one desktop") }
+        unsafeBitCast(r, to: Remove.self)(connection, [number] as CFArray, spacesOf().filter { $0 != keep } as CFArray)
+        Log.note("strand: card window now on desktops \(spacesOf()), active \(active)")
     }
 
     private func dump() {

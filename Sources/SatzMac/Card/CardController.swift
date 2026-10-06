@@ -18,14 +18,28 @@ final class CardController {
     }
 
     func show() {
-        let panel = panel ?? make()
+        var panel = panel ?? make()
         self.panel = panel
         if !panel.isVisible {
             panel.place(offset: preferences.cardOffset, avoiding: FocusedField.frame())
             panel.orderFrontRegardless()
+            // After a night's sleep the window was left on one desktop only,
+            // so every card after that came up on a desktop the user was not
+            // looking at. A new window joins every desktop again.
+            if !panel.isOnActiveSpace {
+                Log.note("card was on another desktop only; replaced")
+                panel.orderOut(nil)
+                panel = make()
+                self.panel = panel
+                panel.place(offset: preferences.cardOffset, avoiding: FocusedField.frame())
+                panel.orderFrontRegardless()
+            }
             Log.note("card shown at \(NSStringFromRect(panel.frame)) on a screen of \(NSStringFromRect(panel.screen?.frame ?? .zero)), visible \(panel.isOnActiveSpace)")
         }
     }
+
+    /// The window server's number for the card's window, for test mode.
+    var windowNumber: Int? { panel?.windowNumber }
 
     func hide() {
         panel?.orderOut(nil)
