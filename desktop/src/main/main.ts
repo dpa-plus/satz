@@ -13,6 +13,7 @@ import { startKeyboard, type Keyboard } from './keyboard'
 import { deliver, isWayland } from './paste'
 import { FileSource, MicHub, MicRecorder } from './recorder'
 import { Store } from './store'
+import { MediaPause, systemPlayers } from './media'
 
 /**
  * satz for Windows and Linux. Double-tap right Ctrl, talk, double-tap again:
@@ -124,8 +125,10 @@ async function start() {
     }, 16)
   }
   session.onChange = pushState
-  session.onOpen = () => { card.show(); pushState() }
-  session.onClose = () => { card.hide(); refreshTray() }
+  // Never in test mode, where it would pause the user's music, unless a test asks.
+  const mediaPause = new MediaPause(systemPlayers(log), () => store.prefs.pausesMedia && (!testMode || args.includes('--test-media')), log)
+  session.onOpen = () => { card.show(); pushState(); mediaPause.dictationStarted() }
+  session.onClose = () => { card.hide(); refreshTray(); mediaPause.dictationEnded() }
 
   ipcMain.on('card:ready', pushState)
   ipcMain.on('card:button', (_e, button: string) => {

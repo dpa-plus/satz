@@ -12,7 +12,7 @@ interface Info {
   prefs: {
     provider: Provider; models: Record<string, string>; customBaseURL: string; words: string[]; triggerMode: 'tap' | 'hold'
     language: 'de' | 'en'; spokenLanguage: 'de' | 'en' | null; replacements: Replacement[]; usesReplacements: boolean; removesFillers: boolean
-    keepsOnClipboard: boolean; historyLimit: number
+    keepsOnClipboard: boolean; historyLimit: number; pausesMedia: boolean
   }
   hasKey: boolean; keyboard: string; wayland: boolean; platform: string; startAtLogin: boolean; spokenLanguage: 'de' | 'en'
 }
@@ -182,6 +182,8 @@ function render() {
   // General
   const startBox = el('input', { type: 'checkbox', checked: info.startAtLogin })
   startBox.onchange = async () => { await satz.invoke('settings:start-at-login', startBox.checked); await load() }
+  const mediaBox = el('input', { type: 'checkbox', checked: p.pausesMedia })
+  mediaBox.onchange = () => update({ pausesMedia: mediaBox.checked })
   // Off: whatever was copied before comes back after pasting.
   const keepBox = el('input', { type: 'checkbox', checked: p.keepsOnClipboard })
   keepBox.onchange = () => update({ keepsOnClipboard: keepBox.checked })
@@ -197,6 +199,7 @@ function render() {
     el('div', { className: 'row' }, el('span', { className: 'grow', textContent: t('Sprache', 'Language') }),
       select(p.language, [['de', 'Deutsch'], ['en', 'English']], v => update({ language: v }))),
     el('div', { className: 'row' }, el('label', { className: 'switch' }, t('Beim Anmelden starten', 'Start at login'), startBox)),
+    el('div', { className: 'row' }, el('label', { className: 'switch' }, t('Musik beim Diktieren pausieren', 'Pause music while dictating'), mediaBox)),
     el('div', { className: 'row' }, el('label', { className: 'switch' }, t('Text in der Zwischenablage behalten', 'Keep text on the clipboard'), keepBox)),
     el('div', { className: 'row' }, el('span', { className: 'grow', textContent: t('Verlauf behalten', 'Keep history') }), keep, show, clear))
 

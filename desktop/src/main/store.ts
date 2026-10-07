@@ -25,6 +25,8 @@ export interface Preferences {
   removesFillers: boolean
   /** The transcript stays on the clipboard after pasting, instead of what was copied before. */
   keepsOnClipboard: boolean
+  /** Music and videos pause while dictating, and play on afterwards. */
+  pausesMedia: boolean
   /** How many dictations the history keeps: 0 none, KEEP_ALL every one. */
   historyLimit: number
   showsText: boolean
@@ -76,6 +78,7 @@ export class Store {
       usesReplacements: true,
       removesFillers: true,
       keepsOnClipboard: false,
+      pausesMedia: true,
       historyLimit: STANDARD_HISTORY,
       showsText: true,
       cardSpot: null,
