@@ -28,6 +28,10 @@ bundle:
 	cp -R Resources/Fonts "$(APP)/Contents/Resources/Fonts"
 	cp Resources/AppIcon.icns "$(APP)/Contents/Resources/AppIcon.icns"
 	cp -R Resources/en.lproj Resources/de.lproj "$(APP)/Contents/Resources/"
+	# Reads what is playing, from inside /usr/bin/perl (see now-playing.m).
+	clang -dynamiclib -arch arm64 -arch x86_64 -mmacosx-version-min=14.0 -framework Foundation \
+		Resources/NowPlaying/now-playing.m -o "$(APP)/Contents/Resources/now-playing.dylib"
+	cp Resources/NowPlaying/now-playing.pl "$(APP)/Contents/Resources/"
 	# This folder is cloud-synced, which stamps extended attributes onto every
 	# file. codesign refuses to sign a bundle carrying them.
 	xattr -cr "$(APP)"

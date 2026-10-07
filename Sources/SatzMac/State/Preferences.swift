@@ -128,6 +128,11 @@ final class Preferences {
         didSet { defaults?.set(historyLimit, forKey: Key.historyLimit) }
     }
 
+    /// Music and videos pause while dictating, and play on afterwards.
+    var pausesMedia: Bool {
+        didSet { defaults?.set(pausesMedia, forKey: Key.pausesMedia) }
+    }
+
     /// The dictated text stays on the clipboard after pasting, instead of
     /// what was copied before coming back.
     var keepsOnClipboard: Bool {
@@ -201,6 +206,7 @@ final class Preferences {
         static let usesReplacements = "usesReplacements"
         static let keepsOnClipboard = "keepsOnClipboard"
         static let historyLimit = "historyLimit"
+        static let pausesMedia = "pausesMedia"
     }
 
     init(defaults: UserDefaults? = .standard) {
@@ -231,6 +237,7 @@ final class Preferences {
         usesReplacements = defaults?.object(forKey: Key.usesReplacements) as? Bool ?? true
         keepsOnClipboard = defaults?.bool(forKey: Key.keepsOnClipboard) ?? false
         historyLimit = defaults?.object(forKey: Key.historyLimit) as? Int ?? History.standardLimit
+        pausesMedia = defaults?.object(forKey: Key.pausesMedia) as? Bool ?? true
         // Only the real, stored preferences set the app-wide language and
         // colours; a fixture made for a snapshot must not reset them.
         if defaults != nil {

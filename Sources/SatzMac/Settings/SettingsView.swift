@@ -774,6 +774,13 @@ private struct GeneralBlock: View {
                 .frame(height: 48)
                 .help(launchAtLogin.problem ?? "")
                 Rule()
+                Toggle(isOn: $preferences.pausesMedia) {
+                    Text(de("Musik beim Diktieren pausieren", en: "Pause music while dictating"))
+                }
+                .toggleStyle(AccentToggleStyle())
+                .padding(.horizontal, 16)
+                .frame(height: 48)
+                Rule()
                 // Off: whatever was copied before comes back after pasting.
                 Toggle(isOn: $preferences.keepsOnClipboard) {
                     Text(de("Text in der Zwischenablage behalten", en: "Keep text on the clipboard"))

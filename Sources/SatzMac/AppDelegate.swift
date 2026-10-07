@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var setupWindow: AppWindow!
     private var historyWindow: AppWindow!
     private var devControl: DevControl?
+    private let mediaPause = MediaPause()
 
     /// A dictation tool is only useful if it is there when the Mac starts, so
     /// starting at login is on from the first launch. Only once: switched off
@@ -92,8 +93,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         session = Session(preferences: preferences, history: history, discarded: discarded)
         card = CardController(session: session, preferences: preferences)
-        session.onOpen = { [weak self] in self?.card.show() }
-        session.onClose = { [weak self] in self?.card.hide() }
+        session.onOpen = { [weak self] in self?.card.show(); self?.mediaPause.dictationStarted() }
+        session.onClose = { [weak self] in self?.card.hide(); self?.mediaPause.dictationEnded() }
+        // Never in test mode, where it would pause the user's own music,
+        // unless a test asks for it.
+        mediaPause.isOn = { [weak self] in
+            guard let self else { return false }
+            return preferences.pausesMedia && (argument(after: "--dev-control") == nil || CommandLine.arguments.contains("--test-media"))
+        }
         if let files = argument(after: "--test-audio") {
             AudioSources.testFiles = files.split(separator: ":").map { URL(fileURLWithPath: String($0)) }
         }
