@@ -6,14 +6,13 @@ import SatzKit
 ///
 /// There is no supported way to insert text into another application's text
 /// field, so this does what every dictation tool does: put the text on the
-/// pasteboard and synthesise Command+V. Two things can stop that, and both are
-/// handled by falling back rather than failing:
+/// pasteboard and synthesise Command+V. Without Accessibility the synthesised
+/// keys go nowhere; then the text stays on the clipboard, nothing is lost,
+/// and the user is told to press Command+V themselves.
 ///
-/// - Accessibility has not been granted, so synthesised keys go nowhere.
-/// - Another application holds macOS Secure Input, which swallows them.
-///
-/// In both cases the text is already on the clipboard, so nothing is lost and
-/// the user is told to press Command+V themselves.
+/// Secure Input is not a reason to stop. It keeps apps from reading keys, not
+/// from sending them, and an app can leave it on by mistake: on 07.10. the
+/// Claude app held it for hours and every dictation ended on the clipboard.
 @MainActor
 enum Paster {
 
@@ -49,9 +48,13 @@ enum Paster {
             return .clipboardOnly(de("Auf der Zwischenablage.", en: "On the clipboard."))
         }
 
+        // Whether ⌘V landed cannot be seen. While some app holds Secure Input
+        // the text stays on the clipboard too, so ⌘V by hand always works.
+        let secure = IsSecureEventInputEnabled()
+        if secure { Log.note("paste: Secure Input is on (held by \(secureInputHolder())), sent ⌘V anyway and kept the text on the clipboard") }
         restoreFocus(to: origin)
         sendCommandV()
-        if !keepsOnClipboard {
+        if !keepsOnClipboard, !secure {
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(400))
                 putBack(previous, on: pasteboard, ifStill: ours)
@@ -65,10 +68,14 @@ enum Paster {
         if !AXIsProcessTrusted() {
             return de("Auf der Zwischenablage. satz braucht Bedienungshilfen-Zugriff zum Einfügen.", en: "On the clipboard. satz needs Accessibility access to paste.")
         }
-        if IsSecureEventInputEnabled() {
-            return de("Auf der Zwischenablage. Ein Programm blockiert gerade Tastatureingaben.", en: "On the clipboard. An app is blocking keyboard input right now.")
-        }
         return nil
+    }
+
+    /// The app that switched Secure Input on, for the log.
+    static func secureInputHolder() -> String {
+        guard let session = CGSessionCopyCurrentDictionary() as? [String: Any],
+              let pid = session["kCGSSessionSecureInputPID"] as? Int32 else { return "?" }
+        return NSRunningApplication(processIdentifier: pid)?.localizedName ?? "process \(pid)"
     }
 
     /// Opens System Settings at the Accessibility pane, and prompts the first time.
