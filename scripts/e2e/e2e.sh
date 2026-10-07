@@ -1,11 +1,15 @@
 #!/bin/zsh
 # Test-mode helpers. Usage:
+#   scripts/e2e/test-copy.sh --build      once per change: makes "satz test.app"
 #   source scripts/e2e/e2e.sh
 #   launch "a.wav:b.wav" [-triggerMode hold ...]; cmd press; sleep 6; cmd press; st; stop
 # A test copy never pastes, and leaves the real satz's shortcut and Escape alone.
+# It runs as "satz test" with its own settings; without the copy it falls back
+# to dist/satz.app, which shares the real satz's settings.
 E2E_DIR=${E2E_DIR:-"${TMPDIR:-/tmp}/satz-e2e"}
 SATZ_ROOT=${0:A:h:h:h}
-APP="$SATZ_ROOT/dist/satz.app/Contents/MacOS/satz"
+APP="$HOME/Applications/satz test.app/Contents/MacOS/satz"
+[ -x "$APP" ] || APP="$SATZ_ROOT/dist/satz.app/Contents/MacOS/satz"
 [ -x "$E2E_DIR/satzdev" ] || { mkdir -p "$E2E_DIR"; swiftc -O "$SATZ_ROOT/scripts/e2e/satzdev.swift" -o "$E2E_DIR/satzdev"; }
 [ -f "$E2E_DIR/a.wav" ] || "$SATZ_ROOT/scripts/e2e/make-audio.sh" "$E2E_DIR" >/dev/null
 launch() {
