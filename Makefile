@@ -17,6 +17,10 @@ share:
 	swift build -c release --arch arm64 --arch x86_64 --scratch-path "$(UNIVERSAL)"
 	$(MAKE) bundle BIN="$(UNIVERSAL)/out/Products/Release/SatzMac"
 	rm -f dist/satz.zip
+	# Finder can leave an empty "Icon\r" in an app it has shown, and any file
+	# there breaks the signature's seal: the download would count as damaged.
+	find "$(APP)" -maxdepth 1 -name 'Icon?' -delete
+	codesign --verify --deep --strict "$(APP)"
 	# Without the files' extended attributes: as ._ files they land inside the
 	# bundle with any unzip but Finder's.
 	ditto -c -k --norsrc --noextattr --keepParent "$(APP)" dist/satz.zip
