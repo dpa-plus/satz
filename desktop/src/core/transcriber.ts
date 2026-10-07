@@ -26,6 +26,11 @@ export interface TranscriberSettings {
   /** Seconds before the first byte; one more second per four of audio. */
   timeout?: number
   attempts?: number
+  /** Seconds to wait before asking a second time with the same audio; null
+   *  never does. MAI-Transcribe usually answers in a second or two but now
+   *  and then takes ten or more; the second request is usually back long
+   *  before. The first answer wins. */
+  backupAfter?: number | null
 }
 
 export type FailureKind = 'noKey' | 'unauthorized' | 'rateLimited' | 'offline' | 'timedOut' | 'server' | 'unreadableResponse'
@@ -72,8 +77,10 @@ export function openRouterBody(settings: TranscriberSettings, wav: Uint8Array) {
   const body: Record<string, unknown> = {
     model,
     input_audio: { data: base64(wav), format: 'wav' },
-    provider: { options: { azure } },
   }
+  // Only MAI-Transcribe 2 takes these: MAI-Transcribe 1.5, also at Azure,
+  // refused the whole request when they came along.
+  if (model.includes('mai-transcribe-2')) body.provider = { options: { azure } }
   if (settings.language) body.language = settings.language
   if (settings.vocabulary.length > 0) body.prompt = settings.vocabulary.join(', ')
   return body
@@ -121,12 +128,47 @@ function messageIn(body: string): string | undefined {
 
 export async function transcribe(settings: TranscriberSettings, wav: Uint8Array, apiKey: string, fetcher: Fetch = fetch as unknown as Fetch, sleep = (ms: number) => new Promise(r => setTimeout(r, ms))): Promise<string> {
   if (!apiKey) throw new TranscriptionFailure('noKey')
+  const delay = settings.backupAfter === undefined ? 2.5 : settings.backupAfter
+  if (delay === null) return attempt(settings, wav, apiKey, fetcher, sleep)
+
+  const controllers: AbortController[] = []
+  const ask = () => { const c = new AbortController(); controllers.push(c); return attempt(settings, wav, apiKey, fetcher, sleep, c.signal) }
+  return new Promise<string>((resolve, reject) => {
+    let running = 1
+    let backedUp = false
+    let done = false
+    let firstFailure: unknown
+    const finish = (settle: () => void) => {
+      if (done) return
+      done = true
+      clearTimeout(timer)
+      controllers.forEach(c => c.abort())
+      settle()
+    }
+    const follow = (request: Promise<string>) => request.then(
+      text => finish(() => resolve(text)),
+      error => {
+        running--
+        firstFailure ??= error
+        // A failure before the second request went out is the answer:
+        // rejected keys and the like do not get better.
+        if (!backedUp || running === 0) finish(() => reject(firstFailure))
+      },
+    )
+    follow(ask())
+    const timer = setTimeout(() => { backedUp = true; running++; follow(ask()) }, delay * 1000)
+  })
+}
+
+/** One request, tried again while the provider throttles. */
+async function attempt(settings: TranscriberSettings, wav: Uint8Array, apiKey: string, fetcher: Fetch, sleep: (ms: number) => Promise<unknown>, cancel?: AbortSignal): Promise<string> {
   const request = makeRequest(settings, wav, apiKey)
   const attempts = settings.attempts ?? 3
   for (let attempt = 1; ; attempt++) {
     let response: Response
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), request.timeout)
+    cancel?.addEventListener('abort', () => controller.abort())
     try {
       response = await fetcher(request.url, { method: 'POST', headers: request.headers, body: request.body, signal: controller.signal })
     } catch (error) {

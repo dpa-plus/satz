@@ -73,3 +73,19 @@ test('each model menu starts with the provider default and has no doubles', () =
   }
   assert.equal(choiceFor('openrouter', 'someone/new-model'), undefined)
 })
+
+test('a second request answers when the first is slow; a rejected key fails at once', async () => {
+  const later = (ms: number, status: number, body: string) => new Promise<Response>(resolve => setTimeout(() => resolve(response(status, body)), ms))
+  let calls = 0
+  const slowThenFast = async () => (++calls === 1 ? later(3000, 200, '{"text":"slow"}') : later(0, 200, '{"text":"fast"}'))
+  const start = Date.now()
+  assert.equal(await transcribe({ ...openrouter, backupAfter: 0.2 }, wav, 'k', slowThenFast, async () => {}), 'fast')
+  assert.ok(Date.now() - start < 1500)
+  assert.equal(calls, 2)
+
+  calls = 0
+  const rejected = async () => { calls++; return response(401, '') }
+  await assert.rejects(transcribe({ ...openrouter, backupAfter: 0.5 }, wav, 'k', rejected, async () => {}), (e: TranscriptionFailure) => e.kind === 'unauthorized')
+  await new Promise(resolve => setTimeout(resolve, 700))
+  assert.equal(calls, 1)
+})

@@ -81,7 +81,8 @@ async function start() {
   let keyboard: Keyboard | null = null
 
   const session = new Session({
-    makeSource: (): AudioSource => (testAudio.length > 0 ? new FileSource(testAudio.shift()!) : new MicRecorder(hub)),
+    // In test mode silence once the files run out: a test never records the room.
+    makeSource: (): AudioSource => (testMode && flag('--test-audio') !== undefined ? new FileSource(testAudio.shift() ?? null) : new MicRecorder(hub)),
     transcribe: samples => transcribe(store.transcriberSettings(), encodeWAV(samples), store.readKey() ?? ''),
     replacements: () => store.activeReplacements,
     hasKey: () => store.hasKey(),

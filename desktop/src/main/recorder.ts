@@ -117,7 +117,9 @@ export class FileSource implements AudioSource {
   private stoppedAt: number | null = null
   private ticker: ReturnType<typeof setInterval> | null = null
 
-  constructor(file: string) {
+  /** null plays silence. */
+  constructor(file: string | null) {
+    if (file === null) { this.samples0 = new Float32Array(0); return }
     const { samples, sampleRate } = decodeWAV(new Uint8Array(fs.readFileSync(file)))
     this.samples0 = resample(samples, sampleRate)
   }

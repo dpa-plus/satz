@@ -40,6 +40,12 @@ public struct Transcriber: Sendable {
         /// nil lets the model detect the language, which is what you want if
         /// you switch languages mid-sentence.
         public var language: String?
+        /// How long to wait before asking a second time, with the same audio.
+        /// MAI-Transcribe usually answers in one or two seconds but now and
+        /// then takes ten or more for the same kind of audio (13 of 77 real
+        /// dictations over five seconds, one 15.6 s); a second request is
+        /// usually back long before. The first answer wins. nil: never.
+        public var backupAfter: TimeInterval? = 2.5
 
         public init() {}
 
@@ -97,7 +103,51 @@ public struct Transcriber: Sendable {
     /// - Parameter wav: 16-bit PCM WAV bytes, as produced by `WAVEncoder`.
     public func transcribe(wav: Data, apiKey: String) async throws -> String {
         guard !apiKey.isEmpty else { throw Failure.noKey }
+        guard let delay = settings.backupAfter else { return try await attempt(wav: wav, apiKey: apiKey) }
 
+        enum Event: Sendable {
+            case answer(Result<String, any Error>)
+            case timer
+        }
+        let ask: @Sendable () async -> Event = {
+            do { return .answer(.success(try await attempt(wav: wav, apiKey: apiKey))) } catch { return .answer(.failure(error)) }
+        }
+        return try await withThrowingTaskGroup(of: Event.self) { group in
+            group.addTask(operation: ask)
+            group.addTask {
+                try await Task.sleep(for: .seconds(delay))
+                return .timer
+            }
+            var running = 1
+            var backedUp = false
+            var firstFailure: (any Error)?
+            while let event = try await group.next() {
+                switch event {
+                case .timer:
+                    guard running > 0 else { continue }
+                    backedUp = true
+                    running += 1
+                    group.addTask(operation: ask)
+                case .answer(.success(let text)):
+                    group.cancelAll()
+                    return text
+                case .answer(.failure(let error)):
+                    running -= 1
+                    firstFailure = firstFailure ?? error
+                    // A failure before the second request went out is the
+                    // answer: rejected keys and the like do not get better.
+                    if !backedUp || running == 0 {
+                        group.cancelAll()
+                        throw firstFailure ?? error
+                    }
+                }
+            }
+            throw firstFailure ?? Failure.unreadableResponse
+        }
+    }
+
+    /// One request, tried again while the provider throttles.
+    private func attempt(wav: Data, apiKey: String) async throws -> String {
         let request = makeRequest(wav: wav, apiKey: apiKey)
         var attempt = 1
         while true {
