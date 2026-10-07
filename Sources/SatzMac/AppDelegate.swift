@@ -151,6 +151,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     openSetup: { [weak self] in self?.menuBar.close(); self?.setupWindow.show() },
                     openSettings: { [weak self] in self?.menuBar.close(); self?.show(.settings) },
                     openHistory: { [weak self] in self?.menuBar.close(); self?.show(.history) },
+                    insert: { [weak self] text in
+                        guard let self else { return }
+                        menuBar.close()
+                        // The menu never took the focus: the app in front is
+                        // still the one with the field.
+                        let target = Session.frontmostOtherApp()
+                        // A test copy never types into the user's apps.
+                        guard devControl == nil else {
+                            Log.note("insert from the menu into \(target?.localizedName ?? "?"): test mode, not pasted")
+                            return
+                        }
+                        let outcome = Paster.deliver(text, into: target, keepsOnClipboard: preferences.keepsOnClipboard)
+                        Log.note("insert from the menu into \(target?.localizedName ?? "?"): \(outcome == .pasted ? "sent ⌘V" : "clipboard only")")
+                    },
                     quit: { NSApp.terminate(nil) }
                 )
             ))

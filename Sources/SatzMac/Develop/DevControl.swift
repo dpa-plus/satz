@@ -59,7 +59,7 @@ final class DevControl {
         case "settings", "setup", "history", "menu", "close": open(command)
         case "strand": strand()
         case "quit": NSApp.terminate(nil)
-        case "field": Log.note("focused field: \(FocusedField.frame().map { NSStringFromRect($0) } ?? "unknown")")
+        case "field": Log.note("focused field: \(FocusedField.frame().map { NSStringFromRect($0) } ?? "unknown"), editable \(FocusedField.isEditable(in: Session.frontmostOtherApp())) in \(Session.frontmostOtherApp()?.localizedName ?? "?")")
         case "picture":
             try? card.picture()?.write(to: stateFile.deletingPathExtension().appendingPathExtension("png"))
         case "film": film()

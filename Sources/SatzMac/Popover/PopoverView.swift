@@ -23,7 +23,7 @@ struct PopoverView: View {
             problem
 
             if let latest = history.entries.first {
-                LatestCard(entry: latest)
+                LatestCard(entry: latest, insert: actions.insert)
                 EarlierRows(entries: Array(history.entries.dropFirst().prefix(History.shownInMenu - 1)))
                 if history.entries.count > History.shownInMenu {
                     ShowAllRow(count: history.entries.count, open: actions.openHistory)
@@ -73,6 +73,8 @@ struct PopoverActions {
     var openSetup: () -> Void = {}
     var openSettings: () -> Void = {}
     var openHistory: () -> Void = {}
+    /// Pastes this text into the field the user is typing in.
+    var insert: (String) -> Void = { _ in }
     var quit: () -> Void = {}
 }
 
@@ -147,6 +149,7 @@ private struct DiscardedRow: View {
 
 private struct LatestCard: View {
     let entry: History.Entry
+    let insert: (String) -> Void
     @Environment(\.theme) private var theme
 
     var body: some View {
@@ -165,6 +168,7 @@ private struct LatestCard: View {
                 Text(meta)
                     .font(Typography.text(13))
                 Spacer()
+                InsertButton(text: entry.text, insert: insert)
                 CopyButton(text: entry.text)
             }
             .foregroundStyle(theme.inkOnCard)
@@ -233,6 +237,39 @@ private struct EarlierRow: View {
         Task {
             try? await Task.sleep(for: .seconds(1.2))
             copied = false
+        }
+    }
+}
+
+/// Puts the text into the field the user is typing in, as if dictated again.
+/// Only clickable while the app in front has one focused: elsewhere the text
+/// would go nowhere.
+private struct InsertButton: View {
+    let text: String
+    let insert: (String) -> Void
+    @Environment(\.theme) private var theme
+    @Environment(\.isSnapshot) private var isSnapshot
+    @State private var canInsert = false
+
+    var body: some View {
+        Button { insert(text) } label: {
+            Image(systemName: "text.insert")
+                .font(.system(size: 14, weight: .semibold))
+                .frame(width: 18)
+        }
+        .buttonStyle(OutlineButtonStyle(compact: false))
+        .frame(width: 44)
+        .disabled(!canInsert && !isSnapshot)
+        .opacity(canInsert || isSnapshot ? 1 : 0.45)
+        .help(canInsert ? de("In das Textfeld einfügen", en: "Insert into the text field")
+                        : de("Erst in ein Textfeld klicken", en: "Click into a text field first"))
+        .accessibilityLabel(de("Einfügen", en: "Insert"))
+        // The field can change while the menu is open; looked at twice a second.
+        .task {
+            while !Task.isCancelled {
+                canInsert = FocusedField.isEditable(in: Session.frontmostOtherApp())
+                try? await Task.sleep(for: .milliseconds(500))
+            }
         }
     }
 }

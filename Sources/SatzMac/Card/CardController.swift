@@ -220,6 +220,31 @@ final class CardPanel: NSPanel {
 /// Accessibility (which satz has anyway, to paste).
 enum FocusedField {
 
+    /// Whether the app has a place to type in focused: a text field, a text
+    /// area, or editable web content. Asked by the menu's Insert button,
+    /// which has nowhere to put text otherwise. The app is asked by its
+    /// process, because the open menu holds the keyboard itself.
+    static func isEditable(in app: NSRunningApplication?) -> Bool {
+        guard let app else { return false }
+        let target = AXUIElementCreateApplication(app.processIdentifier)
+        AXUIElementSetMessagingTimeout(target, 0.25)
+        var focused: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(target, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+              let element = focused, CFGetTypeID(element) == AXUIElementGetTypeID() else { return false }
+        let field = element as! AXUIElement
+        var role: CFTypeRef?
+        AXUIElementCopyAttributeValue(field, kAXRoleAttribute as CFString, &role)
+        if let role = role as? String, ["AXTextField", "AXTextArea", "AXComboBox", "AXSearchField"].contains(role) { return true }
+        // A slider's value is settable too; only text counts.
+        var settable: DarwinBoolean = false
+        var value: CFTypeRef?
+        if AXUIElementIsAttributeSettable(field, kAXValueAttribute as CFString, &settable) == .success, settable.boolValue,
+           AXUIElementCopyAttributeValue(field, kAXValueAttribute as CFString, &value) == .success, value is String { return true }
+        // Browsers mark what lies inside an editable web area.
+        var ancestor: CFTypeRef?
+        return AXUIElementCopyAttributeValue(field, "AXEditableAncestor" as CFString, &ancestor) == .success && ancestor != nil
+    }
+
     /// In AppKit screen coordinates. nil when it cannot be known, or when
     /// what has focus is too big to be a text field (some apps report their
     /// whole web view), which would push the card off the screen.
