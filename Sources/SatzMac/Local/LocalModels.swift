@@ -240,21 +240,27 @@ final class LocalModels {
     }
 
     nonisolated private static func whisperTranscribe(_ samples: [Float], kit: Kit, vocabulary: [String]) async throws -> String {
-        // Whisper finds the language itself, per recording, so German and
-        // English both work without a setting.
-        var options = DecodingOptions(task: .transcribe, language: nil, temperature: 0, usePrefillPrompt: true,
-                                      detectLanguage: true, skipSpecialTokens: true, withoutTimestamps: true)
+        let decode = { (prompt: [Int]?) async throws -> String in
+            // Whisper finds the language itself, per recording, so German and
+            // English both work without a setting.
+            var options = DecodingOptions(task: .transcribe, language: nil, temperature: 0, usePrefillPrompt: true,
+                                          detectLanguage: true, skipSpecialTokens: true, withoutTimestamps: true)
+            options.promptTokens = prompt
+            let results = try await kit.whisper.transcribe(audioArray: samples, decodeOptions: options)
+            return results.map(\.text).joined(separator: " ")
+                .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        }
+        let plain = try await decode(nil)
+        guard !vocabulary.isEmpty, let tokenizer = kit.whisper.tokenizer else { return plain }
         // The word list goes in as Whisper's own prompt: text it takes as
         // having come before, so it spells those words the same way. It
         // copies the prompt's style too: without the full stop, sentences
         // came back without theirs.
-        if !vocabulary.isEmpty, let tokenizer = kit.whisper.tokenizer {
-            options.promptTokens = tokenizer.encode(text: " " + vocabulary.joined(separator: ", ") + ".")
-                .filter { $0 < tokenizer.specialTokens.specialTokenBegin }
-        }
-        let results = try await kit.whisper.transcribe(audioArray: samples, decodeOptions: options)
-        return results.map(\.text).joined(separator: " ")
-            .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        let prompt = tokenizer.encode(text: " " + vocabulary.joined(separator: ", ") + ".")
+            .filter { $0 < tokenizer.specialTokens.specialTokenBegin }
+        let kept = WordCheck.keepEveryWord(prompted: try await decode(prompt), plain: plain)
+        if !kept.usedPrompt { Log.note("local: the word list cost words here, kept the text without it") }
+        return kept.text
     }
 
     // MARK: - Apple
