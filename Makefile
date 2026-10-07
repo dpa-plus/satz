@@ -17,7 +17,9 @@ share:
 	swift build -c release --arch arm64 --arch x86_64 --scratch-path "$(UNIVERSAL)"
 	$(MAKE) bundle BIN="$(UNIVERSAL)/out/Products/Release/SatzMac"
 	rm -f dist/satz.zip
-	ditto -c -k --keepParent "$(APP)" dist/satz.zip
+	# Without the files' extended attributes: as ._ files they land inside the
+	# bundle with any unzip but Finder's.
+	ditto -c -k --norsrc --noextattr --keepParent "$(APP)" dist/satz.zip
 	@echo "built dist/satz.zip"
 
 bundle:
