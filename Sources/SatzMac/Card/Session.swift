@@ -75,6 +75,9 @@ final class Session {
     @ObservationIgnored private(set) var isEditing = false
 
     @ObservationIgnored var onOpen: () -> Void = {}
+    /// The microphone starts: a new dictation, or more after a pause. The card
+    /// also opens for messages, which are not a reason to pause the music.
+    @ObservationIgnored var onRecord: () -> Void = {}
     /// Test mode: receives the finished text instead of it being pasted.
     @ObservationIgnored var deliverOverride: ((String) -> Void)?
     @ObservationIgnored var onClose: () -> Void = {}
@@ -328,6 +331,7 @@ final class Session {
         startToken += 1
         let mine = startToken
         phase = .starting
+        onRecord()
         levels = Array(repeating: 0, count: levels.count)
         holdEscape()
 

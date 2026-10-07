@@ -32,7 +32,10 @@ final class MediaPause {
         Task.detached(priority: .userInitiated) {
             guard await pausing.value else { return }
             // Something the user started in the meantime is theirs: leave it.
-            if let state = NowPlaying.read(), state.playing { return }
+            if let state = NowPlaying.read(), state.playing {
+                Log.note("media left as the user set it")
+                return
+            }
             MediaCommand.send(.play)
             Log.note("media resumed")
         }

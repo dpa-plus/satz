@@ -15,14 +15,18 @@ import { createInterface } from 'node:readline'
 export interface Players {
   /** Pauses what is playing and returns who it paused. */
   pause(): Promise<string[]>
-  /** Plays these again, if they are still paused. */
-  play(ids: string[]): Promise<void>
+  /** Plays these again where they are still paused, and returns which. */
+  play(ids: string[]): Promise<string[]>
+  /** Gets ready ahead of the first dictation, where that takes long. */
+  prepare?(): void
 }
 
 export class MediaPause {
   private pausing: Promise<string[]> | null = null
 
-  constructor(private players: Players | null, private isOn: () => boolean, private log: (message: string) => void) {}
+  constructor(private players: Players | null, private isOn: () => boolean, private log: (message: string) => void) {
+    if (isOn()) players?.prepare?.()
+  }
 
   dictationStarted() {
     if (!this.players || !this.isOn() || this.pausing) return
@@ -36,8 +40,8 @@ export class MediaPause {
     if (!pausing || !this.players) return
     const ids = await pausing
     if (ids.length === 0) return
-    await this.players.play(ids).catch(error => this.log(`media: ${(error as Error).message}`))
-    this.log(`media resumed: ${ids.join(', ')}`)
+    const resumed = await this.players.play(ids).catch(error => { this.log(`media: ${(error as Error).message}`); return [] as string[] })
+    this.log(resumed.length ? `media resumed: ${resumed.join(', ')}` : 'media left as the user set it')
   }
 }
 
@@ -80,9 +84,13 @@ class Mpris implements Players {
   }
 
   async play(names: string[]) {
+    const played: string[] = []
     for (const name of names) {
-      if ((await this.status(name).catch(() => '')) === 'Paused') await this.call(name, 'Play').catch(() => {})
+      if ((await this.status(name).catch(() => '')) !== 'Paused') continue
+      await this.call(name, 'Play')
+      played.push(name)
     }
+    return played
   }
 }
 
@@ -95,6 +103,7 @@ class Mpris implements Players {
  */
 const SCRIPT = String.raw`
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
 $asTask = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation` + '`' + String.raw`1' } | Select-Object -First 1
 function Await($operation, [Type]$type) { $task = $asTask.MakeGenericMethod($type).Invoke($null, @($operation)); $task.Wait(-1) | Out-Null; $task.Result }
@@ -139,7 +148,11 @@ class WindowsMedia implements Players {
       helper.on('error', reject)
     })
     createInterface({ input: helper.stdout }).on('line', line => this.waiting.shift()?.(line.trim()))
-    helper.stderr.on('data', chunk => this.log(`media helper: ${String(chunk).trim().split('\n')[0]}`))
+    helper.stderr.on('data', chunk => {
+      const line = String(chunk).trim().split('\n')[0]
+      // PowerShell reports progress as CLIXML on stderr; not an error.
+      if (!line.startsWith('#< CLIXML')) this.log(`media helper: ${line}`)
+    })
     helper.on('exit', () => { this.helper = null; this.ready = null; this.waiting.splice(0).forEach(answer => answer('error helper stopped')) })
     return this.ready
   }
@@ -155,6 +168,8 @@ class WindowsMedia implements Players {
     return answer.slice(3).split(' ').filter(Boolean)
   }
 
+  /** PowerShell takes seconds to start: started with satz, not with the first dictation. */
+  prepare() { this.start().catch(error => this.log(`media helper: ${(error as Error).message}`)) }
   pause() { return this.ask('pause') }
-  async play(ids: string[]) { await this.ask(`play ${ids.join(' ')}`) }
+  play(ids: string[]) { return this.ask(`play ${ids.join(' ')}`) }
 }

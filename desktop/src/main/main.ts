@@ -127,7 +127,8 @@ async function start() {
   session.onChange = pushState
   // Never in test mode, where it would pause the user's music, unless a test asks.
   const mediaPause = new MediaPause(systemPlayers(log), () => store.prefs.pausesMedia && (!testMode || args.includes('--test-media')), log)
-  session.onOpen = () => { card.show(); pushState(); mediaPause.dictationStarted() }
+  session.onOpen = () => { card.show(); pushState() }
+  session.onRecord = () => mediaPause.dictationStarted()
   session.onClose = () => { card.hide(); refreshTray(); mediaPause.dictationEnded() }
 
   ipcMain.on('card:ready', pushState)

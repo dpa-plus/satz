@@ -93,7 +93,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         session = Session(preferences: preferences, history: history, discarded: discarded)
         card = CardController(session: session, preferences: preferences)
-        session.onOpen = { [weak self] in self?.card.show(); self?.mediaPause.dictationStarted() }
+        session.onOpen = { [weak self] in self?.card.show() }
+        session.onRecord = { [weak self] in self?.mediaPause.dictationStarted() }
         session.onClose = { [weak self] in self?.card.hide(); self?.mediaPause.dictationEnded() }
         // Never in test mode, where it would pause the user's own music,
         // unless a test asks for it.

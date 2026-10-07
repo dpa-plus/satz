@@ -80,6 +80,9 @@ export class Session {
 
   onChange: () => void = () => {}
   onOpen: () => void = () => {}
+  /** The microphone starts: a new dictation, or more after a pause. The card
+   *  also opens for messages, which are not a reason to pause the music. */
+  onRecord: () => void = () => {}
   onClose: () => void = () => {}
 
   private segments = new Map<number, Segment>()
@@ -259,6 +262,7 @@ export class Session {
   private startRecording() {
     const mine = ++this.startToken
     this.phase = { kind: 'starting' }
+    this.onRecord()
     this.levels = this.levels.map(() => 0)
     this.changed()
     const source = this.deps.makeSource()

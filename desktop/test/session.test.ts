@@ -211,3 +211,17 @@ test('restoring from the tray while dictating keeps the discarded text', async (
   assert.equal(session.phase.kind, 'listening')
   session.dispose()
 })
+
+test('music pauses for recording, not for the card that says nothing was heard', async () => {
+  // Pausing whenever the card opened paused music the user had just started
+  // again, when the card came back to say "Nothing heard".
+  const { session, sources } = setup([''])
+  let records = 0
+  session.onRecord = () => { records++ }
+  session.press(); await settle()
+  sources[0].say()
+  session.press(); await settle()
+  assert.equal(session.phase.kind, 'failed')
+  assert.equal(records, 1)
+  session.dispose()
+})
