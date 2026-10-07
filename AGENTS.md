@@ -36,7 +36,7 @@ cmd press; sleep 6; cmd press; st    # dictate, finish, print phase and text
 stop                                 # always stop it: a second menu bar icon confuses the user
 ```
 
-- Test mode (`--test-audio … --dev-control state.json`) never pastes: the text goes to the state file. Commands: `press`, `release`, `mic`, `discard`, `undo`, `eye`, `caret:<n>`, `dump`, `picture`, `film`, `clipboard`, `strand`, `settings`, `setup`, `history`, `menu`, `close`.
+- Test mode (`--test-audio … --dev-control state.json`) never pastes: the text goes to the state file, and it never pauses the user's music unless `--test-media` is given (test against a stand-in player, not the user's Spotify). Commands: `press`, `release`, `mic`, `discard`, `undo`, `eye`, `caret:<n>`, `dump`, `picture`, `film`, `clipboard`, `strand`, `settings`, `setup`, `history`, `menu`, `close`.
 - The test copy shares the key files in `~/Library/Application Support/satz` with the real satz. In test mode the history lives next to the state file, so the user's is never touched.
 - Windows only come forward when the app is opened for real: `open "$HOME/Applications/satz test.app"`. A test-mode command cannot make satz the active app.
 - `satz --snapshot <dir>` renders every surface to PNGs without a window or permissions. Use it to look at UI.

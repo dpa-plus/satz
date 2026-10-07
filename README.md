@@ -68,6 +68,11 @@ Talk, tap twice again, and the text is pasted. satz starts by itself when you lo
 - **Hide the text** with the eye if you only want the small waveform.
 - **Throw it away** with ×, then *Undo* for a few seconds, or *Restore* from the menu bar after that.
 - **Move the card** anywhere. It stays where you put it and never leaves the screen.
+- **Music pauses by itself** while you talk (Spotify, Apple Music, YouTube in the browser, anything the system lists as playing) and plays on when you are done. Only what was playing, and only what satz paused.
+
+**Find it again**
+- **Open satz** from Applications, Spotlight or the Start menu and you get your **History**: everything you dictated, by day, with search. A click copies, × forgets one.
+- **Keep** the last 10, 50, 200 or all of them, or none. The menu bar shows the last four.
 
 **In Settings**
 - **Vocabulary:** names and terms the model should spell your way ("Kubernetes", your colleague's name).
@@ -75,7 +80,6 @@ Talk, tap twice again, and the text is pasted. satz starts by itself when you lo
 - **Spoken in:** German or English, separately from the app's language.
 - **Shortcut:** tap to start and stop, or hold while you talk. On the Mac also your own key combination or a mouse button.
 - **Keep text on the clipboard:** off by default, so whatever you had copied comes back after pasting. On, the dictated text stays there to paste again.
-- **History:** the last dictations in the menu bar, one click to copy.
 - **Look:** four colours, light and dark, Liquid Glass on macOS 26.
 
 ## Built not to lose your words
@@ -90,16 +94,30 @@ Talk, tap twice again, and the text is pasted. satz starts by itself when you lo
 | It pastes into the wrong app | The text goes back to the app you started in |
 | It eats your clipboard | What you had copied is put back after pasting |
 
-## Providers
+## Providers and models
 
 | Provider | Default model | Notes |
 |---|---|---|
-| **OpenRouter** (recommended) | `microsoft/mai-transcribe-2` | Clean mode, uses your vocabulary as a phrase list |
-| OpenAI | `gpt-transcribe` | |
-| Groq | `whisper-large-v3-turbo` | Very fast |
+| **OpenRouter** (recommended) | Microsoft MAI-Transcribe 2 | One key, 17 models to choose from |
+| OpenAI | GPT Transcribe | Also GPT-4o (mini) Transcribe, Whisper |
+| Groq | Whisper Large v3 Turbo | Very fast |
 | Custom | your URL and model | Any OpenAI-compatible endpoint |
 
-Each provider keeps its own key and model, so you can switch back and forth.
+With an OpenRouter key you pick the model from a menu. Every one passed a German and an English test dictation with satz (October 2026); the menu shows what an hour of talking cost then:
+
+| Model | per hour | |
+|---|---|---|
+| Microsoft MAI-Transcribe 2 | $0.10 | Default. Clean mode drops "uhm"s; the vocabulary is its phrase list |
+| OpenAI GPT Transcribe, GPT-4o, GPT-4o mini, Whisper | $0.12 to $0.37 | |
+| OpenAI Whisper Large v3 / v3 Turbo | $0.03 / $0.01 | The cheapest |
+| AssemblyAI Universal-3.5 Pro | $0.44 | |
+| Mistral Voxtral Mini Transcribe, Small, Mini 3B | $0.06 to $0.18 | |
+| Qwen3 ASR Flash, 1.7B, 0.6B | $0.01 to $0.11 | |
+| xAI Grok STT | $0.10 | |
+| Google Chirp 3 | $1.00 | |
+| Fish Audio Transcribe 1 | $0.37 | |
+
+"Other model" takes any model id by hand. Each provider keeps its own key and model, so you can switch back and forth.
 
 ## Your key and your data
 
