@@ -30,6 +30,7 @@ struct SettingsView: View {
                     // way to notice.
                     while !Task.isCancelled {
                         setup.refresh()
+                        launchAtLogin.refresh()
                         try? await Task.sleep(for: .seconds(1))
                     }
                 }
@@ -208,6 +209,10 @@ private struct ModelRow: View {
     @Environment(\.theme) private var theme
     @Environment(\.isSnapshot) private var isSnapshot
     @State private var typing = false
+    /// What is typed in the Model ID field, saved only on Return or when the
+    /// field is left: saved on every keystroke, one stray key changed the
+    /// model, and the field wrote its old text back over a pick from the menu.
+    @State private var draft = ""
     @FocusState private var idFocused: Bool
 
     private static let other = "\u{0}other"
@@ -236,7 +241,10 @@ private struct ModelRow: View {
                         .pickerStyle(.inline)
                         .labelsHidden()
                         Divider()
-                        Button(de("Anderes Modell …", en: "Other model …")) { typing = true }
+                        Button(de("Anderes Modell …", en: "Other model …")) {
+                            draft = preferences.model
+                            typing = true
+                        }
                     } label: { label(current) }
                         .menuStyle(.button)
                         .buttonStyle(.plain)
@@ -265,11 +273,17 @@ private struct ModelRow: View {
                         Text(preferences.model.isEmpty ? provider.defaultModel : preferences.model)
                     } else {
                         // Taking the keyboard selects the id, so typing replaces it.
-                        TextField("", text: $preferences.model, prompt: Text(provider.defaultModel).foregroundStyle(theme.inkOnCard))
+                        TextField("", text: $draft, prompt: Text(provider.defaultModel).foregroundStyle(theme.inkOnCard))
                             .textFieldStyle(.plain)
                             .multilineTextAlignment(.trailing)
                             .focused($idFocused)
-                            .onSubmit { typing = false }
+                            .onSubmit { commit() }
+                            // Escape keeps the model there was.
+                            .onExitCommand {
+                                draft = preferences.model
+                                typing = false
+                                idFocused = false
+                            }
                     }
                 }
                 .font(Typography.mono(13))
@@ -284,6 +298,10 @@ private struct ModelRow: View {
             // request was dropped (the same as the Wortschatz field).
             if now { Task { idFocused = true } }
         }
+        // Leaving the field saves what was typed and closes it.
+        .onChange(of: idFocused) { _, focused in if !focused { commit() } }
+        .onAppear { draft = preferences.model }
+        .onDisappear { typing = false }
         .task(id: provider) { if !isSnapshot { store.refresh(provider) } }
     }
 
@@ -292,10 +310,20 @@ private struct ModelRow: View {
             get: { current?.id ?? Self.other },
             set: { id in
                 guard id != Self.other else { return }
-                preferences.model = id
+                // The field lets go first, so nothing it still holds is saved over the pick.
                 typing = false
+                idFocused = false
+                preferences.model = id
+                draft = id
             }
         )
+    }
+
+    private func commit() {
+        let id = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !id.isEmpty { preferences.model = id }
+        draft = preferences.model
+        typing = false
     }
 
     private func label(_ current: ModelChoice?) -> some View {
@@ -775,6 +803,9 @@ private struct GeneralBlock: View {
     let launchAtLogin: LaunchAtLogin
     let history: History
     @Environment(\.theme) private var theme
+    /// A smaller history (or none) asked about before anything is deleted:
+    /// one click on "Off" took every dictation with it, with no way back.
+    @State private var asking: Int?
 
     var body: some View {
         Block(title: de("Allgemein", en: "General")) {
@@ -826,11 +857,12 @@ private struct GeneralBlock: View {
                     // it drops the oldest at once.
                     Segmented(
                         options: History.limits.map { (value: $0, label: Self.limitName($0)) },
-                        selection: Binding(get: { preferences.historyLimit },
-                                           set: { preferences.historyLimit = $0; history.limit = $0 })
+                        selection: Binding(get: { preferences.historyLimit }, set: { limit in
+                            if limit < history.entries.count { asking = limit } else { keep(limit) }
+                        })
                     )
                     .frame(width: 230)
-                    Button(de("Leeren", en: "Clear"), action: history.clear)
+                    Button(de("Leeren", en: "Clear")) { asking = -1 }
                         .buttonStyle(.outlineCompact)
                         .disabled(history.entries.isEmpty)
                 }
@@ -841,6 +873,29 @@ private struct GeneralBlock: View {
             .foregroundStyle(theme.ink)
             .surface(radius: 16)
         }
+        .confirmationDialog(question, isPresented: Binding(get: { asking != nil }, set: { if !$0 { asking = nil } })) {
+            Button(de("Löschen", en: "Delete"), role: .destructive) {
+                if let asking { asking < 0 ? history.clear() : keep(asking) }
+                asking = nil
+            }
+            Button(de("Abbrechen", en: "Cancel"), role: .cancel) { asking = nil }
+        } message: {
+            Text(de("Das lässt sich nicht rückgängig machen.", en: "This cannot be undone."))
+        }
+    }
+
+    private func keep(_ limit: Int) {
+        preferences.historyLimit = limit
+        history.limit = limit
+    }
+
+    private var question: String {
+        let count = history.entries.count
+        guard let asking, asking > 0 else {
+            return de("Alle \(count) Diktate aus dem Verlauf löschen?", en: "Delete all \(count) dictations from the history?")
+        }
+        let gone = count - asking
+        return de("Die ältesten \(gone) Diktate löschen?", en: "Delete the oldest \(gone) dictations?")
     }
 
     private static func limitName(_ limit: Int) -> String {

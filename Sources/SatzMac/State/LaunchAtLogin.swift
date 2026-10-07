@@ -13,6 +13,12 @@ final class LaunchAtLogin {
     private(set) var isEnabled = SMAppService.mainApp.status == .enabled
     private(set) var problem: String?
 
+    /// Read again: changed in Login Items, or approved there, it was stale.
+    func refresh() {
+        let now = SMAppService.mainApp.status == .enabled
+        if now != isEnabled { isEnabled = now }
+    }
+
     func set(_ enabled: Bool) {
         do {
             if enabled {

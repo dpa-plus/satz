@@ -181,7 +181,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the setup while it is unfinished. A menu bar app otherwise appears to
     /// do nothing when relaunched.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if setup.isComplete { show(.history) } else { setupWindow.show() }
+        if !setup.isComplete {
+            setupWindow.show()
+        } else if mainWindow.isVisible {
+            // Already open: brought forward as it is, a half-typed setting included.
+            mainWindow.show()
+        } else {
+            show(.history)
+        }
         return true
     }
 
@@ -193,6 +200,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Quitting with a window open: the app the user came from gets the focus
     /// back, not whichever app macOS picks.
     func applicationWillTerminate(_ notification: Notification) {
+        mediaPause.quitting()
         AppWindow.handBack()
     }
 

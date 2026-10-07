@@ -43,6 +43,11 @@ enum Paster {
             // Leave the transcript on the clipboard: it is the fallback.
             return .clipboardOnly(blocker)
         }
+        // Started while satz itself was in front (its settings, say): ⌘V
+        // would go to satz, and with no field there the text went nowhere.
+        guard origin != nil else {
+            return .clipboardOnly(de("Auf der Zwischenablage.", en: "On the clipboard."))
+        }
 
         restoreFocus(to: origin)
         sendCommandV()

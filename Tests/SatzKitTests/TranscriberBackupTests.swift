@@ -30,7 +30,7 @@ final class SlowResponses: URLProtocol, @unchecked Sendable {
         requests = 0
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [SlowResponses.self]
-        var settings = Transcriber.Settings()
+        var settings = Transcriber.Settings(provider: .openRouter)
         settings.backupAfter = backupAfter
         return Transcriber(settings: settings, session: URLSession(configuration: configuration))
     }
@@ -67,6 +67,19 @@ struct BackupTests {
         let transcriber = SlowResponses.transcriber([(0.6, 200, #"{"text":"late but fine"}"#), (0, 500, "")], backupAfter: 0.1)
         let text = try await transcriber.transcribe(wav: Data("RIFF".utf8), apiKey: "k")
         #expect(text == "late but fine")
+    }
+
+    @Test func otherProvidersSendOnlyOnce() async throws {
+        let transcriber = SlowResponses.transcriber([(0.6, 200, #"{"text":"one"}"#), (0, 200, #"{"text":"two"}"#)], backupAfter: 0.1)
+        var settings = transcriber.settings
+        settings.format = .multipart
+        let single = Transcriber(settings: settings, session: URLSession(configuration: {
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.protocolClasses = [SlowResponses.self]
+            return configuration
+        }()))
+        #expect(try await single.transcribe(wav: Data("RIFF".utf8), apiKey: "k") == "one")
+        #expect(SlowResponses.requests == 1)
     }
 
     @Test func whenBothFailTheFirstFailureIsReported() async {

@@ -45,6 +45,8 @@ public struct Transcriber: Sendable {
         /// then takes ten or more for the same kind of audio (13 of 77 real
         /// dictations over five seconds, one 15.6 s); a second request is
         /// usually back long before. The first answer wins. nil: never.
+        /// OpenRouter only, where this was measured; plus a second for every
+        /// ten seconds of audio.
         public var backupAfter: TimeInterval? = 2.5
 
         public init() {}
@@ -103,7 +105,10 @@ public struct Transcriber: Sendable {
     /// - Parameter wav: 16-bit PCM WAV bytes, as produced by `WAVEncoder`.
     public func transcribe(wav: Data, apiKey: String) async throws -> String {
         guard !apiKey.isEmpty else { throw Failure.noKey }
-        guard let delay = settings.backupAfter else { return try await attempt(wav: wav, apiKey: apiKey) }
+        // Counted from the start of the upload, so a long recording, whose
+        // upload alone takes a while, waits longer before a second copy goes.
+        guard settings.format == .openRouter, let base = settings.backupAfter else { return try await attempt(wav: wav, apiKey: apiKey) }
+        let delay = base + Double(max(0, wav.count - 44)) / 32_000 / 10
 
         enum Event: Sendable {
             case answer(Result<String, any Error>)

@@ -46,6 +46,8 @@ struct HistoryView: View {
         .padding(.bottom, 20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(theme.ground)
+        // A search kept from last time showed a filtered list, or "Nothing found".
+        .onDisappear { query = "" }
     }
 
     private var search: some View {
@@ -73,7 +75,7 @@ struct HistoryView: View {
 
     private var list: some View {
         LazyVStack(alignment: .leading, spacing: 18) {
-            ForEach(days, id: \.title) { day in
+            ForEach(days, id: \.start) { day in
                 VStack(alignment: .leading, spacing: 4) {
                     Text(day.title)
                         .font(Typography.text(12, .semibold))
@@ -101,15 +103,15 @@ struct HistoryView: View {
     }
 
     /// The entries by day, newest day first, each day as one surface.
-    private var days: [(title: String, entries: [History.Entry])] {
+    private var days: [(start: Date, title: String, entries: [History.Entry])] {
         let calendar = Calendar.current
-        var result: [(title: String, entries: [History.Entry])] = []
+        var result: [(start: Date, title: String, entries: [History.Entry])] = []
         for entry in shown {
-            let title = Self.dayTitle(entry.date, calendar: calendar)
-            if result.last?.title == title {
+            let start = calendar.startOfDay(for: entry.date)
+            if result.last?.start == start {
                 result[result.count - 1].entries.append(entry)
             } else {
-                result.append((title, [entry]))
+                result.append((start, Self.dayTitle(entry.date, calendar: calendar), [entry]))
             }
         }
         return result
@@ -118,7 +120,10 @@ struct HistoryView: View {
     private static func dayTitle(_ date: Date, calendar: Calendar) -> String {
         if calendar.isDateInToday(date) { return de("Heute", en: "Today") }
         if calendar.isDateInYesterday(date) { return de("Gestern", en: "Yesterday") }
-        return date.formatted(.dateTime.weekday(.wide).day().month(.wide))
+        if calendar.isDate(date, equalTo: .now, toGranularity: .year) {
+            return date.formatted(.dateTime.weekday(.wide).day().month(.wide))
+        }
+        return date.formatted(.dateTime.weekday(.wide).day().month(.wide).year())
     }
 
     private var keeping: String {

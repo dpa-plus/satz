@@ -13,32 +13,59 @@ import Foundation
 final class MediaPause {
 
     var isOn: () -> Bool = { true }
-    /// Whether the pause at the start actually paused something.
-    private var pausing: Task<Bool, Never>?
+    /// satz paused something and has not played it again yet.
+    private var pausedByUs = false
+    private var pausing: Task<Void, Never>?
+    private var resuming: Task<Void, Never>?
 
     func dictationStarted() {
-        guard isOn(), pausing == nil else { return }
-        pausing = Task.detached(priority: .userInitiated) {
-            guard let state = NowPlaying.read(), state.playing else { return false }
-            MediaCommand.send(.pause)
-            Log.note("media paused (app \(state.pid))")
-            return true
+        // The next dictation right after the last one: the music stays paused.
+        resuming?.cancel()
+        resuming = nil
+        guard isOn(), !pausedByUs, pausing == nil else { return }
+        pausing = Task {
+            let paused = await Task.detached(priority: .userInitiated) { () -> Bool in
+                guard let state = NowPlaying.read(), state.playing else { return false }
+                MediaCommand.send(.pause)
+                Log.note("media paused (app \(state.pid))")
+                return true
+            }.value
+            pausedByUs = paused
+            pausing = nil
         }
     }
 
     func dictationEnded() {
-        guard let pausing else { return }
-        self.pausing = nil
-        Task.detached(priority: .userInitiated) {
-            guard await pausing.value else { return }
-            // Something the user started in the meantime is theirs: leave it.
-            if let state = NowPlaying.read(), state.playing {
-                Log.note("media left as the user set it")
-                return
-            }
-            MediaCommand.send(.play)
-            Log.note("media resumed")
+        let pausing = self.pausing
+        resuming?.cancel()
+        resuming = Task {
+            await pausing?.value
+            // A moment's grace: two dictations in a row did play-pause between them.
+            try? await Task.sleep(for: .milliseconds(800))
+            guard !Task.isCancelled, pausedByUs else { return }
+            pausedByUs = false
+            resuming = nil
+            await Task.detached(priority: .userInitiated) {
+                // Something the user started in the meantime is theirs: leave it.
+                if let state = NowPlaying.read(), state.playing {
+                    Log.note("media left as the user set it")
+                    return
+                }
+                MediaCommand.send(.play)
+                Log.note("media resumed")
+            }.value
         }
+    }
+
+    /// satz quits: what it paused plays again, also in the middle of a dictation.
+    func quitting() {
+        resuming?.cancel()
+        guard pausedByUs else { return }
+        pausedByUs = false
+        MediaCommand.send(.play)
+        // The command is delivered after the call returns; a process that
+        // exits at once never sends it.
+        Thread.sleep(forTimeInterval: 0.3)
     }
 }
 

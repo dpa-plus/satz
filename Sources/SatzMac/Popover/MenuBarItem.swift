@@ -13,6 +13,9 @@ final class MenuBarItem {
     private let dot = NSView()
     private var panel: PopoverPanel?
     private var outsideClicks: Any?
+    /// Clicks in satz's own windows, which the global monitor does not see:
+    /// the menu stayed open over the settings or the card.
+    private var ownClicks: Any?
     private var escape: Any?
     private let content: () -> AnyView
 
@@ -61,6 +64,11 @@ final class MenuBarItem {
         outsideClicks = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             Task { @MainActor in self?.close() }
         }
+        ownClicks = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+            // Not the menu itself, and not the icon, whose own click toggles it.
+            if let self, event.window !== panel, event.window !== item.button?.window { close() }
+            return event
+        }
         escape = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard event.keyCode == 53 else { return event }  // Escape
             self?.close()
@@ -71,8 +79,10 @@ final class MenuBarItem {
     func close() {
         panel?.orderOut(nil)
         if let outsideClicks { NSEvent.removeMonitor(outsideClicks) }
+        if let ownClicks { NSEvent.removeMonitor(ownClicks) }
         if let escape { NSEvent.removeMonitor(escape) }
         outsideClicks = nil
+        ownClicks = nil
         escape = nil
     }
 

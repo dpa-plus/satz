@@ -12,7 +12,8 @@ import AppKit
 /// picture of every step of the animation, `clipboard`, which checks on
 /// a private pasteboard that a paste hands every kind of content back,
 /// `strand`, which leaves the card's window on one other desktop, and
-/// `settings`, `setup`, `history`, `menu` and `close` for satz's own windows.
+/// `settings`, `setup`, `history`, `menu` and `close` for satz's own windows,
+/// and `quit`, which quits the way the menu does.
 @MainActor
 final class DevControl {
 
@@ -57,6 +58,7 @@ final class DevControl {
         case "eye": toggleEye()
         case "settings", "setup", "history", "menu", "close": open(command)
         case "strand": strand()
+        case "quit": NSApp.terminate(nil)
         case "field": Log.note("focused field: \(FocusedField.frame().map { NSStringFromRect($0) } ?? "unknown")")
         case "picture":
             try? card.picture()?.write(to: stateFile.deletingPathExtension().appendingPathExtension("png"))

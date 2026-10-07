@@ -18,6 +18,9 @@ final class AppWindow: NSObject, NSWindowDelegate {
     private static var cameFrom: NSRunningApplication?
 
     private var window: NSWindow?
+    /// Whether this window is in `open`. Its visibility said no while satz
+    /// was hidden (Hide Others), and the window was counted twice.
+    private var counted = false
     private let title: () -> String
     private let content: () -> AnyView
     private let startsWithoutFocus: Bool
@@ -44,13 +47,16 @@ final class AppWindow: NSObject, NSWindowDelegate {
             window = make()
         }
         window?.title = title()
-        if Self.open == 0 {
-            let front = NSWorkspace.shared.frontmostApplication
-            if front != nil && front != .current { Self.cameFrom = front }
-            NSApp.setActivationPolicy(.regular)
+        // Each time satz comes forward, not only the first: Settings opened
+        // from Safari, then Notes, then back to satz, should close to Notes.
+        let front = NSWorkspace.shared.frontmostApplication
+        if front != nil && front != .current { Self.cameFrom = front }
+        if Self.open == 0 { NSApp.setActivationPolicy(.regular) }
+        let opening = !counted
+        if opening {
+            counted = true
+            Self.open += 1
         }
-        let opening = window?.isVisible == false
-        if opening { Self.open += 1 }
         NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
         if opening && startsWithoutFocus, let window {
@@ -70,6 +76,8 @@ final class AppWindow: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        guard counted else { return }
+        counted = false
         Self.open = max(0, Self.open - 1)
         if Self.open == 0 { Self.stepBack() }
         onClose?()
