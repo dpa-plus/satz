@@ -180,17 +180,34 @@ final class LocalModels {
         let task = Task<Kit, any Error> { try await Self.load(variant) }
         loaded = (variant, task)
         let started = Date()
+        // macOS builds the model for this chip once per app and version:
+        // minutes, during which a dictation would seem to hang. Said instead.
+        let firstTime = !Self.prepared.contains(Self.preparedKey(variant))
+        if firstTime, states[variant] == nil { states[variant] = .preparing }
         Task {
             switch await task.result {
             case .success:
                 Log.note(String(format: "local: %@ loaded in %.1f s", variant, Date().timeIntervalSince(started)))
+                Self.prepared.insert(Self.preparedKey(variant))
+                if states[variant] == .preparing, firstTime { states[variant] = nil }
             case .failure(let error):
                 // A failed load is tried again by the next dictation.
                 Log.note("local: loading \(variant) failed: \(error.localizedDescription)")
                 if loaded?.kit == task { loaded = nil }
+                if states[variant] == .preparing, firstTime { states[variant] = nil }
             }
         }
         return task
+    }
+
+    /// Models this app, in this version, has loaded before.
+    private static var prepared: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: "localPrepared") ?? []) }
+        set { UserDefaults.standard.set(Array(newValue), forKey: "localPrepared") }
+    }
+
+    private static func preparedKey(_ variant: String) -> String {
+        "\(variant)@\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?")"
     }
 
     // MARK: - Transcribing
