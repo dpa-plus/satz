@@ -122,6 +122,12 @@ final class Preferences {
         usesReplacements ? replacements : []
     }
 
+    /// How many dictations the history keeps: 0 keeps none, `History.keepAll`
+    /// every one.
+    var historyLimit: Int {
+        didSet { defaults?.set(historyLimit, forKey: Key.historyLimit) }
+    }
+
     /// The dictated text stays on the clipboard after pasting, instead of
     /// what was copied before coming back.
     var keepsOnClipboard: Bool {
@@ -194,6 +200,7 @@ final class Preferences {
         static let removesFillers = "removesFillers"
         static let usesReplacements = "usesReplacements"
         static let keepsOnClipboard = "keepsOnClipboard"
+        static let historyLimit = "historyLimit"
     }
 
     init(defaults: UserDefaults? = .standard) {
@@ -223,6 +230,7 @@ final class Preferences {
         removesFillers = defaults?.object(forKey: Key.removesFillers) as? Bool ?? true
         usesReplacements = defaults?.object(forKey: Key.usesReplacements) as? Bool ?? true
         keepsOnClipboard = defaults?.bool(forKey: Key.keepsOnClipboard) ?? false
+        historyLimit = defaults?.object(forKey: Key.historyLimit) as? Int ?? History.standardLimit
         // Only the real, stored preferences set the app-wide language and
         // colours; a fixture made for a snapshot must not reset them.
         if defaults != nil {

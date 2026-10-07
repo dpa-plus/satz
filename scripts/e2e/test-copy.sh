@@ -1,7 +1,8 @@
 #!/bin/zsh
 # Makes "satz test.app" in ~/Applications from dist/satz.app: its own name and
 # bundle id (plus.dpa.satz.test), so its settings never touch the real satz's.
-# It still shares the key and history files in ~/Library/Application Support/satz.
+# It still shares the key files in ~/Library/Application Support/satz; in test
+# mode its history lives next to the state file.
 #
 #   scripts/e2e/test-copy.sh            copy the current dist/satz.app
 #   scripts/e2e/test-copy.sh --build    make app first

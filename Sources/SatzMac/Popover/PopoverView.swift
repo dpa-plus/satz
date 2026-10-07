@@ -24,7 +24,10 @@ struct PopoverView: View {
 
             if let latest = history.entries.first {
                 LatestCard(entry: latest)
-                EarlierRows(entries: Array(history.entries.dropFirst()))
+                EarlierRows(entries: Array(history.entries.dropFirst().prefix(History.shownInMenu - 1)))
+                if history.entries.count > History.shownInMenu {
+                    ShowAllRow(count: history.entries.count, open: actions.openHistory)
+                }
             } else if discarded.last == nil {
                 EmptyHint(trigger: preferences.trigger, mode: preferences.triggerMode)
             }
@@ -69,6 +72,7 @@ struct PopoverActions {
     var restore: () -> Void = {}
     var openSetup: () -> Void = {}
     var openSettings: () -> Void = {}
+    var openHistory: () -> Void = {}
     var quit: () -> Void = {}
 }
 
@@ -255,9 +259,38 @@ private struct CopyButton: View {
     }
 }
 
+/// The way from the last few to all of them.
+private struct ShowAllRow: View {
+    let count: Int
+    let open: () -> Void
+    @Environment(\.theme) private var theme
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: open) {
+            HStack(spacing: 8) {
+                Text(de("Ganzer Verlauf", en: "All history"))
+                    .font(Typography.text(14, .semibold))
+                Spacer()
+                Text("\(count)")
+                    .font(Typography.mono(12))
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .bold))
+            }
+            .foregroundStyle(theme.inkSecondary)
+            .padding(.horizontal, 8)
+            .frame(height: 32)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(hovering ? theme.hover : .clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+    }
+}
+
 /// Shown until the first dictation: the one thing a new user needs, which is
 /// how to start. It goes away for good once there is history.
-private struct EmptyHint: View {
+struct EmptyHint: View {
     let trigger: Trigger
     let mode: TriggerMode
     @Environment(\.theme) private var theme

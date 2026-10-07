@@ -7,7 +7,13 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let preferences = Preferences()
-    private let history = History(file: History.standardFile)
+    /// In test mode next to the state file: a test that clears or trims the
+    /// history must not touch the user's.
+    private lazy var history = History(
+        file: argument(after: "--dev-control").map { URL(fileURLWithPath: $0).deletingLastPathComponent().appendingPathComponent("history.json") }
+            ?? History.standardFile,
+        limit: preferences.historyLimit
+    )
     private let discarded = Discarded()
     private let launchAtLogin = LaunchAtLogin()
     private lazy var setup = Setup(preferences: preferences)
@@ -18,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBar: MenuBarItem!
     private var settingsWindow: AppWindow!
     private var setupWindow: AppWindow!
+    private var historyWindow: AppWindow!
     private var devControl: DevControl?
 
     /// A dictation tool is only useful if it is there when the Mac starts, so
@@ -117,6 +124,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ))
         }
 
+        historyWindow = AppWindow(title: de("satz Verlauf", en: "satz History")) { [unowned self] in
+            AnyView(HistoryView(history: history, preferences: preferences,
+                                openSettings: { [weak self] in self?.settingsWindow.show() }))
+        }
+
         menuBar = MenuBarItem { [unowned self] in
             AnyView(PopoverView(
                 history: history, discarded: discarded, setup: setup, shortcut: shortcut, preferences: preferences,
@@ -131,6 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     },
                     openSetup: { [weak self] in self?.menuBar.close(); self?.setupWindow.show() },
                     openSettings: { [weak self] in self?.menuBar.close(); self?.settingsWindow.show() },
+                    openHistory: { [weak self] in self?.menuBar.close(); self?.historyWindow.show() },
                     quit: { NSApp.terminate(nil) }
                 )
             ))
@@ -139,7 +152,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             switch which {
             case "settings": self?.settingsWindow.show()
             case "setup": self?.setupWindow.show()
-            case "close": self?.settingsWindow.close(); self?.setupWindow.close()
+            case "history": self?.historyWindow.show()
+            case "close": self?.settingsWindow.close(); self?.setupWindow.close(); self?.historyWindow.close()
             default: self?.menuBar.open()
             }
         }
@@ -156,10 +170,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Opening the app again from Finder or Spotlight shows the settings. A
-    /// menu bar app otherwise appears to do nothing when relaunched.
+    /// Opening the app again from Finder or Spotlight shows the history, or
+    /// the setup while it is unfinished. A menu bar app otherwise appears to
+    /// do nothing when relaunched.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        settingsWindow.show()
+        if setup.isComplete { historyWindow.show() } else { setupWindow.show() }
         return true
     }
 

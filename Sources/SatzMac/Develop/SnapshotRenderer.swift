@@ -27,6 +27,8 @@ enum SnapshotRenderer {
             ("settings-dark", .german, { AnyView(settingsSheet.environment(\.theme, .dark)) }),
             ("settings-en", .english, { AnyView(settingsSheet.environment(\.theme, .dark)) }),
             ("setup-key", .german, { AnyView(setupSheet(.key).environment(\.theme, .light)) }),
+            ("history", .german, { AnyView(historySheet.environment(\.theme, .light)) }),
+            ("history-en", .english, { AnyView(historySheet.environment(\.theme, .dark)) }),
             ("setup-probe", .german, { AnyView(setupSheet(.probe).environment(\.theme, .light)) }),
         ]
         for (name, language, view) in sheets {
@@ -123,6 +125,27 @@ enum SnapshotRenderer {
         history.add("Kannst du mir eine Funktion schreiben, die alle Rechnungen aus dem Ordner Buchhaltung liest und die Beträge pro Kunde summiert?",
                     app: "Claude", pasted: true, at: base + 1200)
         return history
+    }
+
+    /// Two days of dictations, for the history window.
+    private static var longHistory: History {
+        let history = History(limit: History.standardLimit)
+        let now = Date()
+        let texts: [(String, String?, Bool, TimeInterval)] = [
+            ("The test is red, please don't merge yet.", "Slack", true, -26 * 3600),
+            ("Let's move the call with Lena to Thursday at two.", "Mail", true, -25 * 3600),
+            ("Bitte schick mir die Unterlagen bis Freitag, dann schaue ich sie mir am Wochenende an.", nil, false, -3 * 3600),
+            ("Write a function that reads every invoice in the Accounting folder and adds up the totals per customer, without credit notes.", "Claude", true, -40 * 60),
+            ("Thanks for the update. Thursday at two works for me, and I'll bring the slides.", "Mail", true, -5 * 60),
+        ]
+        for (text, app, pasted, offset) in texts {
+            history.add(text, app: app, pasted: pasted, at: now.addingTimeInterval(offset))
+        }
+        return history
+    }
+
+    private static var historySheet: some View {
+        HistoryView(history: longHistory, preferences: preferences, openSettings: {})
     }
 
     private static var shortcut: Shortcut {

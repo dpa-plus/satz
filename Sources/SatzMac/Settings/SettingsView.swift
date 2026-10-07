@@ -671,19 +671,35 @@ private struct GeneralBlock: View {
                 .padding(.horizontal, 16)
                 .frame(height: 48)
                 Rule()
-                HStack {
+                HStack(spacing: 10) {
                     Text(de("Verlauf", en: "History"))
                     Spacer()
+                    // The preference and the history change together: lowering
+                    // it drops the oldest at once.
+                    Segmented(
+                        options: History.limits.map { (value: $0, label: Self.limitName($0)) },
+                        selection: Binding(get: { preferences.historyLimit },
+                                           set: { preferences.historyLimit = $0; history.limit = $0 })
+                    )
+                    .frame(width: 230)
                     Button(de("Leeren", en: "Clear"), action: history.clear)
                         .buttonStyle(.outlineCompact)
                         .disabled(history.entries.isEmpty)
                 }
                 .padding(.horizontal, 16)
-                .frame(height: 48)
+                .frame(height: 52)
             }
             .font(Typography.text(15))
             .foregroundStyle(theme.ink)
             .surface(radius: 16)
+        }
+    }
+
+    private static func limitName(_ limit: Int) -> String {
+        switch limit {
+        case 0: de("Aus", en: "Off")
+        case History.keepAll: de("Alle", en: "All")
+        default: "\(limit)"
         }
     }
 }

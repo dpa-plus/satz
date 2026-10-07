@@ -12,7 +12,7 @@ import AppKit
 /// picture of every step of the animation, `clipboard`, which checks on
 /// a private pasteboard that a paste hands every kind of content back,
 /// `strand`, which leaves the card's window on one other desktop, and
-/// `settings`, `setup`, `menu` and `close` for satz's own windows.
+/// `settings`, `setup`, `history`, `menu` and `close` for satz's own windows.
 @MainActor
 final class DevControl {
 
@@ -55,7 +55,7 @@ final class DevControl {
         case "undo": session.undoDiscard()
         case "dump": dump()
         case "eye": toggleEye()
-        case "settings", "setup", "menu", "close": open(command)
+        case "settings", "setup", "history", "menu", "close": open(command)
         case "strand": strand()
         case "field": Log.note("focused field: \(FocusedField.frame().map { NSStringFromRect($0) } ?? "unknown")")
         case "picture":

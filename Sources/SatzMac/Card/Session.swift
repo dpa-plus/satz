@@ -455,6 +455,8 @@ final class Session {
         close()
         if let deliverOverride {
             deliverOverride(output)
+            // Test mode keeps its own history file, so this never reaches the user's.
+            history.add(output, app: origin?.localizedName, pasted: true)
             return
         }
         guard cardHadKeyboard else {
