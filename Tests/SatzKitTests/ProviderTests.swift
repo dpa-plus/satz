@@ -123,3 +123,19 @@ func eachProviderIsAskedAtItsOwnEndpoint(provider: Provider, url: String, model:
     settings = Transcriber.Settings(provider: .openRouter, model: "microsoft/mai-transcribe-2", customBaseURL: nil)
     #expect(Transcriber(settings: settings).openRouterBody(wav: Data())["provider"] != nil)
 }
+
+@Test func onlyTheLocalProviderNeedsNoKey() {
+    #expect(Provider.allCases.filter { !$0.needsKey } == [.local])
+}
+
+@Test func localModelsAreFreeAndSayHowBigTheirDownloadIs() {
+    #expect(Provider.local.models.allSatisfy { $0.dollarsPerHour == 0 })
+    #expect(Provider.local.models.allSatisfy { $0.errorRate == nil })
+    #expect(ModelCatalog.downloadSize(of: ModelCatalog.whisperTurbo) == "632 MB")
+    #expect(ModelCatalog.downloadSize(of: ModelCatalog.apple) == nil)
+    #expect(ModelCatalog.downloadSize(of: "openai_whisper-small") == nil)
+}
+
+@Test func theLocalListIsNeverAskedFor() async throws {
+    #expect(try await ModelCatalog.fetch(.local, key: nil).isEmpty)
+}

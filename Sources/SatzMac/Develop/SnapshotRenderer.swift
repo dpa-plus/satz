@@ -27,6 +27,8 @@ enum SnapshotRenderer {
             ("settings-dark", .german, { AnyView(settingsSheet.environment(\.theme, .dark)) }),
             ("settings-en", .english, { AnyView(settingsSheet.environment(\.theme, .dark)) }),
             ("setup-key", .german, { AnyView(setupSheet(.key).environment(\.theme, .light)) }),
+            ("settings-local", .german, { AnyView(settingsSheet(.local).environment(\.theme, .dark)) }),
+            ("setup-local", .german, { AnyView(setupSheet(.key, provider: .local).environment(\.theme, .light)) }),
             ("history", .german, { AnyView(historySheet.environment(\.theme, .light)) }),
             ("history-en", .english, { AnyView(historySheet.environment(\.theme, .dark)) }),
             ("setup-probe", .german, { AnyView(setupSheet(.probe).environment(\.theme, .light)) }),
@@ -201,8 +203,12 @@ enum SnapshotRenderer {
         .background(Color(hex: 0xC9D4D8))
     }
 
-    private static var settingsSheet: some View {
-        SettingsView(
+    private static var settingsSheet: some View { settingsSheet(.openRouter) }
+
+    private static func settingsSheet(_ provider: Provider) -> some View {
+        let preferences = preferences
+        preferences.provider = provider
+        return SettingsView(
             preferences: preferences,
             setup: Setup(hasKey: true, microphone: .allowed, canPaste: true),
             shortcut: shortcut,
@@ -212,8 +218,10 @@ enum SnapshotRenderer {
         )
     }
 
-    private static func setupSheet(_ step: SetupView.Step) -> some View {
-        SetupView(
+    private static func setupSheet(_ step: SetupView.Step, provider: Provider = .openRouter) -> some View {
+        let preferences = preferences
+        preferences.provider = provider
+        return SetupView(
             preferences: preferences,
             setup: Setup(hasKey: step != .key, microphone: .allowed, canPaste: true),
             shortcut: shortcut,

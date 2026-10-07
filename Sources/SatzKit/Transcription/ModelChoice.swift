@@ -37,6 +37,7 @@ extension Provider {
         case .openAI: ["gpt-transcribe", "gpt-4o-transcribe", "gpt-4o-mini-transcribe", "whisper-1"]
         case .groq: ["whisper-large-v3-turbo", "whisper-large-v3"]
         case .custom: []
+        case .local: ModelCatalog.localModels
         }
         return ModelCatalog.sorted(ids.map { ModelCatalog.describe($0, for: self) }, default: defaultModel)
     }
@@ -105,13 +106,43 @@ public enum ModelCatalog {
         "whisper-large-v3": Known(name: "Whisper Large v3", maker: "OpenAI"),
     ]
 
+    // MARK: - On this computer
+
+    /// Apple's speech recognition, built into macOS 26.
+    public static let apple = "apple"
+    /// Whisper Large v3 Turbo for WhisperKit, compressed to 632 MB for the
+    /// Neural Engine. The id is WhisperKit's name for it, so any other
+    /// WhisperKit model can be typed in under "Other model".
+    public static let whisperTurbo = "openai_whisper-large-v3-v20240930_turbo_632MB"
+
+    /// What runs on this Mac: Apple's only where macOS has it.
+    static var localModels: [String] {
+        if #available(macOS 26, *) { return [whisperTurbo, apple] }
+        return [whisperTurbo]
+    }
+
+    /// Free to run; no error rate, because AA measured neither these builds.
+    static var localKnown: [String: Known] {
+        [
+            apple: Known(name: de("Spracherkennung", en: "Speech recognition"), maker: "Apple", measured: 0),
+            whisperTurbo: Known(name: "Whisper Large v3 Turbo", maker: "OpenAI", measured: 0),
+        ]
+    }
+
+    /// "632 MB" from a WhisperKit name ending in "_632MB"; nil for Apple's
+    /// and for a name without a size.
+    public static func downloadSize(of id: String) -> String? {
+        guard let last = id.split(separator: "_").last, last.hasSuffix("MB"), Int(last.dropLast(2)) != nil else { return nil }
+        return "\(last.dropLast(2)) MB"
+    }
+
     /// Where each provider lists its models. OpenRouter's list is public.
     static func listURL(for provider: Provider) -> URL? {
         switch provider {
         case .openRouter: URL(string: "https://openrouter.ai/api/v1/models?output_modalities=transcription")
         case .openAI: URL(string: "https://api.openai.com/v1/models")
         case .groq: URL(string: "https://api.groq.com/openai/v1/models")
-        case .custom: nil
+        case .custom, .local: nil
         }
     }
 
@@ -159,7 +190,7 @@ public enum ModelCatalog {
 
     /// What satz knows about a model id, filled in from the provider's listing.
     static func describe(_ id: String, for provider: Provider, listedName: String? = nil, pricing: [String: String]? = nil) -> ModelChoice {
-        let entry = known[id]
+        let entry = provider == .local ? localKnown[id] : known[id]
         // OpenRouter names its models "Maker: Name".
         let parts = listedName?.components(separatedBy: ": ")
         let maker = entry?.maker ?? (parts.flatMap { $0.count > 1 ? $0[0] : nil }) ?? id.components(separatedBy: "/").first ?? provider.name

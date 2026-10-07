@@ -18,7 +18,8 @@ final class Setup {
         case notAsked
     }
 
-    /// Whether the selected provider has a key.
+    /// Whether the selected provider has a key; for "Lokal", whether its
+    /// model is on this Mac.
     private(set) var hasKey: Bool
     private(set) var microphone: Microphone
     private(set) var canPaste: Bool
@@ -57,7 +58,8 @@ final class Setup {
         guard let preferences else { return }
         // Assigned only on change: every assignment re-renders whatever
         // observes it, and this runs every few seconds.
-        let key = Secrets.exists(for: preferences.provider)
+        let key = preferences.provider.needsKey ? Secrets.exists(for: preferences.provider)
+            : LocalModels.shared.isReady(preferences.model, language: preferences.spokenLanguage)
         let mic = Self.microphoneStatus()
         let paste = AXIsProcessTrusted()
         if key != hasKey { hasKey = key }

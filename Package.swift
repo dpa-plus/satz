@@ -8,9 +8,16 @@ let package = Package(
         .library(name: "SatzKit", targets: ["SatzKit"]),
         .executable(name: "SatzMac", targets: ["SatzMac"]),
     ],
+    dependencies: [
+        // Whisper on the Mac's own chip, for the provider "Lokal".
+        .package(url: "https://github.com/argmaxinc/WhisperKit.git", exact: "1.1.0"),
+    ],
     targets: [
         .target(name: "SatzKit"),
-        .executableTarget(name: "SatzMac", dependencies: ["SatzKit"]),
+        .executableTarget(name: "SatzMac", dependencies: [
+            "SatzKit",
+            .product(name: "WhisperKit", package: "WhisperKit"),
+        ]),
         .testTarget(name: "SatzKitTests", dependencies: ["SatzKit"]),
     ]
 )

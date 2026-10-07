@@ -196,9 +196,13 @@ struct Segmented<Value: Hashable>: View {
             ForEach(options, id: \.value) { option in
                 let chosen = option.value == selection
                 Button { selection = option.value } label: {
+                    // Never broken over two lines: a long name takes room from the short ones.
                     Text(option.label)
                         .font(Typography.text(14, .semibold))
+                        .lineLimit(1)
+                        .fixedSize()
                         .foregroundStyle(chosen ? theme.ink : theme.inkSecondary)
+                        .padding(.horizontal, 8)
                         .frame(maxWidth: .infinity, minHeight: 28)
                         .background(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)

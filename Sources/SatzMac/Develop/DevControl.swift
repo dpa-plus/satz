@@ -67,6 +67,12 @@ final class DevControl {
         default:
             if command.hasPrefix("caret:"), let index = Int(command.dropFirst(6)) {
                 session.userMovedCaret(to: index)
+            } else if command.hasPrefix("download:") {
+                // What the Download button in Settings does, for a model on this Mac.
+                LocalModels.shared.download(String(command.dropFirst(9)), language: .german)
+            } else if command.hasPrefix("local:") {
+                let model = String(command.dropFirst(6))
+                Log.note("local: \(model) is \(LocalModels.shared.state(of: model, language: .german))")
             }
         }
     }

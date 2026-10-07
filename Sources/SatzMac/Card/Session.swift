@@ -312,13 +312,17 @@ final class Session {
         stopEverything()
         reset()
         origin = Self.frontmostOtherApp()
-        // Checked before recording: finding out there is no key once you have
-        // finished speaking loses the whole message.
-        guard Secrets.exists(for: preferences.provider) else {
-            phase = .failed(Transcriber.Failure.noKey.short, canRetry: false)
+        // Checked before recording: finding out there is no key, or no model,
+        // once you have finished speaking loses the whole message.
+        if let missing = missingForProvider() {
+            phase = .failed(missing, canRetry: false)
             onOpen()
             closeLater(after: .seconds(5))
             return
+        }
+        // Whisper takes seconds to load; it does that while you speak.
+        if !preferences.provider.needsKey {
+            LocalModels.shared.warmUp(preferences.model, language: preferences.spokenLanguage)
         }
         guard !preferences.isEndpointMissing else {
             phase = .failed(de("Adresse fehlt", en: "Address missing"), canRetry: false)
@@ -331,6 +335,19 @@ final class Session {
         onOpen()
         breathe()
         startRecording()
+    }
+
+    /// What keeps the provider from working, in two or three words.
+    private func missingForProvider() -> String? {
+        let provider = preferences.provider
+        if provider.needsKey {
+            return Secrets.exists(for: provider) ? nil : Transcriber.Failure.noKey.short
+        }
+        switch LocalModels.shared.state(of: preferences.model, language: preferences.spokenLanguage) {
+        case .ready: return nil
+        case .downloading, .preparing: return de("Modell lädt noch", en: "Model still loading")
+        default: return de("Modell fehlt", en: "Model missing")
+        }
     }
 
     private func startRecording() {
@@ -520,6 +537,8 @@ final class Session {
         let settings = preferences.transcriberSettings
         let rules = preferences.activeReplacements
         let provider = preferences.provider
+        let model = preferences.model
+        let spoken = preferences.spokenLanguage
         let token = sessionToken
         inFlight.insert(id)
         sendCovers[id] = covered
@@ -527,7 +546,13 @@ final class Session {
 
         sends[id] = Task {
             let result: Result<String, Error>
-            if let key = Secrets.read(for: provider), !key.isEmpty {
+            if !provider.needsKey {
+                do {
+                    result = .success(try await LocalModels.shared.transcribe(audio, model: model, language: spoken, vocabulary: settings.vocabulary))
+                } catch {
+                    result = .failure(error)
+                }
+            } else if let key = Secrets.read(for: provider), !key.isEmpty {
                 let wav = await Task.detached { WAVEncoder.encode(samples: audio, sampleRate: 16_000) }.value
                 do {
                     result = .success(try await Transcriber(settings: settings).transcribe(wav: wav, apiKey: key))

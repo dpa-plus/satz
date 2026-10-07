@@ -6,12 +6,14 @@ import Foundation
 /// upload in OpenAI's format, or JSON for OpenRouter (see
 /// `Transcriber.Format`). That is why supporting another one is a base URL and
 /// a default model, and why a custom endpoint works for anything that copies
-/// OpenAI's API.
+/// OpenAI's API. `.local` is the exception: the model runs on this computer,
+/// and nothing is sent anywhere.
 public enum Provider: String, CaseIterable, Identifiable, Sendable {
     case openAI = "openai"
     case openRouter = "openrouter"
     case groq
     case custom
+    case local
 
     public var id: String { rawValue }
 
@@ -21,8 +23,12 @@ public enum Provider: String, CaseIterable, Identifiable, Sendable {
         case .openRouter: "OpenRouter"
         case .groq: "Groq"
         case .custom: de("Eigener", en: "Custom")
+        case .local: de("Lokal", en: "Local")
         }
     }
+
+    /// Every provider but the one on this computer wants a key.
+    public var needsKey: Bool { self != .local }
 
     /// nil for a custom endpoint, where the user supplies it.
     public var baseURL: URL? {
@@ -30,7 +36,7 @@ public enum Provider: String, CaseIterable, Identifiable, Sendable {
         case .openAI: URL(string: "https://api.openai.com/v1")
         case .openRouter: URL(string: "https://openrouter.ai/api/v1")
         case .groq: URL(string: "https://api.groq.com/openai/v1")
-        case .custom: nil
+        case .custom, .local: nil
         }
     }
 
@@ -45,6 +51,9 @@ public enum Provider: String, CaseIterable, Identifiable, Sendable {
         case .openRouter: "microsoft/mai-transcribe-2"
         case .groq: "whisper-large-v3-turbo"
         case .custom: ""
+        // Whisper rather than Apple's: it hears German and English in one
+        // recording, and takes the word list.
+        case .local: ModelCatalog.whisperTurbo
         }
     }
 
@@ -55,6 +64,7 @@ public enum Provider: String, CaseIterable, Identifiable, Sendable {
         case .openRouter: "sk-or-…"
         case .groq: "gsk_…"
         case .custom: de("API-Schlüssel", en: "API key")
+        case .local: ""
         }
     }
 

@@ -190,9 +190,48 @@ private struct KeyStep: View {
     @State private var problem: String?
 
     var body: some View {
-        StepTitle(text: de("Anbieter und Schlüssel", en: "Provider and key"))
+        StepTitle(text: preferences.provider.needsKey ? de("Anbieter und Schlüssel", en: "Provider and key")
+                                                      : de("Anbieter und Modell", en: "Provider and model"))
         Segmented(options: Provider.allCases.map { (value: $0, label: $0.name) }, selection: $preferences.provider)
 
+        if preferences.provider.needsKey {
+            keyField
+        } else {
+            // Nothing to paste here: the model is downloaded instead.
+            let choices = Provider.local.models
+            if choices.count > 1 {
+                Segmented(options: choices.map { (value: $0.id, label: $0.maker == "Apple" ? "Apple" : "Whisper") },
+                          selection: $preferences.model)
+            }
+            LocalModelRow(preferences: preferences)
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(theme.card))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(theme.control, lineWidth: 1.5))
+        }
+
+        if preferences.provider == .custom {
+            customURLField
+        }
+
+        if let problem {
+            Text(problem).font(Typography.text(13)).foregroundStyle(theme.inkSecondary)
+        }
+
+        HStack {
+            Button(de("Weiter", en: "Continue"), action: next)
+                .buttonStyle(AccentButtonStyle(height: 42))
+                .disabled(!canContinue)
+            Spacer()
+            if let page = preferences.provider.keyPage {
+                Button { NSWorkspace.shared.open(page) } label: {
+                    Text(de("Schlüssel holen", en: "Get a key")).font(Typography.text(14)).underline().foregroundStyle(theme.ink)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .onChange(of: preferences.provider) { input = ""; problem = nil; setup.refresh() }
+    }
+
+    private var keyField: some View {
         HStack(spacing: 10) {
             Image(systemName: setup.hasKey ? "checkmark" : "lock")
                 .font(.system(size: 13, weight: .medium))
@@ -214,42 +253,24 @@ private struct KeyStep: View {
         .frame(height: 42)
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(theme.card))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(theme.control, lineWidth: 1.5))
+    }
 
-        if preferences.provider == .custom {
-            HStack(spacing: 10) {
-                Image(systemName: "link").font(.system(size: 13, weight: .medium)).foregroundStyle(theme.inkOnCard)
-                if isSnapshot {
-                    Text(preferences.customBaseURL.isEmpty ? "https://…/v1" : preferences.customBaseURL)
-                    Spacer()
-                } else {
-                    TextField("", text: $preferences.customBaseURL, prompt: Text("https://…/v1").foregroundStyle(theme.inkOnCard))
-                        .textFieldStyle(.plain)
-                }
-            }
-            .font(Typography.mono(14))
-            .foregroundStyle(theme.ink)
-            .padding(.horizontal, 12)
-            .frame(height: 42)
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(theme.control, lineWidth: 1.5))
-        }
-
-        if let problem {
-            Text(problem).font(Typography.text(13)).foregroundStyle(theme.inkSecondary)
-        }
-
-        HStack {
-            Button(de("Weiter", en: "Continue"), action: next)
-                .buttonStyle(AccentButtonStyle(height: 42))
-                .disabled(!canContinue)
-            Spacer()
-            if let page = preferences.provider.keyPage {
-                Button { NSWorkspace.shared.open(page) } label: {
-                    Text(de("Schlüssel holen", en: "Get a key")).font(Typography.text(14)).underline().foregroundStyle(theme.ink)
-                }
-                .buttonStyle(.plain)
+    private var customURLField: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "link").font(.system(size: 13, weight: .medium)).foregroundStyle(theme.inkOnCard)
+            if isSnapshot {
+                Text(preferences.customBaseURL.isEmpty ? "https://…/v1" : preferences.customBaseURL)
+                Spacer()
+            } else {
+                TextField("", text: $preferences.customBaseURL, prompt: Text("https://…/v1").foregroundStyle(theme.inkOnCard))
+                    .textFieldStyle(.plain)
             }
         }
-        .onChange(of: preferences.provider) { input = ""; problem = nil; setup.refresh() }
+        .font(Typography.mono(14))
+        .foregroundStyle(theme.ink)
+        .padding(.horizontal, 12)
+        .frame(height: 42)
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(theme.control, lineWidth: 1.5))
     }
 
     private var canContinue: Bool {
@@ -414,7 +435,7 @@ extension Provider {
         case .openAI: URL(string: "https://platform.openai.com/api-keys")
         case .openRouter: URL(string: "https://openrouter.ai/settings/keys")
         case .groq: URL(string: "https://console.groq.com/keys")
-        case .custom: nil
+        case .custom, .local: nil
         }
     }
 }

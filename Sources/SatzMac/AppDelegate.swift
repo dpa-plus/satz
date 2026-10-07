@@ -183,6 +183,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         followColourFamily()
 
         Log.note("setup: provider=\(preferences.provider.rawValue) key=\(setup.hasKey) microphone=\(setup.microphone) paste=\(setup.canPaste)")
+        // A model on this Mac is loaded now, not at the first dictation.
+        if !preferences.provider.needsKey {
+            let model = preferences.model, spoken = preferences.spokenLanguage
+            LocalModels.shared.warmUp(model, language: spoken)
+            Task { await LocalModels.shared.check(model, language: spoken) }
+        }
 
         // Nothing works until setup is done, and a menu bar icon alone gives a
         // new user no hint of that.

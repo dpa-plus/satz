@@ -171,12 +171,18 @@ private struct ProviderBlock: View {
                 Segmented(options: Provider.allCases.map { (value: $0, label: $0.name) }, selection: $preferences.provider)
                     .padding(10)
                 Rule()
-                KeyRow(setup: setup, provider: preferences.provider)
-                Rule()
+                if preferences.provider.needsKey {
+                    KeyRow(setup: setup, provider: preferences.provider)
+                    Rule()
+                }
                 if preferences.provider == .custom {
                     FieldRow(label: de("Modell", en: "Model"), text: $preferences.model, prompt: preferences.provider.defaultModel)
                 } else {
                     ModelRow(preferences: preferences, store: models)
+                }
+                if preferences.provider == .local {
+                    Rule()
+                    LocalModelRow(preferences: preferences)
                 }
                 // Only MAI-Transcribe has a clean mode; elsewhere the switch would do nothing.
                 if preferences.model.contains("mai-transcribe") {
@@ -195,7 +201,17 @@ private struct ProviderBlock: View {
             }
             .surface(radius: 16)
         }
-        .onChange(of: preferences.provider) { setup.refresh() }
+        .onChange(of: preferences.provider) { _, provider in
+            setup.refresh()
+            // A loaded model is a gigabyte of memory nobody uses any more.
+            if provider.needsKey { LocalModels.shared.unload() }
+            else { LocalModels.shared.warmUp(preferences.model, language: preferences.spokenLanguage) }
+        }
+        .onChange(of: preferences.model) { _, model in
+            guard preferences.provider == .local else { return }
+            if model == ModelCatalog.apple { LocalModels.shared.unload() }
+            else { LocalModels.shared.warmUp(model, language: preferences.spokenLanguage) }
+        }
     }
 }
 
@@ -255,7 +271,7 @@ private struct ModelRow: View {
             }
             .padding(.horizontal, 16)
             .frame(height: 48)
-            Text(Self.facts(current))
+            Text(provider == .local ? Self.localFacts(current, spoken: preferences.spokenLanguage) : Self.facts(current))
                 .font(Typography.text(12))
                 .foregroundStyle(theme.inkSecondary)
                 .padding(.horizontal, 16)
@@ -352,7 +368,11 @@ private struct ModelRow: View {
     static func title(_ model: ModelChoice) -> String {
         var parts = ["\(model.name) · \(model.maker)"]
         if let rate = model.errorRate { parts.append(de("\(number(rate)) % Fehler", en: "\(number(rate)) % errors")) }
-        if let dollars = model.dollarsPerHour { parts.append(de("\(price(dollars)) pro Stunde", en: "\(price(dollars)) an hour")) }
+        if model.dollarsPerHour == 0 {
+            parts.append(de("kostenlos", en: "free"))
+        } else if let dollars = model.dollarsPerHour {
+            parts.append(de("\(price(dollars)) pro Stunde", en: "\(price(dollars)) an hour"))
+        }
         return parts.joined(separator: " · ")
     }
 
@@ -363,6 +383,116 @@ private struct ModelRow: View {
             ?? de("Noch ohne Fehlerquote von Artificial Analysis", en: "No error rate from Artificial Analysis yet")
         let cost = model.dollarsPerHour.map { de("\(price($0)) pro Stunde Sprechen", en: "\(price($0)) per hour of talking") }
         return [errors, cost].compactMap { $0 }.joined(separator: ", ")
+    }
+
+    /// Under the row, for a model on this Mac: what it can and cannot do.
+    static func localFacts(_ model: ModelChoice?, spoken: Language) -> String {
+        switch model?.id {
+        case ModelCatalog.apple?:
+            de("In macOS eingebaut und kostenlos. Hört nur auf \(spoken.name), nimmt den Wortschatz kaum an.",
+               en: "Built into macOS and free. Listens for \(spoken.name) only, barely takes the word list.")
+        case nil:
+            de("Ein WhisperKit-Modell, das nicht in der Liste steht.", en: "A WhisperKit model that is not in the list.")
+        default:
+            de("Läuft auf diesem Mac, ohne Internet und kostenlos. Erkennt Deutsch und Englisch von selbst.",
+               en: "Runs on this Mac, offline and free. Tells German from English by itself.")
+        }
+    }
+}
+
+/// Whether the model for "Lokal" is on this Mac, and the one button that
+/// changes that: load it, or put it in the Trash.
+struct LocalModelRow: View {
+    @Bindable var preferences: Preferences
+    @Environment(\.theme) private var theme
+    @Environment(\.isSnapshot) private var isSnapshot
+
+    var body: some View {
+        let local = LocalModels.shared
+        let model = preferences.model
+        let spoken = preferences.spokenLanguage
+        let apple = model == ModelCatalog.apple
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                status(local.state(of: model, language: spoken), apple: apple)
+            }
+            .font(Typography.text(15))
+            .foregroundStyle(theme.ink)
+            .padding(.horizontal, 16)
+            .frame(minHeight: 48)
+            // Apple's listens for one language: chosen here as well, where it matters.
+            if apple {
+                Rule()
+                HStack(spacing: 12) {
+                    Text(de("Gesprochen auf", en: "Spoken in"))
+                        .font(Typography.text(15))
+                        .foregroundStyle(theme.ink)
+                    Spacer()
+                    Segmented(options: Language.allCases.map { (value: $0, label: $0.name) }, selection: $preferences.spokenLanguage)
+                        .fixedSize()
+                }
+                .padding(.horizontal, 16)
+                .frame(height: 48)
+            }
+        }
+        .task(id: "\(model)-\(spoken.rawValue)") {
+            if !isSnapshot { await local.check(model, language: spoken) }
+        }
+    }
+
+    @ViewBuilder
+    private func status(_ state: LocalModels.State, apple: Bool) -> some View {
+        let local = LocalModels.shared
+        let model = preferences.model
+        let spoken = preferences.spokenLanguage
+        let size = ModelCatalog.downloadSize(of: model)
+        switch state {
+        case .ready:
+            Image(systemName: "checkmark").font(.system(size: 13, weight: .semibold)).foregroundStyle(theme.accent)
+            Text(apple ? de("Auf diesem Mac", en: "On this Mac")
+                       : de("Auf diesem Mac\(size.map { ", \($0)" } ?? "")", en: "On this Mac\(size.map { ", \($0)" } ?? "")"))
+            Spacer()
+            if !apple {
+                Button(de("Entfernen", en: "Remove")) { local.remove(model) }
+                    .buttonStyle(.outlineCompact)
+                    .help(de("Legt das Modell in den Papierkorb", en: "Moves the model to the Trash"))
+            }
+        case .missing:
+            Image(systemName: "arrow.down.circle").font(.system(size: 14, weight: .medium)).foregroundStyle(theme.inkSecondary)
+            Text(de("Noch nicht auf diesem Mac", en: "Not on this Mac yet"))
+            Spacer()
+            Button(size.map { de("Laden, \($0)", en: "Download, \($0)") } ?? de("Laden", en: "Download")) {
+                local.download(model, language: spoken)
+            }
+            .buttonStyle(AccentButtonStyle(height: 30))
+        case .downloading(let fraction):
+            Text(de("Wird geladen", en: "Downloading"))
+            Spacer()
+            ProgressView(value: fraction)
+                .progressViewStyle(.linear)
+                .tint(theme.accent)
+                .frame(width: 140)
+            Text(fraction.formatted(.percent.precision(.fractionLength(0))))
+                .font(Typography.mono(12))
+                .monospacedDigit()
+                .foregroundStyle(theme.inkSecondary)
+                .frame(width: 40, alignment: .trailing)
+        case .preparing:
+            ProgressView().controlSize(.small)
+            Text(de("Wird für diesen Mac vorbereitet, einmalig", en: "Getting ready for this Mac, once"))
+            Spacer()
+        case .unavailable(let why):
+            Image(systemName: "xmark.circle").font(.system(size: 14, weight: .medium)).foregroundStyle(theme.inkSecondary)
+            Text(why).foregroundStyle(theme.inkSecondary)
+            Spacer()
+        case .failed(let why):
+            Image(systemName: "exclamationmark.triangle").font(.system(size: 13, weight: .medium)).foregroundStyle(theme.accent)
+            Text(de("Laden fehlgeschlagen", en: "Download failed"))
+                .help(why)
+            Spacer()
+            Button(de("Nochmal", en: "Try again")) { local.download(model, language: spoken) }
+                .buttonStyle(.outlineCompact)
+        }
     }
 }
 

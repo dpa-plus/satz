@@ -27,7 +27,7 @@ final class ModelStore {
 
     /// Asks the provider again when the kept list is older than a day.
     func refresh(_ provider: Provider, force: Bool = false) {
-        guard provider != .custom, !fetching.contains(provider) else { return }
+        guard provider != .custom, provider != .local, !fetching.contains(provider) else { return }
         if let kept = cached(provider) {
             lists[provider] = kept.models
             if !force, Date().timeIntervalSince(kept.fetched) < 24 * 3600 { return }

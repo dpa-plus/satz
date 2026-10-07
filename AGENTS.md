@@ -36,7 +36,7 @@ cmd press; sleep 6; cmd press; st    # dictate, finish, print phase and text
 stop                                 # always stop it: a second menu bar icon confuses the user
 ```
 
-- Test mode (`--test-audio … --dev-control state.json`) never pastes: the text goes to the state file, and it never pauses the user's music unless `--test-media` is given (test against a stand-in player, not the user's Spotify). Commands: `press`, `release`, `mic`, `discard`, `undo`, `eye`, `caret:<n>`, `dump`, `picture`, `film`, `clipboard`, `strand`, `settings`, `setup`, `history`, `menu`, `close`.
+- Test mode (`--test-audio … --dev-control state.json`) never pastes: the text goes to the state file, and it never pauses the user's music unless `--test-media` is given (test against a stand-in player, not the user's Spotify). Commands: `press`, `release`, `mic`, `discard`, `undo`, `eye`, `caret:<n>`, `dump`, `picture`, `film`, `clipboard`, `strand`, `settings`, `setup`, `history`, `menu`, `close`, `field` (what the Insert button sees), `download:<model>` and `local:<model>` (a local model's download and state; start with `-provider local`).
 - The test copy shares the key files in `~/Library/Application Support/satz` with the real satz. In test mode the history lives next to the state file, so the user's is never touched.
 - Windows only come forward when the app is opened for real: `open "$HOME/Applications/satz test.app"`. A test-mode command cannot make satz the active app.
 - `satz --snapshot <dir>` renders every surface to PNGs without a window or permissions. Use it to look at UI.
@@ -50,7 +50,8 @@ Unit tests do not reach `desktop/src/main/main.ts`: start the packaged app once 
 
 ## Rules
 
-- **No local models, and no second model rewriting what was said**, unless the user turns such an option on. Accuracy comes from the transcription model, the word list and replacements.
+- **No second model rewriting what was said**, unless the user turns such an option on. Accuracy comes from the transcription model, the word list and replacements.
+- **Local models are a provider, never the default.** "Lokal" runs Whisper (WhisperKit on the Mac) or Apple's built-in recognizer on the computer itself; the user downloads the model from Settings. Model files live in `~/Library/Application Support/satz/models`, and removing one moves it to the Trash.
 - **Never cut the audio.** One recording per insertion spot; cut pieces came back garbled or in the wrong language.
 - **Never lose the user's words or clipboard.** Failed requests keep the audio; the clipboard is put back after pasting unless the user chose to keep the text there.
 - Every user-facing string exists in German and English: `de("…", en: "…")` on the Mac, `t('…', '…')` on Windows and Linux. No em dashes in UI text.
