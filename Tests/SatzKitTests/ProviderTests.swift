@@ -63,3 +63,18 @@ func eachProviderIsAskedAtItsOwnEndpoint(provider: Provider, url: String, model:
     let accounts = Provider.allCases.map(\.keychainAccount)
     #expect(Set(accounts).count == accounts.count)
 }
+
+@Test func eachMenuStartsWithTheProvidersDefault() {
+    // The menu shows the default as the first choice; a list that left it
+    // out would show an empty or "Other" choice to every new user.
+    for provider in Provider.allCases where provider != .custom {
+        #expect(provider.models.first?.id == provider.defaultModel)
+        #expect(Set(provider.models.map(\.id)).count == provider.models.count)
+    }
+    #expect(Provider.custom.models.isEmpty)
+}
+
+@Test func aModelTypedInByHandHasNoMenuEntry() {
+    #expect(Provider.openRouter.choice(for: "openai/whisper-1")?.name == "Whisper")
+    #expect(Provider.openRouter.choice(for: "someone/new-model") == nil)
+}

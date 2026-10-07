@@ -1,4 +1,5 @@
 import { satz } from './bridge'
+import { choiceFor, models, type ModelChoice } from '../core/models'
 
 /**
  * Settings: the provider and its key, the vocabulary, the Ersetzungen with
@@ -22,6 +23,10 @@ let editingKey = false
 let keyProblem = ''
 /** Focus the key field: on the first look without a key, and after "Change". */
 let wantsKeyFocus = true
+/** "Other model" was chosen: the field for typing an id stays open. */
+let typingModel = false
+/** Select the id once the field is drawn, so typing replaces it. */
+let selectModelId = false
 /** The field to put the cursor in after the next drawing, by id. */
 let focusNext: string | null = null
 
@@ -93,19 +98,42 @@ function render() {
     change.onclick = () => { editingKey = true; wantsKeyFocus = true; render() }
     keyRow.append(el('span', { className: 'grow', textContent: t('Schlüssel gesichert', 'Key saved') }), change)
   }
-  const model = el('input', { type: 'text', id: 'model', className: 'grow', value: p.models[p.provider] ?? '', placeholder: defaults[p.provider] })
-  model.onchange = () => update({ models: { ...p.models, [p.provider]: model.value.trim() } })
+  // A menu of the tested models with what an hour costs, and "Other" for one
+  // typed in by hand: a plain text field let one stray keystroke break every
+  // dictation after it.
+  const currentModel = p.models[p.provider] || defaults[p.provider]
+  const modelField = el('input', { type: 'text', id: 'model', className: 'grow', value: p.models[p.provider] ?? '', placeholder: defaults[p.provider] })
+  modelField.onchange = () => update({ models: { ...p.models, [p.provider]: modelField.value.trim() } })
+  const modelMenu = el('select', { id: 'model-menu', className: 'grow' })
+  const title = (model: ModelChoice) => model.dollarsPerHour === undefined ? model.name
+    : t(`${model.name} · $${model.dollarsPerHour.toFixed(2)} pro Stunde`, `${model.name} · $${model.dollarsPerHour.toFixed(2)} an hour`)
+  for (const maker of [...new Set(models[p.provider].map(model => model.maker))]) {
+    const group = el('optgroup', { label: maker })
+    for (const model of models[p.provider].filter(x => x.maker === maker)) group.append(el('option', { value: model.id, textContent: title(model) }))
+    modelMenu.append(group)
+  }
+  modelMenu.append(el('option', { value: '', textContent: t('Anderes Modell …', 'Other model …') }))
+  const known = choiceFor(p.provider, currentModel) !== undefined
+  modelMenu.value = known && !typingModel ? currentModel : ''
+  modelMenu.onchange = () => {
+    if (!modelMenu.value) { typingModel = true; selectModelId = true; focusNext = 'model'; render(); return }
+    typingModel = false
+    update({ models: { ...p.models, [p.provider]: modelMenu.value } })
+  }
+  const showsModelField = p.provider === 'custom' || typingModel || !known
   const providerBox = el('div', { className: 'box' },
     el('div', { className: 'row' }, el('span', { className: 'grow', textContent: t('Anbieter', 'Provider') }),
-      select(p.provider, [['openrouter', 'OpenRouter'], ['openai', 'OpenAI'], ['groq', 'Groq'], ['custom', t('Eigener', 'Custom')]], v => { editingKey = false; update({ provider: v }) })),
+      select(p.provider, [['openrouter', 'OpenRouter'], ['openai', 'OpenAI'], ['groq', 'Groq'], ['custom', t('Eigener', 'Custom')]], v => { editingKey = false; typingModel = false; update({ provider: v }) })),
     keyRow,
-    el('div', { className: 'row' }, el('span', { textContent: t('Modell', 'Model') }), model))
+    ...(p.provider === 'custom' ? [] : [el('div', { className: 'row' }, el('span', { textContent: t('Modell', 'Model') }), modelMenu)]),
+    ...(showsModelField ? [el('div', { className: 'row' }, el('span', { textContent: p.provider === 'custom' ? t('Modell', 'Model') : t('Modell-ID', 'Model ID') }), modelField)] : []))
   if (p.provider === 'custom') {
     const url = el('input', { type: 'text', id: 'custom-url', className: 'grow', value: p.customBaseURL, placeholder: 'https://…/v1' })
     url.onchange = () => update({ customBaseURL: url.value.trim() })
     providerBox.append(el('div', { className: 'row' }, el('span', { textContent: t('Adresse', 'Address') }), url))
   }
-  if (p.provider === 'openrouter') {
+  // Only MAI-Transcribe has a clean mode; elsewhere the switch would do nothing.
+  if (currentModel.includes('mai-transcribe')) {
     const box = el('input', { type: 'checkbox', checked: p.removesFillers })
     box.onchange = () => update({ removesFillers: box.checked })
     providerBox.append(el('div', { className: 'row' }, el('label', { className: 'switch' }, t('Füllwörter weglassen', 'Remove filler words'), box)))
@@ -185,7 +213,10 @@ function render() {
   )
   const target = focusNext ?? focused
   focusNext = null
-  if (target) (document.getElementById(target) as HTMLInputElement | null)?.focus()
+  const field = target ? document.getElementById(target) as HTMLInputElement | null : null
+  field?.focus()
+  if (selectModelId && target === 'model') field?.select()
+  selectModelId = false
 }
 
 async function load() {

@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { makeRequest, openRouterBody, retryDelay, transcribe, TranscriptionFailure, type TranscriberSettings } from '../src/core/transcriber'
+import { makeRequest, openRouterBody, providers, retryDelay, transcribe, TranscriptionFailure, type TranscriberSettings } from '../src/core/transcriber'
+import { choiceFor, models } from '../src/core/models'
 import { encodeWAV, decodeWAV, resample, level } from '../src/core/wav'
 
 const openrouter: TranscriberSettings = { provider: 'openrouter', model: '', vocabulary: ['Kubernetes', 'Klammer auf'], removesFillers: true }
@@ -63,4 +64,12 @@ test('WAV round trip, resampling and level', () => {
   assert.equal(resample(new Float32Array(48_000), 48_000).length, 16_000)
   assert.equal(level(new Float32Array(100)), 0)
   assert.ok(level(new Float32Array(100).fill(0.5)) > 0.8)
+})
+
+test('each model menu starts with the provider default and has no doubles', () => {
+  for (const provider of ['openai', 'openrouter', 'groq'] as const) {
+    assert.equal(models[provider][0].id, providers[provider].defaultModel)
+    assert.equal(new Set(models[provider].map(m => m.id)).size, models[provider].length)
+  }
+  assert.equal(choiceFor('openrouter', 'someone/new-model'), undefined)
 })

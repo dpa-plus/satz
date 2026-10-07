@@ -21,3 +21,6 @@ button.accent { background: var(--accent); color: var(--ground); border-color: v
 .error { color: var(--accent); font-size: 12.5px; padding: 0 14px 10px; }
 label.switch { display: flex; align-items: center; gap: 10px; width: 100%; cursor: pointer; }
 label.switch input { margin-left: auto; width: 18px; height: 18px; accent-color: var(--accent); }
+/* The open list is drawn by the system, light on Linux: give it the page's colours. */
+option, optgroup { background: var(--ground); color: var(--ink); }
+optgroup { color: var(--secondary); }

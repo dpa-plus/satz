@@ -175,7 +175,11 @@ private struct ProviderBlock: View {
                 Rule()
                 KeyRow(setup: setup, provider: preferences.provider)
                 Rule()
-                FieldRow(label: de("Modell", en: "Model"), text: $preferences.model, prompt: preferences.provider.defaultModel)
+                if preferences.provider == .custom {
+                    FieldRow(label: de("Modell", en: "Model"), text: $preferences.model, prompt: preferences.provider.defaultModel)
+                } else {
+                    ModelRow(preferences: preferences)
+                }
                 // Only MAI-Transcribe has a clean mode; elsewhere the switch would do nothing.
                 if preferences.model.contains("mai-transcribe") {
                     Rule()
@@ -194,6 +198,113 @@ private struct ProviderBlock: View {
             .surface(radius: 16)
         }
         .onChange(of: preferences.provider) { setup.refresh() }
+    }
+}
+
+/// The model: a menu of the tested ones with what an hour of speech costs,
+/// and "Other" for one typed in by hand. A plain text field let one stray
+/// keystroke break every dictation after it.
+private struct ModelRow: View {
+    @Bindable var preferences: Preferences
+    @Environment(\.theme) private var theme
+    @Environment(\.isSnapshot) private var isSnapshot
+    @State private var typing = false
+    @FocusState private var idFocused: Bool
+
+    var body: some View {
+        let provider = preferences.provider
+        let current = provider.choice(for: preferences.model)
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Text(de("Modell", en: "Model"))
+                    .font(Typography.text(15))
+                    .foregroundStyle(theme.ink)
+                Spacer()
+                if isSnapshot {
+                    label(current)
+                } else {
+                    Menu { items(provider) } label: { label(current) }
+                        .menuStyle(.button)
+                        .buttonStyle(.plain)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        .accessibilityLabel(de("Modell", en: "Model"))
+                }
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 48)
+            // A model typed in by hand keeps its field, so it can be read and changed.
+            if typing || current == nil {
+                Rule()
+                HStack(spacing: 12) {
+                    Text(de("Modell-ID", en: "Model ID"))
+                        .font(Typography.text(15))
+                        .foregroundStyle(theme.ink)
+                    Spacer()
+                    if isSnapshot {
+                        Text(preferences.model.isEmpty ? provider.defaultModel : preferences.model)
+                    } else {
+                        // Taking the keyboard selects the id, so typing replaces it.
+                        TextField("", text: $preferences.model, prompt: Text(provider.defaultModel).foregroundStyle(theme.inkOnCard))
+                            .textFieldStyle(.plain)
+                            .multilineTextAlignment(.trailing)
+                            .focused($idFocused)
+                    }
+                }
+                .font(Typography.mono(13))
+                .foregroundStyle(theme.inkOnCard)
+                .padding(.horizontal, 16)
+                .frame(height: 48)
+            }
+        }
+        .onChange(of: provider) { typing = false }
+        .onChange(of: typing) { _, now in
+            // Once the field is in the window: asked for as it appears, the
+            // request was dropped (the same as the Wortschatz field).
+            if now { Task { idFocused = true } }
+        }
+    }
+
+    private func label(_ current: ModelChoice?) -> some View {
+        HStack(spacing: 6) {
+            Text(current.map { "\($0.maker) \($0.name)" } ?? de("Anderes", en: "Other"))
+                .font(Typography.text(15))
+                .lineLimit(1)
+            Image(systemName: "chevron.up.chevron.down")
+                .font(.system(size: 10, weight: .semibold))
+        }
+        .foregroundStyle(theme.inkOnCard)
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private func items(_ provider: Provider) -> some View {
+        // By maker, in the order of the list, which starts with the default.
+        let makers = provider.models.map(\.maker).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
+        ForEach(makers, id: \.self) { maker in
+            Section(maker) {
+                ForEach(provider.models.filter { $0.maker == maker }) { model in
+                    Button {
+                        preferences.model = model.id
+                        typing = false
+                    } label: {
+                        if model.id == preferences.model {
+                            Label(Self.title(model), systemImage: "checkmark")
+                        } else {
+                            Text(Self.title(model))
+                        }
+                    }
+                }
+            }
+        }
+        Divider()
+        Button(de("Anderes Modell …", en: "Other model …")) { typing = true }
+    }
+
+    private static func title(_ model: ModelChoice) -> String {
+        guard let price = model.dollarsPerHour else { return model.name }
+        let amount = String(format: "$%.2f", price)
+        return de("\(model.name) · \(amount) pro Stunde", en: "\(model.name) · \(amount) an hour")
     }
 }
 
