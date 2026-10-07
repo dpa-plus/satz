@@ -11,7 +11,7 @@ interface Info {
   prefs: {
     provider: Provider; models: Record<string, string>; customBaseURL: string; words: string[]; triggerMode: 'tap' | 'hold'
     language: 'de' | 'en'; spokenLanguage: 'de' | 'en' | null; replacements: Replacement[]; usesReplacements: boolean; removesFillers: boolean
-    keepsOnClipboard: boolean
+    keepsOnClipboard: boolean; historyLimit: number
   }
   hasKey: boolean; keyboard: string; wayland: boolean; platform: string; startAtLogin: boolean; spokenLanguage: 'de' | 'en'
 }
@@ -159,12 +159,18 @@ function render() {
   keepBox.onchange = () => update({ keepsOnClipboard: keepBox.checked })
   const clear = el('button', { textContent: t('Leeren', 'Clear') })
   clear.onclick = () => satz.invoke('settings:clear-history')
+  // Lowering it drops the oldest at once.
+  const keep = select(String(p.historyLimit ?? 50), [['0', t('Aus', 'Off')], ['10', '10'], ['50', '50'], ['200', '200'], ['100000', t('Alle', 'All')]],
+    v => satz.invoke('history:set-limit', Number(v)).then(load))
+  keep.id = 'history-limit'
+  const show = el('button', { textContent: t('Ansehen', 'Show') })
+  show.onclick = () => satz.invoke('history:open')
   const general = el('div', { className: 'box' },
     el('div', { className: 'row' }, el('span', { className: 'grow', textContent: t('Sprache', 'Language') }),
       select(p.language, [['de', 'Deutsch'], ['en', 'English']], v => update({ language: v }))),
     el('div', { className: 'row' }, el('label', { className: 'switch' }, t('Beim Anmelden starten', 'Start at login'), startBox)),
     el('div', { className: 'row' }, el('label', { className: 'switch' }, t('Text in der Zwischenablage behalten', 'Keep text on the clipboard'), keepBox)),
-    el('div', { className: 'row' }, el('span', { className: 'grow', textContent: t('Verlauf', 'History') }), clear))
+    el('div', { className: 'row' }, el('span', { className: 'grow', textContent: t('Verlauf behalten', 'Keep history') }), keep, show, clear))
 
   // The page is drawn anew after every change; the cursor stays in the field
   // it was in, so several words can be typed one after the other.
@@ -187,4 +193,5 @@ async function load() {
   render()
 }
 
+satz.on('history:changed', load)
 load()

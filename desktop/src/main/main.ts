@@ -90,6 +90,9 @@ async function start() {
     deliver: async text => {
       if (testMode && !realPasteInTest) {
         delivered.push(text)
+        // Test mode runs in the test VMs; the history shows what it heard.
+        store.addHistory(text, true)
+        historyChanged()
         return { pasted: true }
       }
       // A moment for the shortcut's own keys to come up before Ctrl+V.
@@ -98,7 +101,7 @@ async function start() {
       log(`paste: ${outcome.pasted ? 'sent Ctrl+V' : 'clipboard only'}, ${text.length} characters`)
       store.addHistory(text, outcome.pasted)
       delivered.push(text)
-      refreshTray()
+      historyChanged()
       return outcome
     },
   })
@@ -146,10 +149,13 @@ async function start() {
   })
   log(`shortcut: ${keyboard.description}`)
 
-  // A second start ("satz --toggle", e.g. from a desktop shortcut) acts like the shortcut.
+  // A second start ("satz --toggle", e.g. from a desktop shortcut) acts like
+  // the shortcut. Opened from the app menu again, satz shows the history:
+  // without it, starting a running tray app looked like nothing happened.
   app.on('second-instance', (_e, argv) => {
     if (argv.includes('--toggle')) session.press()
     else if (argv.includes('--settings')) openSettings()
+    else openHistory()
   })
 
   // Tray.
@@ -157,12 +163,14 @@ async function start() {
   const tray = new Tray(nativeImage.createFromPath(iconPath))
   tray.setToolTip('satz')
   function refreshTray() {
-    const recent: Electron.MenuItemConstructorOptions[] = store.history.map(entry => ({
+    const recent: Electron.MenuItemConstructorOptions[] = store.history.slice(0, 4).map(entry => ({
       label: entry.text.length > 60 ? entry.text.slice(0, 57) + '…' : entry.text,
       click: () => { clipboard.writeText(entry.text) },
     }))
     const menu = Menu.buildFromTemplate([
-      ...(recent.length ? [{ label: de('Zuletzt (klicken zum Kopieren)', 'Recent (click to copy)'), enabled: false }, ...recent, { type: 'separator' as const }] : []),
+      ...(recent.length ? [{ label: de('Zuletzt (klicken zum Kopieren)', 'Recent (click to copy)'), enabled: false }, ...recent] : []),
+      { label: de(`Ganzer Verlauf (${store.history.length})…`, `All history (${store.history.length})…`), click: openHistory },
+      { type: 'separator' as const },
       ...(session.discarded && session.canRestore ? [{ label: de('Verworfenes zurückholen', 'Restore discarded'), click: () => session.restoreLast() }, { type: 'separator' as const }] : []),
       { label: de('Einstellungen…', 'Settings…'), click: openSettings },
       { label: de('Beenden', 'Quit'), click: () => app.quit() },
@@ -171,6 +179,32 @@ async function start() {
   }
   tray.on('click', () => tray.popUpContextMenu())
   refreshTray()
+
+  // History: everything kept, searchable; what opening satz again shows.
+  let historyWindow: BrowserWindow | null = null
+  function openHistory() {
+    if (historyWindow && !historyWindow.isDestroyed()) { historyWindow.show(); historyWindow.focus(); return }
+    historyWindow = new BrowserWindow({
+      width: 580, height: 700, title: de('satz Verlauf', 'satz History'), autoHideMenuBar: true,
+      icon: path.join(__dirname, '..', 'assets', 'icon.png'),
+      backgroundColor: '#16303C',
+      webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
+    })
+    historyWindow.loadFile(path.join(__dirname, 'history.html'))
+  }
+  /** The tray and an open history window show the change at once. */
+  function historyChanged() {
+    refreshTray()
+    for (const window of [historyWindow, settings]) {
+      if (window && !window.isDestroyed()) window.webContents.send('history:changed')
+    }
+  }
+  ipcMain.handle('history:get', () => ({ entries: store.history, limit: store.prefs.historyLimit, language: store.prefs.language }))
+  ipcMain.handle('history:remove', (_e, id: string) => { store.removeHistory(id); historyChanged() })
+  ipcMain.handle('history:copy', (_e, text: string) => { clipboard.writeText(text) })
+  ipcMain.handle('history:set-limit', (_e, limit: number) => { store.setHistoryLimit(limit); historyChanged() })
+  ipcMain.handle('history:open-settings', () => openSettings())
+  ipcMain.handle('history:open', () => openHistory())
 
   // Settings.
   let settings: BrowserWindow | null = null
@@ -196,7 +230,7 @@ async function start() {
   }))
   ipcMain.handle('settings:update', (_e, change) => { store.update(change); refreshTray(); return store.prefs })
   ipcMain.handle('settings:store-key', (_e, key: string) => { store.storeKey(key); return store.hasKey() })
-  ipcMain.handle('settings:clear-history', () => { store.clearHistory(); refreshTray() })
+  ipcMain.handle('settings:clear-history', () => { store.clearHistory(); historyChanged() })
   ipcMain.handle('settings:start-at-login', (_e, on: boolean) => { startAtLogin.set(on); return startAtLogin.get() })
   ipcMain.handle('settings:open-log', () => shell.openPath(path.join(app.getPath('userData'), 'satz.log')))
 

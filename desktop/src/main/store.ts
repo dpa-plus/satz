@@ -25,13 +25,22 @@ export interface Preferences {
   removesFillers: boolean
   /** The transcript stays on the clipboard after pasting, instead of what was copied before. */
   keepsOnClipboard: boolean
+  /** How many dictations the history keeps: 0 none, KEEP_ALL every one. */
+  historyLimit: number
   showsText: boolean
   /** Where the user dragged the card, from its starting spot. */
   cardSpot: { x: number; y: number } | null
   startAtLoginDefaulted: boolean
 }
 
-export interface HistoryEntry { text: string; date: string; pasted: boolean }
+export interface HistoryEntry { id: string; text: string; date: string; pasted: boolean }
+
+export const STANDARD_HISTORY = 50
+/** "All": no limit anyone would reach. */
+export const KEEP_ALL = 100_000
+/** The choices in the settings, 0 being "keep none". */
+export const HISTORY_LIMITS = [0, 10, 50, 200, KEEP_ALL]
+const newId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 
 const dir = () => app.getPath('userData')
 const file = (name: string) => path.join(dir(), name)
@@ -67,13 +76,17 @@ export class Store {
       usesReplacements: true,
       removesFillers: true,
       keepsOnClipboard: false,
+      historyLimit: STANDARD_HISTORY,
       showsText: true,
       cardSpot: null,
       startAtLoginDefaulted: false,
       ...stored,
     }
     setLanguage(this.prefs.language)
-    this.history = (readJSON<HistoryEntry[]>('history.json') ?? []).slice(0, 4)
+    // Entries from before 0.1.2 have no id yet.
+    this.history = (readJSON<HistoryEntry[]>('history.json') ?? [])
+      .map(entry => ({ ...entry, id: entry.id ?? newId() }))
+      .slice(0, this.prefs.historyLimit)
   }
 
   save() { writeJSON('preferences.json', this.prefs) }
@@ -133,8 +146,22 @@ export class Store {
   // MARK: - History
 
   addHistory(text: string, pasted: boolean) {
-    if (!text) return
-    this.history = [{ text, date: new Date().toISOString(), pasted }, ...this.history].slice(0, 4)
+    // Off means nothing is written, not written and then forgotten.
+    if (!text || this.prefs.historyLimit === 0) return
+    this.history = [{ id: newId(), text, date: new Date().toISOString(), pasted }, ...this.history].slice(0, this.prefs.historyLimit)
+    writeJSON('history.json', this.history, 0o600)
+  }
+
+  /** Lowering it drops the oldest at once, from disk too. */
+  setHistoryLimit(limit: number) {
+    this.update({ historyLimit: limit })
+    if (limit === 0) return this.clearHistory()
+    this.history = this.history.slice(0, limit)
+    writeJSON('history.json', this.history, 0o600)
+  }
+
+  removeHistory(id: string) {
+    this.history = this.history.filter(entry => entry.id !== id)
     writeJSON('history.json', this.history, 0o600)
   }
 
