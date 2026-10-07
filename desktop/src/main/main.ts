@@ -14,6 +14,7 @@ import { deliver, isWayland } from './paste'
 import { FileSource, MicHub, MicRecorder } from './recorder'
 import { Store } from './store'
 import { MediaPause, systemPlayers } from './media'
+import { ModelLists } from './modelLists'
 
 /**
  * satz for Windows and Linux. Double-tap right Ctrl, talk, double-tap again:
@@ -125,7 +126,13 @@ async function start() {
       })
     }, 16)
   }
-  session.onChange = pushState
+  // The tray follows the phase too: "Restore discarded" appears right after
+  // a discard and goes after Undo, not only when the card closes.
+  let lastPhase = session.phase.kind
+  session.onChange = () => {
+    pushState()
+    if (session.phase.kind !== lastPhase) { lastPhase = session.phase.kind; refreshTray() }
+  }
   // Never in test mode, where it would pause the user's music, unless a test asks.
   const mediaPause = new MediaPause(systemPlayers(log), () => store.prefs.pausesMedia && (!testMode || args.includes('--test-media')), log)
   session.onOpen = () => { card.show(); pushState() }
@@ -185,24 +192,34 @@ async function start() {
   tray.on('click', () => tray.popUpContextMenu())
   refreshTray()
 
-  // History: everything kept, searchable; what opening satz again shows.
-  let historyWindow: BrowserWindow | null = null
-  function openHistory() {
-    if (historyWindow && !historyWindow.isDestroyed()) { historyWindow.show(); historyWindow.focus(); return }
-    historyWindow = new BrowserWindow({
-      width: 580, height: 700, title: de('satz Verlauf', 'satz History'), autoHideMenuBar: true,
+  // One window, two pages: History (what opening satz again shows) and
+  // Settings. Two windows for them meant a second one beside the first.
+  let mainWindow: BrowserWindow | null = null
+  function openWindow(page: 'history' | 'settings') {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('window:page', page)
+      mainWindow.show(); mainWindow.focus()
+      return
+    }
+    mainWindow = new BrowserWindow({
+      width: 580, height: 780, title: 'satz', autoHideMenuBar: true,
       icon: path.join(__dirname, '..', 'assets', 'icon.png'),
       backgroundColor: '#16303C',
       webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
     })
-    historyWindow.loadFile(path.join(__dirname, 'history.html'))
+    mainWindow.loadFile(path.join(__dirname, 'window.html'), { query: { page } })
   }
-  /** The tray and an open history window show the change at once. */
+  // Declared as functions, so the tray built above can name them before this
+  // line runs; as constants they stopped satz's start halfway.
+  function openHistory() { openWindow('history') }
+  function openSettings() { openWindow('settings') }
+  function tellWindow(channel: string) {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel)
+  }
+  /** The tray and an open window show the change at once. */
   function historyChanged() {
     refreshTray()
-    for (const window of [historyWindow, settings]) {
-      if (window && !window.isDestroyed()) window.webContents.send('history:changed')
-    }
+    tellWindow('history:changed')
   }
   ipcMain.handle('history:get', () => ({ entries: store.history, limit: store.prefs.historyLimit, language: store.prefs.language }))
   ipcMain.handle('history:remove', (_e, id: string) => { store.removeHistory(id); historyChanged() })
@@ -211,29 +228,36 @@ async function start() {
   ipcMain.handle('history:open-settings', () => openSettings())
   ipcMain.handle('history:open', () => openHistory())
 
-  // Settings.
-  let settings: BrowserWindow | null = null
-  function openSettings() {
-    if (settings && !settings.isDestroyed()) { settings.show(); settings.focus(); return }
-    settings = new BrowserWindow({
-      width: 560, height: 760, title: de('satz Einstellungen', 'satz Settings'), autoHideMenuBar: true,
-      icon: path.join(__dirname, '..', 'assets', 'icon.png'),
-      backgroundColor: '#16303C',
-      webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
-    })
-    settings.loadFile(path.join(__dirname, 'settings.html'))
-  }
-  ipcMain.handle('settings:get', () => ({
-    prefs: store.prefs,
-    hasKey: store.hasKey(),
-    keyboard: keyboard?.description,
-    wayland: isWayland(),
-    platform: process.platform,
-    history: store.history,
-    startAtLogin: startAtLogin.get(),
-    spokenLanguage: store.spokenLanguage,
-  }))
-  ipcMain.handle('settings:update', (_e, change) => { store.update(change); refreshTray(); return store.prefs })
+  // The model menu: the provider's live list, the shipped one until it arrives.
+  const modelLists = new ModelLists(app.getPath('userData'), provider => store.readKey(provider), log, () => tellWindow('models:changed'))
+  ipcMain.handle('settings:get', () => {
+    modelLists.refresh(store.prefs.provider)
+    return {
+      prefs: store.prefs,
+      hasKey: store.hasKey(),
+      keyboard: keyboard?.description,
+      wayland: isWayland(),
+      platform: process.platform,
+      history: store.history,
+      startAtLogin: startAtLogin.get(),
+      spokenLanguage: store.spokenLanguage,
+      models: modelLists.get(store.prefs.provider),
+    }
+  })
+  ipcMain.handle('settings:update', (_e, change) => {
+    store.update(change)
+    if (change.pausesMedia) mediaPause.prepare()
+    refreshTray()
+    return store.prefs
+  })
+  // Quitting in the middle of a dictation plays the paused music again.
+  let quitting = false
+  app.on('before-quit', event => {
+    if (quitting) return
+    quitting = true
+    event.preventDefault()
+    mediaPause.quitting().finally(() => app.quit())
+  })
   ipcMain.handle('settings:store-key', (_e, key: string) => { store.storeKey(key); return store.hasKey() })
   ipcMain.handle('settings:clear-history', () => { store.clearHistory(); historyChanged() })
   ipcMain.handle('settings:start-at-login', (_e, on: boolean) => { startAtLogin.set(on); return startAtLogin.get() })

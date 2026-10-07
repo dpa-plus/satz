@@ -8,7 +8,7 @@ interface Entry { id: string; text: string; date: string; pasted: boolean }
 interface Info { entries: Entry[]; limit: number; language: 'de' | 'en' }
 
 const KEEP_ALL = 100_000
-const app = document.getElementById('app')!
+const app = document.getElementById('history-page')!
 let info: Info
 let query = ''
 let copiedId: string | null = null
@@ -48,10 +48,7 @@ function row(entry: Entry): HTMLElement {
 }
 
 function render() {
-  document.title = t('satz Verlauf', 'satz History')
-  const settings = el('button', { textContent: t('Einstellungen', 'Settings') })
-  settings.onclick = () => satz.invoke('history:open-settings')
-  const children: Node[] = [el('header', {}, el('h1', { textContent: t('Verlauf', 'History') }), settings)]
+  const children: Node[] = []
 
   if (info.entries.length > 0) {
     // Kept when the page is drawn again, with the cursor where it was.
@@ -109,4 +106,6 @@ async function load() {
 }
 
 satz.on('history:changed', load)
+// The language is set on the settings page, in the same window.
+document.addEventListener('satz-language', () => load())
 load()

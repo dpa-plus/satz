@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 /** The few channels the card and settings windows may use. */
 const send = new Set(['card:ready', 'card:button', 'card:caret', 'card:rect', 'card:pointer-inside', 'card:drag', 'rec:started', 'rec:chunk'])
-const receive = new Set(['card:state', 'rec:start', 'rec:stop', 'history:changed'])
+const receive = new Set(['card:state', 'rec:start', 'rec:stop', 'history:changed', 'models:changed', 'window:page'])
 const invoke = new Set(['settings:get', 'settings:update', 'settings:store-key', 'settings:clear-history', 'settings:start-at-login', 'settings:open-log',
   'history:get', 'history:remove', 'history:copy', 'history:set-limit', 'history:open-settings', 'history:open'])
 

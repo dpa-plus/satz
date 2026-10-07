@@ -22,24 +22,46 @@ export interface Players {
 }
 
 export class MediaPause {
-  private pausing: Promise<string[]> | null = null
+  /** Who satz paused and has not played again yet. */
+  private paused: string[] = []
+  private pausing: Promise<void> | null = null
+  private resuming: ReturnType<typeof setTimeout> | null = null
 
   constructor(private players: Players | null, private isOn: () => boolean, private log: (message: string) => void) {
-    if (isOn()) players?.prepare?.()
+    if (isOn()) this.prepare()
   }
 
+  /** For when the switch is turned on later: the Windows helper takes seconds to start. */
+  prepare() { this.players?.prepare?.() }
+
   dictationStarted() {
-    if (!this.players || !this.isOn() || this.pausing) return
-    this.pausing = this.players.pause().catch(error => { this.log(`media: ${(error as Error).message}`); return [] })
-    this.pausing.then(ids => { if (ids.length) this.log(`media paused: ${ids.join(', ')}`) })
+    // The next dictation right after the last one: the music stays paused.
+    if (this.resuming) { clearTimeout(this.resuming); this.resuming = null }
+    if (!this.players || !this.isOn() || this.paused.length > 0 || this.pausing) return
+    this.pausing = this.players.pause()
+      .then(ids => { this.paused = ids; if (ids.length) this.log(`media paused: ${ids.join(', ')}`) })
+      .catch(error => this.log(`media: ${(error as Error).message}`))
+      .finally(() => { this.pausing = null })
   }
 
   async dictationEnded() {
-    const pausing = this.pausing
-    this.pausing = null
-    if (!pausing || !this.players) return
-    const ids = await pausing
-    if (ids.length === 0) return
+    await this.pausing
+    if (this.resuming) clearTimeout(this.resuming)
+    // A moment's grace: two dictations in a row did play-pause between them.
+    this.resuming = setTimeout(() => { this.resuming = null; void this.resume() }, 800)
+  }
+
+  /** satz quits: what it paused plays again, also in the middle of a dictation. */
+  async quitting() {
+    if (this.resuming) { clearTimeout(this.resuming); this.resuming = null }
+    await this.pausing
+    await this.resume()
+  }
+
+  private async resume() {
+    const ids = this.paused
+    this.paused = []
+    if (ids.length === 0 || !this.players) return
     const resumed = await this.players.play(ids).catch(error => { this.log(`media: ${(error as Error).message}`); return [] as string[] })
     this.log(resumed.length ? `media resumed: ${resumed.join(', ')}` : 'media left as the user set it')
   }
@@ -77,8 +99,8 @@ class Mpris implements Players {
     const paused: string[] = []
     for (const name of await this.names()) {
       if ((await this.status(name).catch(() => '')) !== 'Playing') continue
-      await this.call(name, 'Pause')
-      paused.push(name)
+      // One player failing must not lose the ones already paused.
+      if (await this.call(name, 'Pause').then(() => true, () => false)) paused.push(name)
     }
     return paused
   }
@@ -160,7 +182,8 @@ class WindowsMedia implements Players {
   private async ask(command: string): Promise<string[]> {
     await this.start()
     const answer = await new Promise<string>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('no answer')), 3000)
+      // Generous: an answer thrown away after pausing would never be resumed.
+      const timer = setTimeout(() => reject(new Error('no answer')), 8000)
       this.waiting.push(line => { clearTimeout(timer); resolve(line) })
       this.helper?.stdin.write(command + '\r\n')
     })

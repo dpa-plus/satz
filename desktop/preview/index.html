@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<!-- The window's pages with a stand-in for the app (mock.ts). Serve desktop/ and open /preview/. -->
+<title>satz</title>
+<link rel="stylesheet" href="../dist/settings.css">
+<link rel="stylesheet" href="../dist/history.css">
+<link rel="stylesheet" href="../dist/window.css">
+</head>
+<body>
+<nav id="tabs" role="tablist">
+  <button role="tab" id="tab-history" data-page="history">History</button>
+  <button role="tab" id="tab-settings" data-page="settings">Settings</button>
+</nav>
+<main id="history-page" role="tabpanel"></main>
+<main id="settings-page" role="tabpanel" hidden></main>
+<script src="mock.js"></script>
+<script src="../dist/history.js"></script>
+<script src="../dist/settings.js"></script>
+<script src="../dist/window.js"></script>
+</body>
+</html>

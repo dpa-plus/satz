@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { makeRequest, openRouterBody, providers, retryDelay, transcribe, TranscriptionFailure, type TranscriberSettings } from '../src/core/transcriber'
-import { choiceFor, models } from '../src/core/models'
+import { choiceFor, listedPrice, models, parse } from '../src/core/models'
 import { encodeWAV, decodeWAV, resample, level } from '../src/core/wav'
 
 const openrouter: TranscriberSettings = { provider: 'openrouter', model: '', vocabulary: ['Kubernetes', 'Klammer auf'], removesFillers: true }
@@ -71,7 +71,7 @@ test('each model menu starts with the provider default and has no doubles', () =
     assert.equal(models[provider][0].id, providers[provider].defaultModel)
     assert.equal(new Set(models[provider].map(m => m.id)).size, models[provider].length)
   }
-  assert.equal(choiceFor('openrouter', 'someone/new-model'), undefined)
+  assert.equal(choiceFor(models.openrouter, 'someone/new-model'), undefined)
 })
 
 test('a second request answers when the first is slow; a rejected key fails at once', async () => {
@@ -88,4 +88,25 @@ test('a second request answers when the first is slow; a rejected key fails at o
   await assert.rejects(transcribe({ ...openrouter, backupAfter: 0.5 }, wav, 'k', rejected, async () => {}), (e: TranscriptionFailure) => e.kind === 'unauthorized')
   await new Promise(resolve => setTimeout(resolve, 700))
   assert.equal(calls, 1)
+})
+
+test('the live list becomes the menu: hidden ones out, best first, prices from the listing', () => {
+  const list = parse({ data: [
+    { id: 'google/gemini-3.5-transcribe', name: 'Google: Gemini 3.5 Transcribe', pricing: { prompt: '0.000002', completion: '0.000012' } },
+    { id: 'someone/brand-new-stt', name: 'Someone: Brand New STT', pricing: { prompt: '0.00005' } },
+    { id: 'openai/gpt-transcribe', name: 'OpenAI: GPT Transcribe', pricing: { prompt: '0.000075' } },
+    { id: 'microsoft/mai-transcribe-2', name: 'Microsoft AI: MAI-Transcribe 2', pricing: { prompt: '0.1' } },
+  ] }, 'openrouter')
+  assert.deepEqual(list.map(m => m.id), ['microsoft/mai-transcribe-2', 'openai/gpt-transcribe', 'someone/brand-new-stt'])
+  const fresh = list[2]
+  assert.equal(fresh.name, 'Brand New STT')
+  assert.equal(fresh.maker, 'Someone')
+  assert.ok(Math.abs((fresh.dollarsPerHour ?? 0) - 0.18) < 1e-9)
+  assert.equal(listedPrice({ prompt: '0.0000025', completion: '0.00001' }), undefined)
+  assert.deepEqual(parse({ data: [{ id: 'gpt-5' }, { id: 'whisper-1' }, { id: 'gpt-realtime-transcribe' }] }, 'openai').map(m => m.id), ['whisper-1'])
+})
+
+test('only MAI-Transcribe 2 gets the Azure options', () => {
+  assert.equal(openRouterBody({ ...openrouter, model: 'microsoft/mai-transcribe-1.5' }, wav).provider, undefined)
+  assert.ok(openRouterBody({ ...openrouter, model: 'microsoft/mai-transcribe-2' }, wav).provider)
 })

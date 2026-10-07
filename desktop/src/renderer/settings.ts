@@ -1,5 +1,5 @@
 import { satz } from './bridge'
-import { choiceFor, models, type ModelChoice } from '../core/models'
+import { choiceFor, type ModelChoice } from '../core/models'
 
 /**
  * Settings: the provider and its key, the vocabulary, the Ersetzungen with
@@ -15,9 +15,11 @@ interface Info {
     keepsOnClipboard: boolean; historyLimit: number; pausesMedia: boolean
   }
   hasKey: boolean; keyboard: string; wayland: boolean; platform: string; startAtLogin: boolean; spokenLanguage: 'de' | 'en'
+  /** The provider's live list, or the shipped one until it arrives. */
+  models: ModelChoice[]
 }
 
-const app = document.getElementById('app')!
+const app = document.getElementById('settings-page')!
 let info: Info
 let editingKey = false
 let keyProblem = ''
@@ -49,8 +51,10 @@ function section(title: string, ...children: Node[]) {
   return el('section', {}, el('h2', { textContent: title }), ...children)
 }
 
-function select<T extends string>(value: T, options: [T, string][], onChange: (v: T) => void) {
+/** `label` names the menu for screen readers, which otherwise read only its value. */
+function select<T extends string>(value: T, options: [T, string][], onChange: (v: T) => void, label?: string) {
   const s = el('select')
+  if (label) s.setAttribute('aria-label', label)
   for (const [v, label] of options) s.append(el('option', { value: v, textContent: label, selected: v === value }))
   s.onchange = () => onChange(s.value as T)
   return s
@@ -58,14 +62,13 @@ function select<T extends string>(value: T, options: [T, string][], onChange: (v
 
 function render() {
   const p = info.prefs
-  document.title = t('satz Einstellungen', 'satz Settings')
 
   // Shortcut
   const shortcut = el('div', { className: 'box' },
     el('div', { className: 'row' }, el('span', { className: 'grow', textContent: p.triggerMode === 'tap'
       ? t('Rechte Strg-Taste zweimal tippen: starten, nochmal: einfügen', 'Tap right Ctrl twice to start, again to paste')
       : t('Rechte Strg-Taste zweimal tippen und halten: sprechen, loslassen: einfügen', 'Tap right Ctrl twice and hold to talk, let go to paste') }),
-      select(p.triggerMode, [['tap', t('Tippen', 'Tap')], ['hold', t('Halten', 'Hold')]], v => update({ triggerMode: v }))))
+      select(p.triggerMode, [['tap', t('Tippen', 'Tap')], ['hold', t('Halten', 'Hold')]], v => update({ triggerMode: v }), t('Tippen oder halten', 'Tap or hold'))))
   // Only worth a line when something is missing.
   const shortcutHint = el('div', { className: 'hint', textContent: '' })
   if (info.wayland && info.keyboard?.startsWith('Wayland')) {
@@ -98,22 +101,43 @@ function render() {
     change.onclick = () => { editingKey = true; wantsKeyFocus = true; render() }
     keyRow.append(el('span', { className: 'grow', textContent: t('Schlüssel gesichert', 'Key saved') }), change)
   }
-  // A menu of the tested models with what an hour costs, and "Other" for one
-  // typed in by hand: a plain text field let one stray keystroke break every
-  // dictation after it.
+  // A menu of what the provider offers now, best first, with how many words
+  // each gets wrong and what an hour costs, and "Other" for one typed in by
+  // hand: a plain text field let one stray keystroke break every dictation.
   const currentModel = p.models[p.provider] || defaults[p.provider]
   const modelField = el('input', { type: 'text', id: 'model', className: 'grow', value: p.models[p.provider] ?? '', placeholder: defaults[p.provider] })
-  modelField.onchange = () => update({ models: { ...p.models, [p.provider]: modelField.value.trim() } })
-  const modelMenu = el('select', { id: 'model-menu', className: 'grow' })
-  const title = (model: ModelChoice) => model.dollarsPerHour === undefined ? model.name
-    : t(`${model.name} · $${model.dollarsPerHour.toFixed(2)} pro Stunde`, `${model.name} · $${model.dollarsPerHour.toFixed(2)} an hour`)
-  for (const maker of [...new Set(models[p.provider].map(model => model.maker))]) {
-    const group = el('optgroup', { label: maker })
-    for (const model of models[p.provider].filter(x => x.maker === maker)) group.append(el('option', { value: model.id, textContent: title(model) }))
-    modelMenu.append(group)
+  // Saved on Return, or quietly when the field is left: drawing the page
+  // again right then closed the model menu the user had just opened.
+  const saveModel = (redraw: boolean) => {
+    const id = modelField.value.trim()
+    typingModel = false
+    if (redraw) update({ models: { ...p.models, [p.provider]: id } })
+    else satz.invoke('settings:update', { models: { ...p.models, [p.provider]: id } }).then(next => { info.prefs = next })
   }
+  modelField.onchange = () => saveModel(false)
+  modelField.onkeydown = event => {
+    if (event.key === 'Enter') saveModel(true)
+    // Escape keeps the model there was. The old id goes back first: the field
+    // closing counts as leaving it, which saved the half-typed one.
+    if (event.key === 'Escape') { modelField.value = p.models[p.provider] ?? ''; typingModel = false; render() }
+  }
+  const modelMenu = el('select', { id: 'model-menu', className: 'grow' })
+  modelMenu.setAttribute('aria-label', t('Modell', 'Model'))
+  const number = (value: number, digits: number) => value.toLocaleString(p.language === 'de' ? 'de-DE' : 'en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })
+  const title = (model: ModelChoice) => [
+    `${model.name} · ${model.maker}`,
+    ...(model.errorRate === undefined ? [] : [t(`${number(model.errorRate, 1)} % Fehler`, `${number(model.errorRate, 1)} % errors`)]),
+    ...(model.dollarsPerHour === undefined ? [] : [t(`${number(model.dollarsPerHour, 2)} $ pro Stunde`, `$${number(model.dollarsPerHour, 2)} an hour`)]),
+  ].join(' · ')
+  for (const model of info.models) modelMenu.append(el('option', { value: model.id, textContent: title(model) }))
   modelMenu.append(el('option', { value: '', textContent: t('Anderes Modell …', 'Other model …') }))
-  const known = choiceFor(p.provider, currentModel) !== undefined
+  const chosen = choiceFor(info.models, currentModel)
+  const known = chosen !== undefined
+  const facts = el('div', { className: 'hint', textContent: !chosen ? t('Ein Modell, das nicht in der Liste steht.', 'A model that is not in the list.') : [
+    chosen.errorRate === undefined ? t('Noch ohne Fehlerquote von Artificial Analysis', 'No error rate from Artificial Analysis yet')
+      : t(`${number(chosen.errorRate, 1)} % falsche Wörter laut Artificial Analysis`, `${number(chosen.errorRate, 1)} % wrong words per Artificial Analysis`),
+    ...(chosen.dollarsPerHour === undefined ? [] : [t(`${number(chosen.dollarsPerHour, 2)} $ pro Stunde Sprechen`, `$${number(chosen.dollarsPerHour, 2)} per hour of talking`)]),
+  ].join(', ') })
   modelMenu.value = known && !typingModel ? currentModel : ''
   modelMenu.onchange = () => {
     if (!modelMenu.value) { typingModel = true; selectModelId = true; focusNext = 'model'; render(); return }
@@ -123,9 +147,9 @@ function render() {
   const showsModelField = p.provider === 'custom' || typingModel || !known
   const providerBox = el('div', { className: 'box' },
     el('div', { className: 'row' }, el('span', { className: 'grow', textContent: t('Anbieter', 'Provider') }),
-      select(p.provider, [['openrouter', 'OpenRouter'], ['openai', 'OpenAI'], ['groq', 'Groq'], ['custom', t('Eigener', 'Custom')]], v => { editingKey = false; typingModel = false; update({ provider: v }) })),
+      select(p.provider, [['openrouter', 'OpenRouter'], ['openai', 'OpenAI'], ['groq', 'Groq'], ['custom', t('Eigener', 'Custom')]], v => { editingKey = false; typingModel = false; update({ provider: v }) }, t('Anbieter', 'Provider'))),
     keyRow,
-    ...(p.provider === 'custom' ? [] : [el('div', { className: 'row' }, el('span', { textContent: t('Modell', 'Model') }), modelMenu)]),
+    ...(p.provider === 'custom' ? [] : [el('div', { className: 'row' }, el('span', { textContent: t('Modell', 'Model') }), modelMenu), facts]),
     ...(showsModelField ? [el('div', { className: 'row' }, el('span', { textContent: p.provider === 'custom' ? t('Modell', 'Model') : t('Modell-ID', 'Model ID') }), modelField)] : []))
   if (p.provider === 'custom') {
     const url = el('input', { type: 'text', id: 'custom-url', className: 'grow', value: p.customBaseURL, placeholder: 'https://…/v1' })
@@ -159,7 +183,7 @@ function render() {
   const replacementBox = el('div', { className: 'box' }, el('div', { className: 'row' }, el('label', { className: 'switch' }, t('Gesprochene Zeichen ersetzen', 'Replace spoken symbols'), useBox)))
   if (p.usesReplacements) {
     replacementBox.append(el('div', { className: 'row' }, el('span', { className: 'grow', textContent: t('Gesprochen auf', 'Spoken in') }),
-      select(info.spokenLanguage, [['de', 'Deutsch'], ['en', 'English']], v => update({ spokenLanguage: v }))))
+      select(info.spokenLanguage, [['de', 'Deutsch'], ['en', 'English']], v => update({ spokenLanguage: v }), t('Gesprochen auf', 'Spoken in'))))
     const chips = el('div', { className: 'chips' })
     for (const rule of p.replacements.filter(r => r.isOn)) {
       const remove = el('button', { textContent: '×' })
@@ -187,17 +211,32 @@ function render() {
   // Off: whatever was copied before comes back after pasting.
   const keepBox = el('input', { type: 'checkbox', checked: p.keepsOnClipboard })
   keepBox.onchange = () => update({ keepsOnClipboard: keepBox.checked })
+  // Deleting history asks first: one click on "Off" took every dictation.
+  // Counted when asked: this page is not drawn again for every dictation.
+  const count = async () => ((await satz.invoke('history:get')).entries as unknown[]).length
   const clear = el('button', { textContent: t('Leeren', 'Clear') })
-  clear.onclick = () => satz.invoke('settings:clear-history')
-  // Lowering it drops the oldest at once.
+  clear.onclick = async () => {
+    const all = await count()
+    if (all > 0 && confirm(t(`Alle ${all} Diktate aus dem Verlauf löschen? Das lässt sich nicht rückgängig machen.`, `Delete all ${all} dictations from the history? This cannot be undone.`)))
+      satz.invoke('settings:clear-history')
+  }
   const keep = select(String(p.historyLimit ?? 50), [['0', t('Aus', 'Off')], ['10', '10'], ['50', '50'], ['200', '200'], ['100000', t('Alle', 'All')]],
-    v => satz.invoke('history:set-limit', Number(v)).then(load))
+    async v => {
+      const limit = Number(v)
+      const all = await count()
+      const gone = all - limit
+      if (gone > 0 && !confirm(limit === 0
+        ? t(`Alle ${all} Diktate aus dem Verlauf löschen? Das lässt sich nicht rückgängig machen.`, `Delete all ${all} dictations from the history? This cannot be undone.`)
+        : t(`Die ältesten ${gone} Diktate löschen? Das lässt sich nicht rückgängig machen.`, `Delete the oldest ${gone} dictations? This cannot be undone.`))) { render(); return }
+      satz.invoke('history:set-limit', limit).then(load)
+    })
   keep.id = 'history-limit'
+  keep.setAttribute('aria-label', t('Verlauf behalten', 'Keep history'))
   const show = el('button', { textContent: t('Ansehen', 'Show') })
   show.onclick = () => satz.invoke('history:open')
   const general = el('div', { className: 'box' },
     el('div', { className: 'row' }, el('span', { className: 'grow', textContent: t('Sprache', 'Language') }),
-      select(p.language, [['de', 'Deutsch'], ['en', 'English']], v => update({ language: v }))),
+      select(p.language, [['de', 'Deutsch'], ['en', 'English']], v => update({ language: v }), t('Sprache', 'Language'))),
     el('div', { className: 'row' }, el('label', { className: 'switch' }, t('Beim Anmelden starten', 'Start at login'), startBox)),
     el('div', { className: 'row' }, el('label', { className: 'switch' }, t('Musik beim Diktieren pausieren', 'Pause music while dictating'), mediaBox)),
     el('div', { className: 'row' }, el('label', { className: 'switch' }, t('Text in der Zwischenablage behalten', 'Keep text on the clipboard'), keepBox)),
@@ -207,7 +246,6 @@ function render() {
   // it was in, so several words can be typed one after the other.
   const focused = (document.activeElement as HTMLElement | null)?.id || null
   app.replaceChildren(
-    el('h1', { textContent: t('Einstellungen', 'Settings') }),
     section(t('Kurzbefehl', 'Shortcut'), shortcut, shortcutHint),
     section(t('Anbieter', 'Provider'), providerBox, ...(keyProblem ? [el('div', { className: 'error', textContent: keyProblem })] : [])),
     section(t('Wortschatz', 'Vocabulary'), el('div', { className: 'box' }, words)),
@@ -224,8 +262,17 @@ function render() {
 
 async function load() {
   info = await satz.invoke('settings:get')
+  document.dispatchEvent(new CustomEvent('satz-language', { detail: info.prefs.language }))
   render()
 }
 
-satz.on('history:changed', load)
+// A new model list draws the page again, but not under someone typing: that
+// emptied a half-typed word. It waits until the field is left.
+function loadWhenFree() {
+  const field = document.activeElement
+  if (field instanceof HTMLInputElement && field.type !== 'checkbox' && field.closest('#settings-page')) {
+    field.addEventListener('blur', () => load(), { once: true })
+  } else load()
+}
+satz.on('models:changed', loadWhenFree)
 load()

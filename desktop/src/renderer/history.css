@@ -1,5 +1,5 @@
 /* On top of settings.css: same colours and controls. */
-main { height: 100vh; padding-bottom: 16px; gap: 14px; }
+#history-page { padding-bottom: 16px; gap: 14px; }
 header { display: flex; align-items: center; justify-content: space-between; }
 input.search { width: 100%; padding: 9px 12px; }
 .list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding-bottom: 4px; }

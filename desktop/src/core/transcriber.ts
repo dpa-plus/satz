@@ -128,8 +128,11 @@ function messageIn(body: string): string | undefined {
 
 export async function transcribe(settings: TranscriberSettings, wav: Uint8Array, apiKey: string, fetcher: Fetch = fetch as unknown as Fetch, sleep = (ms: number) => new Promise(r => setTimeout(r, ms))): Promise<string> {
   if (!apiKey) throw new TranscriptionFailure('noKey')
-  const delay = settings.backupAfter === undefined ? 2.5 : settings.backupAfter
-  if (delay === null) return attempt(settings, wav, apiKey, fetcher, sleep)
+  const base = settings.backupAfter === undefined ? 2.5 : settings.backupAfter
+  // OpenRouter only, where the slow answers were measured; counted from the
+  // start of the upload, so a second more for every ten seconds of audio.
+  if (base === null || settings.provider !== 'openrouter') return attempt(settings, wav, apiKey, fetcher, sleep)
+  const delay = base + Math.max(0, wav.length - 44) / 32_000 / 10
 
   const controllers: AbortController[] = []
   const ask = () => { const c = new AbortController(); controllers.push(c); return attempt(settings, wav, apiKey, fetcher, sleep, c.signal) }
