@@ -44,6 +44,10 @@ stop                                 # always stop it: a second menu bar icon co
 
 Windows and Linux are tested in QEMU VMs on the user's Mac; see `desktop/README.md` for the test mode there (HTTP on 127.0.0.1).
 
+The Windows/Linux window (History and Settings) also runs in a plain browser with a stand-in for the app: `cd desktop && node build.mjs --preview`, serve `desktop/` (the `satz-desktop-preview` entry in the Projects launch.json) and open `/preview/`. `window.__calls` lists what the page asked the app; `confirm()` answers yes and is recorded. Good for clicking through menus and fields without the user's screen; the Mac app's SwiftUI window cannot run there, use `--snapshot` and the test copy for it.
+
+Unit tests do not reach `desktop/src/main/main.ts`: start the packaged app once (the Ubuntu VM) after changing it. A constant used before its line stopped satz's start halfway once.
+
 ## Rules
 
 - **No local models, and no second model rewriting what was said**, unless the user turns such an option on. Accuracy comes from the transcription model, the word list and replacements.

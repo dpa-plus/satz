@@ -71,7 +71,7 @@ Talk, tap twice again, and the text is pasted. satz starts by itself when you lo
 - **Music pauses by itself** while you talk (Spotify, Apple Music, YouTube in the browser, anything the system lists as playing) and plays on when you are done. Only what was playing, and only what satz paused.
 
 **Find it again**
-- **Open satz** from Applications, Spotlight or the Start menu and you get your **History**: everything you dictated, by day, with search. A click copies, × forgets one.
+- **Open satz** from Applications, Spotlight or the Start menu and you get its window: **History** and **Settings**, one click (or ⌘1 / ⌘2) apart. History has everything you dictated, by day, with search. A click copies, × forgets one.
 - **Keep** the last 10, 50, 200 or all of them, or none. The menu bar shows the last four.
 
 **In Settings**
@@ -98,26 +98,31 @@ Talk, tap twice again, and the text is pasted. satz starts by itself when you lo
 
 | Provider | Default model | Notes |
 |---|---|---|
-| **OpenRouter** (recommended) | Microsoft MAI-Transcribe 2 | One key, 17 models to choose from |
+| **OpenRouter** (recommended) | Microsoft MAI-Transcribe 2 | One key, every speech model OpenRouter has |
 | OpenAI | GPT Transcribe | Also GPT-4o (mini) Transcribe, Whisper |
 | Groq | Whisper Large v3 Turbo | Very fast |
 | Custom | your URL and model | Any OpenAI-compatible endpoint |
 
-With an OpenRouter key you pick the model from a menu. Every one passed a German and an English test dictation with satz (October 2026); the menu shows what an hour of talking cost then:
+The model menu is the provider's **live list**, so new models show up without a new satz. Next to each: how many words it gets wrong, from [Artificial Analysis](https://artificialanalysis.ai/speech-to-text)' word error rate (the same ~8 hours of speech for every model, lower is better), and what an hour of talking costs. The best come first. Prices as satz measured them in October 2026:
 
-| Model | per hour | |
+| Model | Wrong words | per hour |
 |---|---|---|
-| Microsoft MAI-Transcribe 2 | $0.10 | Default. Clean mode drops "uhm"s; the vocabulary is its phrase list |
-| OpenAI GPT Transcribe, GPT-4o, GPT-4o mini, Whisper | $0.12 to $0.37 | |
-| OpenAI Whisper Large v3 / v3 Turbo | $0.03 / $0.01 | The cheapest |
-| AssemblyAI Universal-3.5 Pro | $0.44 | |
-| Mistral Voxtral Mini Transcribe, Small, Mini 3B | $0.06 to $0.18 | |
-| Qwen3 ASR Flash, 1.7B, 0.6B | $0.01 to $0.11 | |
-| xAI Grok STT | $0.10 | |
-| Google Chirp 3 | $1.00 | |
-| Fish Audio Transcribe 1 | $0.37 | |
+| Microsoft MAI-Transcribe 2 (default, clean mode, uses your vocabulary) | 2.0 % | $0.10 |
+| Microsoft MAI-Transcribe 1.5 | 2.4 % | $0.36 |
+| Mistral Voxtral Small | 2.8 % | $0.18 |
+| OpenAI GPT Transcribe | 3.3 % | $0.28 |
+| Mistral Voxtral Mini 3B | 3.8 % | $0.06 |
+| OpenAI GPT-4o Transcribe | 4.0 % | $0.23 |
+| xAI Grok STT | 4.0 % | $0.10 |
+| OpenAI Whisper | 4.1 % | $0.37 |
+| Google Chirp 3 | 4.3 % | $1.00 |
+| OpenAI GPT-4o mini Transcribe | 4.5 % | $0.12 |
+| OpenAI Whisper Large v3 Turbo | 4.6 % | $0.01 |
+| Qwen3 ASR, Voxtral Mini Transcribe, Universal-3.5 Pro, Whisper Large v3, Fish Audio | not measured | $0.01 to $0.44 |
 
-"Other model" takes any model id by hand. Each provider keeps its own key and model, so you can switch back and forth.
+A few models OpenRouter lists are left out because they fail with dictation (no German, speaker tags in the text, refused requests). "Other model" takes any model id by hand. Each provider keeps its own key and model, so you can switch back and forth.
+
+**Speed.** MAI-Transcribe usually answers in one or two seconds, but now and then a request hangs for ten. When no answer has come after 2.5 seconds, satz asks a second time and takes whichever answer comes first, for a fraction of a cent.
 
 ## Your key and your data
 
