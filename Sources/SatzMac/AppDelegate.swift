@@ -22,9 +22,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var card: CardController!
     private var shortcut: Shortcut!
     private var menuBar: MenuBarItem!
-    private var settingsWindow: AppWindow!
+    /// History and settings, one window.
+    private var mainWindow: AppWindow!
+    private let navigation = MainNavigation()
+    private let models = ModelStore()
     private var setupWindow: AppWindow!
-    private var historyWindow: AppWindow!
     private var devControl: DevControl?
     private let mediaPause = MediaPause()
 
@@ -119,22 +121,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         if devControl == nil { shortcut.start() }
 
-        settingsWindow = AppWindow(title: de("satz Einstellungen", en: "satz Settings"), startsWithoutFocus: true) { [unowned self] in
-            AnyView(SettingsView(
-                preferences: preferences, setup: setup, shortcut: shortcut,
-                launchAtLogin: launchAtLogin, history: history
-            ))
+        mainWindow = AppWindow(
+            title: self.navigation.page == .history ? de("satz Verlauf", en: "satz History") : de("satz Einstellungen", en: "satz Settings"),
+            startsWithoutFocus: true
+        ) { [unowned self] in
+            AnyView(MainView(navigation: navigation, history: history, preferences: preferences, setup: setup,
+                             shortcut: shortcut, launchAtLogin: launchAtLogin, models: models))
         }
+        navigation.onChange = { [weak self] in self?.mainWindow.retitle() }
         setupWindow = AppWindow(title: de("satz einrichten", en: "Set up satz")) { [unowned self] in
             AnyView(SetupView(
                 preferences: preferences, setup: setup, shortcut: shortcut, history: history,
                 onDone: { [weak self] in self?.setupWindow.close() }
             ))
-        }
-
-        historyWindow = AppWindow(title: de("satz Verlauf", en: "satz History")) { [unowned self] in
-            AnyView(HistoryView(history: history, preferences: preferences,
-                                openSettings: { [weak self] in self?.settingsWindow.show() }))
         }
 
         menuBar = MenuBarItem { [unowned self] in
@@ -150,18 +149,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         session.restore(snapshot)
                     },
                     openSetup: { [weak self] in self?.menuBar.close(); self?.setupWindow.show() },
-                    openSettings: { [weak self] in self?.menuBar.close(); self?.settingsWindow.show() },
-                    openHistory: { [weak self] in self?.menuBar.close(); self?.historyWindow.show() },
+                    openSettings: { [weak self] in self?.menuBar.close(); self?.show(.settings) },
+                    openHistory: { [weak self] in self?.menuBar.close(); self?.show(.history) },
                     quit: { NSApp.terminate(nil) }
                 )
             ))
         }
         devControl?.open = { [weak self] which in
             switch which {
-            case "settings": self?.settingsWindow.show()
+            case "settings": self?.show(.settings)
             case "setup": self?.setupWindow.show()
-            case "history": self?.historyWindow.show()
-            case "close": self?.settingsWindow.close(); self?.setupWindow.close(); self?.historyWindow.close()
+            case "history": self?.show(.history)
+            case "close": self?.mainWindow.close(); self?.setupWindow.close()
             default: self?.menuBar.open()
             }
         }
@@ -182,8 +181,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the setup while it is unfinished. A menu bar app otherwise appears to
     /// do nothing when relaunched.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if setup.isComplete { historyWindow.show() } else { setupWindow.show() }
+        if setup.isComplete { show(.history) } else { setupWindow.show() }
         return true
+    }
+
+    private func show(_ page: MainNavigation.Page) {
+        navigation.page = page
+        mainWindow.show()
     }
 
     /// Quitting with a window open: the app the user came from gets the focus

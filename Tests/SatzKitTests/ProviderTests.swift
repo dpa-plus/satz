@@ -78,3 +78,48 @@ func eachProviderIsAskedAtItsOwnEndpoint(provider: Provider, url: String, model:
     #expect(Provider.openRouter.choice(for: "openai/whisper-1")?.name == "Whisper")
     #expect(Provider.openRouter.choice(for: "someone/new-model") == nil)
 }
+
+@Test func openRoutersLiveListBecomesTheMenu() throws {
+    let listing = """
+    {"data": [
+      {"id": "google/gemini-3.5-transcribe", "name": "Google: Gemini 3.5 Transcribe", "pricing": {"prompt": "0.000002", "completion": "0.000012"}},
+      {"id": "someone/brand-new-stt", "name": "Someone: Brand New STT", "pricing": {"prompt": "0.00005"}},
+      {"id": "openai/gpt-transcribe", "name": "OpenAI: GPT Transcribe", "pricing": {"prompt": "0.000075"}},
+      {"id": "microsoft/mai-transcribe-2", "name": "Microsoft AI: MAI-Transcribe 2", "pricing": {"prompt": "0.1"}},
+      {"id": "other/per-hour", "name": "Other: Per Hour", "pricing": {"prompt": "0.36"}}
+    ]}
+    """
+    let models = try ModelCatalog.parse(Data(listing.utf8), for: .openRouter)
+    // A model known to fail with satz is left out; the default leads, then
+    // the scored ones, then the rest by price.
+    #expect(models.map(\.id) == ["microsoft/mai-transcribe-2", "openai/gpt-transcribe", "someone/brand-new-stt", "other/per-hour"])
+    let new = try #require(models.first { $0.id == "someone/brand-new-stt" })
+    #expect(new.name == "Brand New STT")
+    #expect(new.maker == "Someone")
+    #expect(abs((new.dollarsPerHour ?? 0) - 0.18) < 0.0001)   // per second, times 3600
+    #expect(models.first { $0.id == "other/per-hour" }?.dollarsPerHour == 0.36)
+    #expect(models.first?.errorRate == 2.0)
+    #expect(models.first?.maker == "Microsoft")
+}
+
+@Test func aPricePerTokenIsNotTurnedIntoAPricePerHour() {
+    #expect(ModelCatalog.listedPrice(["prompt": "0.0000025", "completion": "0.00001"]) == nil)
+    #expect(ModelCatalog.listedPrice(["prompt": "0"]) == nil)
+    #expect(ModelCatalog.listedPrice(nil) == nil)
+}
+
+@Test func openAIsListIsCutToItsTranscriptionModels() throws {
+    let listing = """
+    {"object": "list", "data": [{"id": "gpt-5"}, {"id": "gpt-transcribe"}, {"id": "whisper-1"}, {"id": "gpt-4o-transcribe-diarize"}, {"id": "gpt-realtime-transcribe"}, {"id": "tts-1"}]}
+    """
+    let models = try ModelCatalog.parse(Data(listing.utf8), for: .openAI)
+    #expect(models.map(\.id) == ["gpt-transcribe", "whisper-1"])
+}
+
+@Test func onlyMAITranscribe2GetsTheAzureOptions() throws {
+    var settings = Transcriber.Settings(provider: .openRouter, model: "microsoft/mai-transcribe-1.5", customBaseURL: nil)
+    settings.vocabulary = ["Kubernetes"]
+    #expect(Transcriber(settings: settings).openRouterBody(wav: Data())["provider"] == nil)
+    settings = Transcriber.Settings(provider: .openRouter, model: "microsoft/mai-transcribe-2", customBaseURL: nil)
+    #expect(Transcriber(settings: settings).openRouterBody(wav: Data())["provider"] != nil)
+}

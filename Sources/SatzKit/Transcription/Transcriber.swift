@@ -166,8 +166,12 @@ public struct Transcriber: Sendable {
         var body: [String: Any] = [
             "model": settings.model,
             "input_audio": ["data": wav.base64EncodedString(), "format": "wav"],
-            "provider": ["options": ["azure": azure]],
         ]
+        // Only MAI-Transcribe 2 takes these: MAI-Transcribe 1.5, also at
+        // Azure, refused the whole request when they came along.
+        if settings.model.contains("mai-transcribe-2") {
+            body["provider"] = ["options": ["azure": azure]]
+        }
         if let language = settings.language { body["language"] = language }
         // For models other than MAI. OpenRouter documents it as ignored for
         // multipart; in JSON it costs nothing to offer.

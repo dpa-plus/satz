@@ -16,13 +16,18 @@ extension AudioRecorder: AudioSource {}
 
 enum AudioSources {
     /// Files to play instead of the microphone, one per recording, in order.
-    /// Set by `--test-audio a.wav:b.wav`; empty in normal use.
-    @MainActor static var testFiles: [URL] = []
+    /// Set by `--test-audio a.wav:b.wav`; nil in normal use.
+    @MainActor static var testFiles: [URL]?
 
     @MainActor
     static func make(inputDeviceUID: String?) -> AudioSource {
-        if !testFiles.isEmpty {
-            return FileSource(url: testFiles.removeFirst())
+        if var files = testFiles {
+            // Once they run out, silence: a test never records the room. It
+            // once took the microphone and wrote down what the user said to
+            // their own satz.
+            let next = files.isEmpty ? URL(fileURLWithPath: "/dev/null") : files.removeFirst()
+            testFiles = files
+            return FileSource(url: next)
         }
         var settings = AudioRecorder.Settings()
         settings.inputDeviceID = InputDevices.id(forUID: inputDeviceUID)

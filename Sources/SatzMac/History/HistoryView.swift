@@ -8,7 +8,6 @@ import SwiftUI
 struct HistoryView: View {
     let history: History
     let preferences: Preferences
-    let openSettings: () -> Void
 
     @Environment(\.theme) private var theme
     @Environment(\.isSnapshot) private var isSnapshot
@@ -16,18 +15,6 @@ struct HistoryView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(de("Verlauf", en: "History"))
-                    .font(Typography.display(26))
-                    .foregroundStyle(theme.ink)
-                Spacer()
-                Button(action: openSettings) {
-                    Label(de("Einstellungen", en: "Settings"), systemImage: "gearshape")
-                        .labelStyle(.titleAndIcon)
-                }
-                .buttonStyle(.outlineCompact)
-            }
-
             if !history.entries.isEmpty { search }
 
             if history.limit == 0 && history.entries.isEmpty {
@@ -54,13 +41,11 @@ struct HistoryView: View {
                     .foregroundStyle(theme.inkSecondary)
             }
         }
-        .padding(.horizontal, 28)
-        .padding(.top, 30)
+        .padding(.horizontal, 32)
+        .padding(.top, 8)
         .padding(.bottom, 20)
-        .frame(width: 560, height: 640, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(theme.ground)
-        .focusEffectDisabled()
-        .id(preferences.lookKey)
     }
 
     private var search: some View {

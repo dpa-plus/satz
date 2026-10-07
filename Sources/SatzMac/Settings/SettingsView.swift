@@ -9,6 +9,7 @@ struct SettingsView: View {
     let shortcut: Shortcut
     let launchAtLogin: LaunchAtLogin
     let history: History
+    let models: ModelStore
 
     @Environment(\.theme) private var theme
     @Environment(\.isSnapshot) private var isSnapshot
@@ -21,7 +22,7 @@ struct SettingsView: View {
             ScrollView { content }
                 .focusEffectDisabled()
                 .scrollIndicators(.never)
-                .frame(width: 520, height: 720)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(theme.ground)
                 .task {
                     // Permissions are granted in System Settings, which gives
@@ -37,24 +38,19 @@ struct SettingsView: View {
 
     private var content: some View {
             VStack(alignment: .leading, spacing: 26) {
-                Text(de("Einstellungen", en: "Settings"))
-                    .font(Typography.display(26))
-                    .foregroundStyle(theme.ink)
                 Block(title: de("Kurzbefehl", en: "Shortcut")) {
                     ShortcutChoice(preferences: preferences, setup: setup, shortcut: shortcut)
                 }
                 MicrophoneBlock(preferences: preferences)
-                ProviderBlock(preferences: preferences, setup: setup)
+                ProviderBlock(preferences: preferences, setup: setup, models: models)
                 WordsBlock(preferences: preferences)
                 ReplacementsBlock(preferences: preferences)
                 GeneralBlock(preferences: preferences, launchAtLogin: launchAtLogin, history: history)
             }
             .padding(.horizontal, 32)
-            .padding(.top, 34)
+            .padding(.top, 12)
             .padding(.bottom, 32)
-            .frame(width: 520, alignment: .leading)
-            // Every label and colour is read again when language or theme changes.
-            .id(preferences.lookKey)
+            .frame(width: 560, alignment: .leading)
     }
 }
 
@@ -165,6 +161,7 @@ private struct LevelMeter: View {
 private struct ProviderBlock: View {
     @Bindable var preferences: Preferences
     let setup: Setup
+    let models: ModelStore
     @Environment(\.theme) private var theme
 
     var body: some View {
@@ -178,7 +175,7 @@ private struct ProviderBlock: View {
                 if preferences.provider == .custom {
                     FieldRow(label: de("Modell", en: "Model"), text: $preferences.model, prompt: preferences.provider.defaultModel)
                 } else {
-                    ModelRow(preferences: preferences)
+                    ModelRow(preferences: preferences, store: models)
                 }
                 // Only MAI-Transcribe has a clean mode; elsewhere the switch would do nothing.
                 if preferences.model.contains("mai-transcribe") {
@@ -201,20 +198,25 @@ private struct ProviderBlock: View {
     }
 }
 
-/// The model: a menu of the tested ones with what an hour of speech costs,
-/// and "Other" for one typed in by hand. A plain text field let one stray
-/// keystroke break every dictation after it.
+/// The model: a menu of what the provider offers now, best first, each with
+/// how many words it gets wrong and what an hour of talking costs, and "Other"
+/// for one typed in by hand. A plain text field let one stray keystroke break
+/// every dictation after it.
 private struct ModelRow: View {
     @Bindable var preferences: Preferences
+    let store: ModelStore
     @Environment(\.theme) private var theme
     @Environment(\.isSnapshot) private var isSnapshot
     @State private var typing = false
     @FocusState private var idFocused: Bool
 
+    private static let other = "\u{0}other"
+
     var body: some View {
         let provider = preferences.provider
-        let current = provider.choice(for: preferences.model)
-        VStack(spacing: 0) {
+        let list = store.models(for: provider)
+        let current = provider.choice(for: preferences.model, in: list)
+        VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
                 Text(de("Modell", en: "Model"))
                     .font(Typography.text(15))
@@ -223,7 +225,19 @@ private struct ModelRow: View {
                 if isSnapshot {
                     label(current)
                 } else {
-                    Menu { items(provider) } label: { label(current) }
+                    // A picker inside the menu: the choice is one value, so the
+                    // menu always shows exactly what is chosen.
+                    Menu {
+                        Picker("", selection: selection(current)) {
+                            ForEach(list) { model in
+                                Text(Self.title(model)).tag(model.id)
+                            }
+                        }
+                        .pickerStyle(.inline)
+                        .labelsHidden()
+                        Divider()
+                        Button(de("Anderes Modell …", en: "Other model …")) { typing = true }
+                    } label: { label(current) }
                         .menuStyle(.button)
                         .buttonStyle(.plain)
                         .menuIndicator(.hidden)
@@ -233,6 +247,12 @@ private struct ModelRow: View {
             }
             .padding(.horizontal, 16)
             .frame(height: 48)
+            Text(Self.facts(current))
+                .font(Typography.text(12))
+                .foregroundStyle(theme.inkSecondary)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 10)
+                .padding(.top, -6)
             // A model typed in by hand keeps its field, so it can be read and changed.
             if typing || current == nil {
                 Rule()
@@ -249,6 +269,7 @@ private struct ModelRow: View {
                             .textFieldStyle(.plain)
                             .multilineTextAlignment(.trailing)
                             .focused($idFocused)
+                            .onSubmit { typing = false }
                     }
                 }
                 .font(Typography.mono(13))
@@ -263,6 +284,18 @@ private struct ModelRow: View {
             // request was dropped (the same as the Wortschatz field).
             if now { Task { idFocused = true } }
         }
+        .task(id: provider) { if !isSnapshot { store.refresh(provider) } }
+    }
+
+    private func selection(_ current: ModelChoice?) -> Binding<String> {
+        Binding(
+            get: { current?.id ?? Self.other },
+            set: { id in
+                guard id != Self.other else { return }
+                preferences.model = id
+                typing = false
+            }
+        )
     }
 
     private func label(_ current: ModelChoice?) -> some View {
@@ -277,34 +310,31 @@ private struct ModelRow: View {
         .contentShape(Rectangle())
     }
 
-    @ViewBuilder
-    private func items(_ provider: Provider) -> some View {
-        // By maker, in the order of the list, which starts with the default.
-        let makers = provider.models.map(\.maker).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
-        ForEach(makers, id: \.self) { maker in
-            Section(maker) {
-                ForEach(provider.models.filter { $0.maker == maker }) { model in
-                    Button {
-                        preferences.model = model.id
-                        typing = false
-                    } label: {
-                        if model.id == preferences.model {
-                            Label(Self.title(model), systemImage: "checkmark")
-                        } else {
-                            Text(Self.title(model))
-                        }
-                    }
-                }
-            }
-        }
-        Divider()
-        Button(de("Anderes Modell …", en: "Other model …")) { typing = true }
+    private static var locale: Locale { Locale(identifier: Language.current == .english ? "en_US" : "de_DE") }
+
+    private static func number(_ value: Double) -> String {
+        value.formatted(.number.precision(.fractionLength(1)).locale(locale))
     }
 
-    private static func title(_ model: ModelChoice) -> String {
-        guard let price = model.dollarsPerHour else { return model.name }
-        let amount = String(format: "$%.2f", price)
-        return de("\(model.name) · \(amount) pro Stunde", en: "\(model.name) · \(amount) an hour")
+    private static func price(_ dollars: Double) -> String {
+        dollars.formatted(.currency(code: "USD").precision(.fractionLength(2)).locale(locale))
+    }
+
+    /// One line in the menu: name, maker, errors, price.
+    static func title(_ model: ModelChoice) -> String {
+        var parts = ["\(model.name) · \(model.maker)"]
+        if let rate = model.errorRate { parts.append(de("\(number(rate)) % Fehler", en: "\(number(rate)) % errors")) }
+        if let dollars = model.dollarsPerHour { parts.append(de("\(price(dollars)) pro Stunde", en: "\(price(dollars)) an hour")) }
+        return parts.joined(separator: " · ")
+    }
+
+    /// Under the row: what the chosen model's numbers mean.
+    static func facts(_ model: ModelChoice?) -> String {
+        guard let model else { return de("Ein Modell, das nicht in der Liste steht.", en: "A model that is not in the list.") }
+        let errors = model.errorRate.map { de("\(number($0)) % falsche Wörter laut Artificial Analysis", en: "\(number($0)) % wrong words per Artificial Analysis") }
+            ?? de("Noch ohne Fehlerquote von Artificial Analysis", en: "No error rate from Artificial Analysis yet")
+        let cost = model.dollarsPerHour.map { de("\(price($0)) pro Stunde Sprechen", en: "\(price($0)) per hour of talking") }
+        return [errors, cost].compactMap { $0 }.joined(separator: ", ")
     }
 }
 

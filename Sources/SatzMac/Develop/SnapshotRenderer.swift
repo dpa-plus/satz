@@ -145,7 +145,9 @@ enum SnapshotRenderer {
     }
 
     private static var historySheet: some View {
-        HistoryView(history: longHistory, preferences: preferences, openSettings: {})
+        MainView(navigation: MainNavigation(), history: longHistory, preferences: preferences,
+                 setup: Setup(hasKey: true, microphone: .allowed, canPaste: true), shortcut: shortcut,
+                 launchAtLogin: LaunchAtLogin(), models: ModelStore(folder: nil))
     }
 
     private static var shortcut: Shortcut {
@@ -205,7 +207,8 @@ enum SnapshotRenderer {
             setup: Setup(hasKey: true, microphone: .allowed, canPaste: true),
             shortcut: shortcut,
             launchAtLogin: LaunchAtLogin(),
-            history: history
+            history: history,
+            models: ModelStore(folder: nil)
         )
     }
 

@@ -64,6 +64,11 @@ final class AppWindow: NSObject, NSWindowDelegate {
         window?.close()
     }
 
+    /// Reads the title again, for a window whose content changed its subject.
+    func retitle() {
+        window?.title = title()
+    }
+
     func windowWillClose(_ notification: Notification) {
         Self.open = max(0, Self.open - 1)
         if Self.open == 0 { Self.stepBack() }
