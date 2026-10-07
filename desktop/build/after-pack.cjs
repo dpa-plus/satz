@@ -12,6 +12,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 exports.default = async function afterPack(context) {
+  keepOnlyThisOnnxRuntime(context)
   if (context.electronPlatformName !== 'linux') return
   const name = context.packager.executableName
   const binary = path.join(context.appOutDir, name)
@@ -23,4 +24,18 @@ exports.default = async function afterPack(context) {
     'exec "$here/' + name + '-bin" --no-sandbox --ozone-platform=x11 "$@"',
     '',
   ].join('\n'), { mode: 0o755 })
+}
+
+// ONNX Runtime (for Whisper on this computer) ships its native library for
+// every system and chip, 300 MB in all; each package keeps its own.
+function keepOnlyThisOnnxRuntime(context) {
+  const { Arch } = require('electron-builder')
+  const bin = path.join(context.appOutDir, 'resources', 'app.asar.unpacked', 'node_modules', 'onnxruntime-node', 'bin', 'napi-v6')
+  if (!fs.existsSync(bin)) return
+  const arch = Arch[context.arch]
+  for (const system of fs.readdirSync(bin)) {
+    for (const chip of fs.readdirSync(path.join(bin, system))) {
+      if (system !== context.electronPlatformName || chip !== arch) fs.rmSync(path.join(bin, system, chip), { recursive: true, force: true })
+    }
+  }
 }

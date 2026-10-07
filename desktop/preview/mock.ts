@@ -1,7 +1,7 @@
 // Stands in for satz's main process, so the window's pages run in a plain
 // browser: settings, history and the model menu with sample data. Changes
 // stay in this page. Built by `node build.mjs --preview`; see preview/index.html.
-import { models as shipped } from '../src/core/models'
+import { downloadSize, models as shipped } from '../src/core/models'
 import { standardReplacements } from '../src/core/replacements'
 import type { Provider } from '../src/core/transcriber'
 
@@ -18,6 +18,18 @@ let history = [
   { id: 'd', text: "The test is red, please don't merge yet.", date: new Date(Date.now() - 26 * hour).toISOString(), pasted: true },
 ]
 let hasKey = true
+// The local model: missing until "Download", which counts up like the real one.
+let localState: { kind: string; fraction?: number } = { kind: 'missing' }
+const localModel = () => prefs.models.local || 'onnx-community/whisper-large-v3-turbo'
+function fakeDownload() {
+  let fraction = 0
+  const timer = setInterval(() => {
+    fraction += 0.1
+    localState = fraction >= 1 ? { kind: 'ready' } : { kind: 'downloading', fraction }
+    emit('local:changed')
+    if (fraction >= 1) clearInterval(timer)
+  }, 300)
+}
 const listeners: Record<string, ((value: unknown) => void)[]> = {}
 const emit = (channel: string, value?: unknown) => (listeners[channel] ?? []).forEach(listener => listener(value))
 // What the page asked for, for a test to read: window.__calls.
@@ -34,7 +46,10 @@ window.confirm = (message?: string) => { calls.push(['confirm', message]); retur
     switch (channel) {
       case 'settings:get':
         return { prefs, hasKey, keyboard: 'right Ctrl twice', wayland: false, platform: 'win32', history, startAtLogin: true,
-          spokenLanguage: prefs.spokenLanguage ?? prefs.language, models: shipped[prefs.provider] }
+          spokenLanguage: prefs.spokenLanguage ?? prefs.language, models: shipped[prefs.provider],
+          local: { state: localState, size: downloadSize[localModel()] ?? null } }
+      case 'local:download': localState = { kind: 'downloading', fraction: 0 }; fakeDownload(); return
+      case 'local:remove': localState = { kind: 'missing' }; return
       case 'settings:update': Object.assign(prefs, args[0]); return prefs
       case 'settings:store-key': hasKey = true; return true
       case 'settings:clear-history': history = []; emit('history:changed'); return

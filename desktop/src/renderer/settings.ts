@@ -6,7 +6,8 @@ import { choiceFor, type ModelChoice } from '../core/models'
  * their spoken language, the shortcut mode, language and start at login.
  * Rebuilt from scratch on every change: it is a short page.
  */
-type Provider = 'openai' | 'openrouter' | 'groq' | 'custom'
+type Provider = 'openai' | 'openrouter' | 'groq' | 'custom' | 'local'
+type LocalState = { kind: 'missing' | 'preparing' | 'ready' } | { kind: 'downloading'; fraction: number } | { kind: 'failed'; message: string }
 interface Replacement { id: string; spoken: string; written: string; isOn: boolean }
 interface Info {
   prefs: {
@@ -17,6 +18,8 @@ interface Info {
   hasKey: boolean; keyboard: string; wayland: boolean; platform: string; startAtLogin: boolean; spokenLanguage: 'de' | 'en'
   /** The provider's live list, or the shipped one until it arrives. */
   models: ModelChoice[]
+  /** The local model chosen, whether it is on this computer, and how big it is. */
+  local: { state: LocalState; size: string | null }
 }
 
 const app = document.getElementById('settings-page')!
@@ -33,7 +36,7 @@ let selectModelId = false
 let focusNext: string | null = null
 
 const t = (de: string, en: string) => (info.prefs.language === 'de' ? de : en)
-const defaults: Record<Provider, string> = { openai: 'gpt-transcribe', openrouter: 'microsoft/mai-transcribe-2', groq: 'whisper-large-v3-turbo', custom: '' }
+const defaults: Record<Provider, string> = { openai: 'gpt-transcribe', openrouter: 'microsoft/mai-transcribe-2', groq: 'whisper-large-v3-turbo', custom: '', local: 'onnx-community/whisper-large-v3-turbo' }
 const shown = (written: string) => (written === '\n' ? '↵' : written === '\n\n' ? '¶' : written)
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Record<string, unknown> = {}, ...children: (Node | string)[]): HTMLElementTagNameMap[K] {
@@ -127,13 +130,16 @@ function render() {
   const title = (model: ModelChoice) => [
     `${model.name} · ${model.maker}`,
     ...(model.errorRate === undefined ? [] : [t(`${number(model.errorRate, 1)} % Fehler`, `${number(model.errorRate, 1)} % errors`)]),
-    ...(model.dollarsPerHour === undefined ? [] : [t(`${number(model.dollarsPerHour, 2)} $ pro Stunde`, `$${number(model.dollarsPerHour, 2)} an hour`)]),
+    ...(model.dollarsPerHour === undefined ? [] : model.dollarsPerHour === 0 ? [t('kostenlos', 'free')]
+      : [t(`${number(model.dollarsPerHour, 2)} $ pro Stunde`, `$${number(model.dollarsPerHour, 2)} an hour`)]),
   ].join(' · ')
   for (const model of info.models) modelMenu.append(el('option', { value: model.id, textContent: title(model) }))
   modelMenu.append(el('option', { value: '', textContent: t('Anderes Modell …', 'Other model …') }))
   const chosen = choiceFor(info.models, currentModel)
   const known = chosen !== undefined
-  const facts = el('div', { className: 'hint', textContent: !chosen ? t('Ein Modell, das nicht in der Liste steht.', 'A model that is not in the list.') : [
+  const facts = el('div', { className: 'hint', textContent: !chosen ? t('Ein Modell, das nicht in der Liste steht.', 'A model that is not in the list.')
+    : p.provider === 'local' ? t('Läuft auf diesem Computer, ohne Internet und kostenlos. Erkennt Deutsch und Englisch von selbst.',
+      'Runs on this computer, offline and free. Tells German from English by itself.') : [
     chosen.errorRate === undefined ? t('Noch ohne Fehlerquote von Artificial Analysis', 'No error rate from Artificial Analysis yet')
       : t(`${number(chosen.errorRate, 1)} % falsche Wörter laut Artificial Analysis`, `${number(chosen.errorRate, 1)} % wrong words per Artificial Analysis`),
     ...(chosen.dollarsPerHour === undefined ? [] : [t(`${number(chosen.dollarsPerHour, 2)} $ pro Stunde Sprechen`, `$${number(chosen.dollarsPerHour, 2)} per hour of talking`)]),
@@ -147,9 +153,11 @@ function render() {
   const showsModelField = p.provider === 'custom' || typingModel || !known
   const providerBox = el('div', { className: 'box' },
     el('div', { className: 'row' }, el('span', { className: 'grow', textContent: t('Anbieter', 'Provider') }),
-      select(p.provider, [['openrouter', 'OpenRouter'], ['openai', 'OpenAI'], ['groq', 'Groq'], ['custom', t('Eigener', 'Custom')]], v => { editingKey = false; typingModel = false; update({ provider: v }) }, t('Anbieter', 'Provider'))),
-    keyRow,
+      select(p.provider, [['openrouter', 'OpenRouter'], ['openai', 'OpenAI'], ['groq', 'Groq'], ['custom', t('Eigener', 'Custom')], ['local', t('Lokal', 'Local')]], v => { editingKey = false; typingModel = false; update({ provider: v }) }, t('Anbieter', 'Provider'))),
+    // Nothing to paste for a model on this computer: it is downloaded instead.
+    ...(p.provider === 'local' ? [] : [keyRow]),
     ...(p.provider === 'custom' ? [] : [el('div', { className: 'row' }, el('span', { textContent: t('Modell', 'Model') }), modelMenu), facts]),
+    ...(p.provider === 'local' ? [localRow()] : []),
     ...(showsModelField ? [el('div', { className: 'row' }, el('span', { textContent: p.provider === 'custom' ? t('Modell', 'Model') : t('Modell-ID', 'Model ID') }), modelField)] : []))
   if (p.provider === 'custom') {
     const url = el('input', { type: 'text', id: 'custom-url', className: 'grow', value: p.customBaseURL, placeholder: 'https://…/v1' })
@@ -260,6 +268,44 @@ function render() {
   selectModelId = false
 }
 
+/** Whether the local model is on this computer, and the one button that changes that. */
+function localRow() {
+  const { state, size } = info.local
+  const row = el('div', { className: 'row', id: 'local-row' })
+  const sized = (de: string, en: string) => t(size ? `${de}, ${size}` : de, size ? `${en}, ${size}` : en)
+  switch (state.kind) {
+    case 'ready': {
+      const remove = el('button', { textContent: t('Entfernen', 'Remove'), title: t('Legt das Modell in den Papierkorb', 'Moves the model to the trash') })
+      remove.onclick = () => satz.invoke('local:remove').then(load)
+      row.append(el('span', { className: 'grow', textContent: `✓ ${sized('Auf diesem Computer', 'On this computer')}` }), remove)
+      break
+    }
+    case 'missing': {
+      const download = el('button', { className: 'accent', textContent: sized('Laden', 'Download') })
+      download.onclick = () => satz.invoke('local:download').then(load)
+      row.append(el('span', { className: 'grow', textContent: t('Noch nicht auf diesem Computer', 'Not on this computer yet') }), download)
+      break
+    }
+    case 'downloading': {
+      const bar = el('progress', { value: state.fraction, max: 1 })
+      bar.setAttribute('aria-label', t('Fortschritt', 'Progress'))
+      row.append(el('span', { className: 'grow', textContent: t('Wird geladen', 'Downloading') }), bar,
+        el('span', { className: 'percent', textContent: `${Math.floor(state.fraction * 100)} %` }))
+      break
+    }
+    case 'preparing':
+      row.append(el('span', { className: 'grow', textContent: t('Wird für diesen Computer vorbereitet …', 'Getting ready for this computer …') }))
+      break
+    case 'failed': {
+      const retry = el('button', { textContent: t('Nochmal', 'Try again') })
+      retry.onclick = () => satz.invoke('local:download').then(load)
+      row.append(el('span', { className: 'grow', textContent: t('Laden fehlgeschlagen', 'Download failed'), title: state.message }), retry)
+      break
+    }
+  }
+  return row
+}
+
 async function load() {
   info = await satz.invoke('settings:get')
   document.dispatchEvent(new CustomEvent('satz-language', { detail: info.prefs.language }))
@@ -275,4 +321,5 @@ function loadWhenFree() {
   } else load()
 }
 satz.on('models:changed', loadWhenFree)
+satz.on('local:changed', loadWhenFree)
 load()

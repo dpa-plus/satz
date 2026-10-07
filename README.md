@@ -21,13 +21,14 @@
 
 ## Why satz
 
-Most dictation apps want something from you first: a big local model to download, an account, or a second AI that rewrites what you said. satz does one thing. It records you, sends the audio to a transcription service you pick, and types the result where your cursor is.
+Most dictation apps want something from you first: an account, a subscription, or a second AI that rewrites what you said. satz does one thing. It records you, turns the audio into text with the model you pick, and types the result where your cursor is. The model runs at a transcription service, or, if you prefer, on your own computer.
 
 - **Works everywhere you type.** Mail, Slack, your editor, a chat with an AI. If it has a text cursor, satz can fill it.
 - **Very accurate, very cheap.** By default it uses Microsoft's MAI-Transcribe 2 through OpenRouter: 2.0% word errors on Artificial Analysis (September 2026), against 3.3% for OpenAI's GPT Transcribe, at a third of the price. You pay the provider directly, for what you use.
 - **Your words, not a rewrite.** No second model polishes your sentences. Clean mode only drops the "uhm"s and stutters.
 - **See it while you talk.** A small card shows your text as you go. Click into it to change where the next words land, pause to think, or throw it away and undo.
 - **Nothing to set up on a server.** No account, no telemetry. Your key stays on your computer.
+- **Offline if you want.** Provider *Local* runs Whisper on your own computer: a one-time download, then free, and nothing leaves the machine.
 
 ## Download
 
@@ -73,6 +74,7 @@ Talk, tap twice again, and the text is pasted. satz starts by itself when you lo
 **Find it again**
 - **Open satz** from Applications, Spotlight or the Start menu and you get its window: **History** and **Settings**, one click (or ⌘1 / ⌘2) apart. History has everything you dictated, by day, with search. A click copies, × forgets one.
 - **Keep** the last 10, 50, 200 or all of them, or none. The menu bar shows the last four.
+- **Insert** (Mac): the button next to *Copy* in the menu bar puts your latest text into the text field you are in. It only works while a text field has the cursor.
 
 **In Settings**
 - **Vocabulary:** names and terms the model should spell your way ("Kubernetes", your colleague's name).
@@ -102,6 +104,7 @@ Talk, tap twice again, and the text is pasted. satz starts by itself when you lo
 | OpenAI | GPT Transcribe | Also GPT-4o (mini) Transcribe, Whisper |
 | Groq | Whisper Large v3 Turbo | Very fast |
 | Custom | your URL and model | Any OpenAI-compatible endpoint |
+| Local | Whisper Large v3 Turbo | On your own computer, no key, see below |
 
 The model menu is the provider's **live list**, so new models show up without a new satz. Next to each: how many words it gets wrong, from [Artificial Analysis](https://artificialanalysis.ai/speech-to-text)' word error rate (the same ~8 hours of speech for every model, lower is better), and what an hour of talking costs. The best come first. Prices as satz measured them in October 2026:
 
@@ -122,19 +125,28 @@ The model menu is the provider's **live list**, so new models show up without a 
 
 A few models OpenRouter lists are left out because they fail with dictation (no German, speaker tags in the text, refused requests). "Other model" takes any model id by hand. Each provider keeps its own key and model, so you can switch back and forth.
 
+**On your own computer.** Choose *Local* and press *Download* once:
+
+| | Mac | Windows and Linux |
+|---|---|---|
+| Whisper Large v3 Turbo | 632 MB, via WhisperKit on the Neural Engine. About 1 s for a short dictation. | 980 MB, on the processor. About 1 to 4 s, depending on the computer. |
+| Apple's speech recognition | Built into macOS 26, nothing to download. Instant, but hears only the language set in *Spoken in* and barely uses your vocabulary. | |
+
+Whisper tells German from English by itself. The first time after the download, the Mac prepares the model for its chip, which takes a few minutes, once. Your vocabulary is given to Whisper as a hint, but only when it costs no words: with one, Whisper sometimes left out a sentence in another language, so satz checks against the text without it. *Remove* puts the model in the Trash.
+
 **Speed.** MAI-Transcribe usually answers in one or two seconds, but now and then a request hangs for ten. When no answer has come after 2.5 seconds, satz asks a second time and takes whichever answer comes first, for a fraction of a cent.
 
 ## Your key and your data
 
-- Your audio goes straight from your computer to the provider you chose. There is no satz server.
+- Your audio goes straight from your computer to the provider you chose. There is no satz server. With *Local*, it never leaves your computer.
 - The key is stored on your computer only: on the Mac in `~/Library/Application Support/satz/keys`, readable only by your user. satz never shows it again after you save it.
 - The history keeps the last few dictations, in a file only you can read. *Clear* in Settings deletes it.
 
 ## Questions
 
-**Is it free?** satz is free and open source (MIT). You pay the transcription provider for what you use: about 10 cents per hour of talking with MAI-Transcribe 2 on OpenRouter.
+**Is it free?** satz is free and open source (MIT). You pay the transcription provider for what you use: about 10 cents per hour of talking with MAI-Transcribe 2 on OpenRouter. With *Local* it costs nothing at all.
 
-**Does it work offline?** No. Transcription happens at the provider.
+**Does it work offline?** With the provider *Local*, yes: Whisper runs on your computer after a one-time download. The other providers need the internet.
 
 **Which languages?** Whatever the model understands. MAI-Transcribe 2 and Whisper handle dozens. The app itself is in English and German.
 

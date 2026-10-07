@@ -12,10 +12,11 @@
     "test": "tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
     "start": "npm run build && electron .",
-    "dist:win": "npm run build && electron-builder --win zip --arm64 --x64",
+    "dist:win": "npm run build && python3 build/vcruntime.py && electron-builder --win zip --arm64 --x64",
     "dist:linux": "npm run build && electron-builder --linux deb tar.gz --arm64 --x64"
   },
   "dependencies": {
+    "@huggingface/transformers": "4.3.1",
     "uiohook-napi": "^1.5.5"
   },
   "devDependencies": {
@@ -37,14 +38,26 @@
       "assets/**",
       "package.json",
       "node_modules/uiohook-napi/**",
-      "node_modules/node-gyp-build/**"
+      "node_modules/node-gyp-build/**",
+      "node_modules/onnxruntime-node/**",
+      "node_modules/onnxruntime-common/**"
     ],
     "asarUnpack": [
-      "node_modules/uiohook-napi/**"
+      "node_modules/uiohook-napi/**",
+      "node_modules/onnxruntime-node/**"
     ],
     "win": {
       "signAndEditExecutable": false,
-      "artifactName": "satz-${version}-windows-${arch}.${ext}"
+      "artifactName": "satz-${version}-windows-${arch}.${ext}",
+      "extraFiles": [
+        {
+          "from": "build/vcruntime/${arch}",
+          "to": "resources/app.asar.unpacked/node_modules/onnxruntime-node/bin/napi-v6/win32/${arch}",
+          "filter": [
+            "*.dll"
+          ]
+        }
+      ]
     },
     "linux": {
       "category": "Utility",

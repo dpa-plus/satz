@@ -12,6 +12,10 @@ The Mac app's dictation for Windows and Linux, on Electron: tap **right Ctrl twi
 
 On first start satz opens its settings for the API key, and switches on start at login (it can be switched off there).
 
+## Without the internet
+
+Provider **Local** runs Whisper Large v3 Turbo on the computer itself (transformers.js on ONNX Runtime, CPU). *Download* in Settings fetches it once from Hugging Face (980 MB, into satz's own folder); after that nothing is sent anywhere. Whisper finds the language itself per recording. The word list goes in as Whisper's prompt, but only where it costs no words: with a prompt, Whisper dropped an English sentence from a German recording, so satz decodes with and without it and keeps the prompted text only if it is as long. The Windows packages carry Microsoft's C++ runtime DLLs next to ONNX Runtime (`build/vcruntime.py` fetches them from Microsoft's redistributable); a fresh Windows has none.
+
 ## Linux and Wayland
 
 Wayland (Ubuntu's default) lets no app watch the keyboard or type into other apps. satz handles it like this:
@@ -24,7 +28,7 @@ Wayland (Ubuntu's default) lets no app watch the keyboard or type into other app
 
 ```bash
 npm install
-npm test               # 48 tests: the shared core, ported from the Mac app
+npm test               # 62 tests: the shared core, ported from the Mac app
 npm run dist:win       # release/*.zip
 npm run dist:linux     # release/*.deb, *.tar.gz
 ```
@@ -33,7 +37,7 @@ Everything builds on a Mac. `npm start` runs it locally.
 
 ## Test mode
 
-`satz --dev-control 48700 --test-audio a.wav:b.wav` plays WAV files instead of the microphone and takes commands on `http://127.0.0.1:48700/<command>`: `press`, `release`, `mic`, `discard`, `undo`, `restore`, `eye`, `caret?at=N`, `state`, `picture`, `js?code=…`. Texts are recorded instead of pasted unless `--test-paste` is given. Windows takes `;` between the files.
+`satz --dev-control 48700 --test-audio a.wav:b.wav` plays WAV files instead of the microphone and takes commands on `http://127.0.0.1:48700/<command>`: `press`, `release`, `mic`, `discard`, `undo`, `restore`, `eye`, `caret?at=N`, `state`, `picture`, `js?code=…`, `local` and `local-download` (the local model's state, and its Download button; set `"provider": "local"` in preferences.json first). Texts are recorded instead of pasted unless `--test-paste` is given. Windows takes `;` between the files.
 
 ## What was verified (04.10.2026)
 

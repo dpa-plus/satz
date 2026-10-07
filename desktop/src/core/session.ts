@@ -40,7 +40,9 @@ export interface SessionDeps {
   /** The transcript of 16 kHz mono samples. Throws TranscriptionFailure. */
   transcribe(samples: Float32Array): Promise<string>
   replacements(): Replacement[]
-  hasKey(): boolean
+  /** What keeps the provider from working, in two or three words: no key,
+   *  or a local model not downloaded yet. null when it is ready. */
+  missing(): string | null
   endpointMissing(): boolean
   triggerMode(): 'tap' | 'hold'
   /** Pastes; false with a reason when the text only reached the clipboard. */
@@ -247,8 +249,11 @@ export class Session {
     this.cancelClose()
     this.stopEverything()
     this.reset()
-    if (!this.deps.hasKey()) {
-      this.phase = { kind: 'failed', message: new TranscriptionFailure('noKey').short, canRetry: false }
+    // Checked before recording: finding out once you have finished speaking
+    // loses the whole message.
+    const missing = this.deps.missing()
+    if (missing) {
+      this.phase = { kind: 'failed', message: missing, canRetry: false }
       this.onOpen(); this.changed(); this.closeLater(5000)
       return
     }

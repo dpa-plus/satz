@@ -47,7 +47,7 @@ const decode = (samples: Float32Array) => {
 const tick = (ms = 0) => new Promise(resolve => setTimeout(resolve, ms))
 async function settle() { for (let i = 0; i < 8; i++) await tick() }
 
-function setup(scripts: string[], options: { mode?: 'tap' | 'hold'; transcribe?: (s: Float32Array) => Promise<string>; opening?: number } = {}) {
+function setup(scripts: string[], options: { mode?: 'tap' | 'hold'; transcribe?: (s: Float32Array) => Promise<string>; opening?: number; missing?: string } = {}) {
   const sources: FakeSource[] = []
   const delivered: string[] = []
   let mode = options.mode ?? 'tap'
@@ -55,7 +55,7 @@ function setup(scripts: string[], options: { mode?: 'tap' | 'hold'; transcribe?:
     makeSource: () => { const s = new FakeSource(scripts[sources.length] ?? ''); s.opening = options.opening ?? 0; sources.push(s); return s },
     transcribe: options.transcribe ?? (async samples => decode(samples)),
     replacements: () => [],
-    hasKey: () => true,
+    missing: () => options.missing ?? null,
     endpointMissing: () => false,
     triggerMode: () => mode,
     deliver: async text => { delivered.push(text); return { pasted: true } },
@@ -236,5 +236,13 @@ test('a press while the microphone is still opening finishes once it is open', a
   assert.equal(session.phase.kind, 'starting')
   await tick(80); await settle()
   assert.deepEqual(delivered, ['Hallo'])
+  session.dispose()
+})
+
+test('a local model not downloaded yet is said before anything is recorded', async () => {
+  const { session, sources } = setup(['Hallo'], { missing: 'Modell fehlt' })
+  session.press(); await settle()
+  assert.deepEqual(session.phase, { kind: 'failed', message: 'Modell fehlt', canRetry: false })
+  assert.equal(sources.length, 0)
   session.dispose()
 })

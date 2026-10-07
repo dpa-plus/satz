@@ -7,7 +7,9 @@ fs.rmSync('dist', { recursive: true, force: true })
 fs.mkdirSync('dist', { recursive: true })
 const common = { bundle: true, sourcemap: 'inline', logLevel: 'warning', target: 'es2023' }
 await Promise.all([
-  build({ ...common, entryPoints: ['src/main/main.ts'], outfile: 'dist/main.js', platform: 'node', format: 'cjs', external: ['electron', 'uiohook-napi'] }),
+  // transformers.js goes into main.js; ONNX Runtime stays a package, for its native code.
+  build({ ...common, entryPoints: ['src/main/main.ts'], outfile: 'dist/main.js', platform: 'node', format: 'cjs',
+    external: ['electron', 'uiohook-napi', 'onnxruntime-node', 'onnxruntime-common'], alias: { sharp: './src/main/no-sharp.ts' } }),
   build({ ...common, entryPoints: ['src/main/preload.ts'], outfile: 'dist/preload.js', platform: 'node', format: 'cjs', external: ['electron'] }),
   build({ ...common, entryPoints: ['src/renderer/card.ts'], outfile: 'dist/card.js', platform: 'browser', format: 'iife' }),
   build({ ...common, entryPoints: ['src/renderer/settings.ts'], outfile: 'dist/settings.js', platform: 'browser', format: 'iife' }),

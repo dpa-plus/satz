@@ -3,9 +3,10 @@ import { de } from './language'
 /**
  * Where the audio goes to become text. Every provider takes
  * `POST {base}/audio/transcriptions`: multipart in OpenAI's format, or JSON for
- * OpenRouter. Ported from Provider.swift and Transcriber.swift.
+ * OpenRouter. 'local' is the exception: Whisper runs on this computer and
+ * nothing is sent anywhere. Ported from Provider.swift and Transcriber.swift.
  */
-export type Provider = 'openai' | 'openrouter' | 'groq' | 'custom'
+export type Provider = 'openai' | 'openrouter' | 'groq' | 'custom' | 'local'
 
 export const providers: Record<Provider, { name: () => string; baseURL: string | null; defaultModel: string; keyPlaceholder: () => string }> = {
   openai: { name: () => 'OpenAI', baseURL: 'https://api.openai.com/v1', defaultModel: 'gpt-transcribe', keyPlaceholder: () => 'sk-…' },
@@ -14,7 +15,12 @@ export const providers: Record<Provider, { name: () => string; baseURL: string |
   openrouter: { name: () => 'OpenRouter', baseURL: 'https://openrouter.ai/api/v1', defaultModel: 'microsoft/mai-transcribe-2', keyPlaceholder: () => 'sk-or-…' },
   groq: { name: () => 'Groq', baseURL: 'https://api.groq.com/openai/v1', defaultModel: 'whisper-large-v3-turbo', keyPlaceholder: () => 'gsk_…' },
   custom: { name: () => de('Eigener', 'Custom'), baseURL: null, defaultModel: '', keyPlaceholder: () => de('API-Schlüssel', 'API key') },
+  local: { name: () => de('Lokal', 'Local'), baseURL: null, defaultModel: 'onnx-community/whisper-large-v3-turbo', keyPlaceholder: () => '' },
 }
+
+/** Every provider but the one on this computer wants a key. */
+export const needsKey = (provider: Provider) => provider !== 'local'
+
 
 export interface TranscriberSettings {
   provider: Provider

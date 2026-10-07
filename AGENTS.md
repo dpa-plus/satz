@@ -51,7 +51,7 @@ Unit tests do not reach `desktop/src/main/main.ts`: start the packaged app once 
 ## Rules
 
 - **No second model rewriting what was said**, unless the user turns such an option on. Accuracy comes from the transcription model, the word list and replacements.
-- **Local models are a provider, never the default.** "Lokal" runs Whisper (WhisperKit on the Mac) or Apple's built-in recognizer on the computer itself; the user downloads the model from Settings. Model files live in `~/Library/Application Support/satz/models`, and removing one moves it to the Trash.
+- **Local models are a provider, never the default.** "Lokal" runs Whisper on the computer itself (WhisperKit on the Mac, transformers.js on ONNX Runtime on Windows/Linux), or Apple's built-in recognizer on macOS 26; the user downloads the model from Settings. Model files live in satz's own folder (`~/Library/Application Support/satz/models` on the Mac), and removing one moves it to the Trash. The word list is Whisper's prompt only when it costs no words (`WordCheck`, `keepEveryWord`): a prompt made Whisper drop a sentence in another language.
 - **Never cut the audio.** One recording per insertion spot; cut pieces came back garbled or in the wrong language.
 - **Never lose the user's words or clipboard.** Failed requests keep the audio; the clipboard is put back after pasting unless the user chose to keep the text there.
 - Every user-facing string exists in German and English: `de("…", en: "…")` on the Mac, `t('…', '…')` on Windows and Linux. No em dashes in UI text.

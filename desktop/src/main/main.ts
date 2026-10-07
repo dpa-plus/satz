@@ -5,7 +5,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { de, setLanguage } from '../core/language'
 import { Session, type AudioSource } from '../core/session'
-import { transcribe } from '../core/transcriber'
+import { needsKey, providers, transcribe, TranscriptionFailure } from '../core/transcriber'
+import { downloadSize } from '../core/models'
 import { DoubleTap } from '../core/trigger'
 import { encodeWAV } from '../core/wav'
 import { CardWindow } from './card'
@@ -15,6 +16,7 @@ import { FileSource, MicHub, MicRecorder } from './recorder'
 import { Store } from './store'
 import { MediaPause, systemPlayers } from './media'
 import { ModelLists } from './modelLists'
+import { LocalModels } from './local'
 
 /**
  * satz for Windows and Linux. Double-tap right Ctrl, talk, double-tap again:
@@ -79,14 +81,27 @@ async function start() {
   ipcMain.on('rec:chunk', (_e, chunk: Float32Array) => hub.push(chunk))
 
   const delivered: string[] = []
+
+  // Whisper on this computer, for the provider "Lokal".
+  const local = new LocalModels(path.join(app.getPath('userData'), 'models', 'local'), log, () => tellWindow('local:changed'))
+  const localModel = () => store.prefs.models.local || providers.local.defaultModel
+  /** What keeps the provider from working, in two or three words; null when it is ready. */
+  function missing(): string | null {
+    if (needsKey(store.prefs.provider)) return store.hasKey() ? null : new TranscriptionFailure('noKey').short
+    const state = local.state(localModel()).kind
+    if (state === 'ready') return null
+    return state === 'downloading' || state === 'preparing' ? de('Modell lädt noch', 'Model still loading') : de('Modell fehlt', 'Model missing')
+  }
   let keyboard: Keyboard | null = null
 
   const session = new Session({
     // In test mode silence once the files run out: a test never records the room.
     makeSource: (): AudioSource => (testMode && flag('--test-audio') !== undefined ? new FileSource(testAudio.shift() ?? null) : new MicRecorder(hub)),
-    transcribe: samples => transcribe(store.transcriberSettings(), encodeWAV(samples), store.readKey() ?? ''),
+    transcribe: samples => store.prefs.provider === 'local'
+      ? local.transcribe(samples, localModel(), store.transcriberSettings().vocabulary)
+      : transcribe(store.transcriberSettings(), encodeWAV(samples), store.readKey() ?? ''),
     replacements: () => store.activeReplacements,
-    hasKey: () => store.hasKey(),
+    missing,
     endpointMissing: () => store.endpointMissing,
     triggerMode: () => store.prefs.triggerMode,
     log,
@@ -257,10 +272,18 @@ async function start() {
       startAtLogin: startAtLogin.get(),
       spokenLanguage: store.spokenLanguage,
       models: modelLists.get(store.prefs.provider),
+      local: { state: local.state(localModel()), size: downloadSize[localModel()] ?? null },
     }
   })
+  ipcMain.handle('local:download', () => local.download(localModel()))
+  ipcMain.handle('local:remove', () => local.remove(localModel(), folder => shell.trashItem(folder)))
   ipcMain.handle('settings:update', (_e, change) => {
     store.update(change)
+    // A loaded model is a gigabyte of memory: there only while "Lokal" is chosen.
+    if ('provider' in change || 'models' in change) {
+      if (store.prefs.provider === 'local') local.warmUp(localModel())
+      else local.unload()
+    }
     if (change.pausesMedia) mediaPause.prepare()
     refreshTray()
     return store.prefs
@@ -289,12 +312,15 @@ async function start() {
     startAtLogin.set(true)
   }
 
-  if (!store.hasKey() && !testMode) {
+  if (store.prefs.provider === 'local') local.warmUp(localModel())
+  if (missing() && !testMode) {
     openSettings()
-    new Notification({ title: 'satz', body: de('Bitte einen API-Schlüssel hinterlegen.', 'Please add an API key.') }).show()
+    new Notification({ title: 'satz', body: needsKey(store.prefs.provider)
+      ? de('Bitte einen API-Schlüssel hinterlegen.', 'Please add an API key.')
+      : de('Bitte das Modell in den Einstellungen laden.', 'Please download the model in Settings.') }).show()
   }
 
-  if (devPort) startDevControl(Number(devPort), session, card, delivered, store)
+  if (devPort) startDevControl(Number(devPort), session, card, delivered, store, () => local.download(localModel()), () => local.state(localModel()))
 }
 
 /** Windows: the registry's Run key through Electron. Linux: an autostart entry. */
@@ -324,7 +350,7 @@ const startAtLogin = {
  * notifications. Finished texts are recorded instead of pasted unless
  * --test-paste is given.
  */
-function startDevControl(port: number, session: Session, card: CardWindow, delivered: string[], store: Store) {
+function startDevControl(port: number, session: Session, card: CardWindow, delivered: string[], store: Store, downloadLocal: () => void, localState: () => unknown) {
   const server = http.createServer(async (request, response) => {
     const url = new URL(request.url ?? '/', 'http://localhost')
     const command = url.pathname.slice(1)
@@ -351,6 +377,9 @@ function startDevControl(port: number, session: Session, card: CardWindow, deliv
         try { body = { result: await card.window.webContents.executeJavaScript(url.searchParams.get('code') ?? '') } } catch (error) { body = { error: String(error) } }
         break
       case 'quit': app.quit(); break
+      // What the Download button does, and the state it leads to (start with --provider local in the prefs).
+      case 'local-download': downloadLocal(); break
+      case 'local': body = localState(); break
       case 'state':
       default:
         body = {

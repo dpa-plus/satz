@@ -50,6 +50,15 @@ export const known: Record<string, Known> = {
   'whisper-1': { name: 'Whisper', maker: 'OpenAI', errorRate: 4.1 },
   'whisper-large-v3-turbo': { name: 'Whisper Large v3 Turbo', maker: 'OpenAI', errorRate: 4.6 },
   'whisper-large-v3': { name: 'Whisper Large v3', maker: 'OpenAI' },
+  // On this computer: free, and AA measured neither of these builds.
+  'onnx-community/whisper-large-v3-turbo': { name: 'Whisper Large v3 Turbo', maker: 'OpenAI', measured: 0 },
+  'onnx-community/whisper-small': { name: 'Whisper Small', maker: 'OpenAI', measured: 0 },
+}
+
+/** What a local model downloads once: the encoder at 8 bits, the decoder at 4. */
+export const downloadSize: Record<string, string> = {
+  'onnx-community/whisper-large-v3-turbo': '980 MB',
+  'onnx-community/whisper-small': '250 MB',
 }
 
 const shipped: Record<Provider, string[]> = {
@@ -63,6 +72,7 @@ const shipped: Record<Provider, string[]> = {
   openai: ['gpt-transcribe', 'gpt-4o-transcribe', 'gpt-4o-mini-transcribe', 'whisper-1'],
   groq: ['whisper-large-v3-turbo', 'whisper-large-v3'],
   custom: [],
+  local: ['onnx-community/whisper-large-v3-turbo', 'onnx-community/whisper-small'],
 }
 
 /** The list satz ships with: before the provider's list arrives, and whenever it cannot. */
@@ -76,6 +86,7 @@ export const listURL: Record<Provider, string | null> = {
   openai: 'https://api.openai.com/v1/models',
   groq: 'https://api.groq.com/openai/v1/models',
   custom: null,
+  local: null,
 }
 
 /** `{data: [{id, name?, pricing?}]}`: OpenRouter's shape, and OpenAI's and Groq's, which list every model they have. */
