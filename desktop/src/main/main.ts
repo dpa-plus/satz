@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, ipcMain, Menu, nativeImage, Notification, session as electronSession, shell, Tray } from 'electron'
+import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, Menu, nativeImage, Notification, session as electronSession, shell, Tray } from 'electron'
 import fs from 'node:fs'
 import http from 'node:http'
 import os from 'node:os'
@@ -131,7 +131,11 @@ async function start() {
   let lastPhase = session.phase.kind
   session.onChange = () => {
     pushState()
-    if (session.phase.kind !== lastPhase) { lastPhase = session.phase.kind; refreshTray() }
+    if (session.phase.kind !== lastPhase) {
+      lastPhase = session.phase.kind
+      refreshTray()
+      takeEscape(['starting', 'listening'].includes(lastPhase))
+    }
   }
   // Never in test mode, where it would pause the user's music, unless a test asks.
   const mediaPause = new MediaPause(systemPlayers(log), () => store.prefs.pausesMedia && (!testMode || args.includes('--test-media')), log)
@@ -152,11 +156,22 @@ async function start() {
   ipcMain.on('card:caret', (_e, offset: number) => session.userMovedCaret(offset))
 
   // The shortcut: right Ctrl twice; Escape discards while recording.
+  // Escape discards while recording. The keyboard hook only listens, so the
+  // key also reached the app the user was typing in. While satz records it
+  // is taken as a global shortcut instead, which keeps it from that app.
+  // Not under Wayland, where such a shortcut never fires for native apps.
+  let escapeTaken = false
+  function takeEscape(take: boolean) {
+    if (isWayland() || take === escapeTaken) return
+    if (take) escapeTaken = globalShortcut.register('Escape', () => session.discard())
+    else { globalShortcut.unregister('Escape'); escapeTaken = false }
+  }
   const doubleTap = new DoubleTap(() => session.press(), () => session.release())
   keyboard = await startKeyboard({
     trigger: (down: boolean) => (down ? doubleTap.keyDown(true) : doubleTap.keyUp(true)),
     other: () => doubleTap.keyDown(false),
-    escape: () => { if (['starting', 'listening'].includes(session.phase.kind)) session.discard() },
+    // Only where Escape could not be taken as a shortcut (Wayland).
+    escape: () => { if (!escapeTaken && ['starting', 'listening'].includes(session.phase.kind)) session.discard() },
     log,
   })
   log(`shortcut: ${keyboard.description}`)

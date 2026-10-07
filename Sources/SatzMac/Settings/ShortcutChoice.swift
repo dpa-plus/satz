@@ -61,6 +61,11 @@ struct ShortcutChoice: View {
             }
         }
         .onDisappear(perform: stopRecording)
+        // Recording listens inside satz only, with the shortcut off meanwhile.
+        // Switching to another app left it off until the user came back.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+            stopRecording()
+        }
     }
 
     private var isKeys: Bool {

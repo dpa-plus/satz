@@ -98,6 +98,8 @@ export class Session {
   private stopping: Held[] = []
   private sessionToken = 0
   private startToken = 0
+  /** The shortcut was pressed to finish while the microphone was still opening. */
+  private finishWhenOpen = false
   private closeTimer: ReturnType<typeof setTimeout> | null = null
   private breathTimer: ReturnType<typeof setInterval> | null = null
   breathBright = true
@@ -123,6 +125,9 @@ export class Session {
     const mode = this.deps.triggerMode(), p = this.phase
     if (p.kind === 'idle' || p.kind === 'discarded' || p.kind === 'clipboard') return this.begin()
     if (mode === 'tap' && (p.kind === 'listening' || p.kind === 'paused')) return this.finish()
+    // Pressed again while the microphone is still opening (a slow Bluetooth
+    // headset): kept, and done once it is open. Ignored, it ran on.
+    if (mode === 'tap' && p.kind === 'starting') { this.finishWhenOpen = true; return }
     if (p.kind === 'failed') {
       // Nothing kept to send ("Kein Schlüssel", "Nichts gehört"): start over.
       if (p.canRetry || [...this.segments.values()].some(s => s.audio.length > 0)) return this.finish()
@@ -261,6 +266,7 @@ export class Session {
 
   private startRecording() {
     const mine = ++this.startToken
+    this.finishWhenOpen = false
     this.phase = { kind: 'starting' }
     this.onRecord()
     this.levels = this.levels.map(() => 0)
@@ -276,6 +282,7 @@ export class Session {
       for (const held of this.stopping) if (held.end === undefined) held.end = held.source.sampleCount
       this.phase = { kind: 'listening' }
       this.changed()
+      if (this.finishWhenOpen) { this.finishWhenOpen = false; this.finish() }
     }, error => {
       if (mine !== this.startToken) return
       this.phase = { kind: 'failed', message: String((error as Error)?.message ?? error), canRetry: false }

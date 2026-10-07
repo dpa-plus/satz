@@ -121,6 +121,8 @@ final class Session {
     @ObservationIgnored private var sessionToken = 0
     /// Bumped by every microphone start, so a start that resolves late drops.
     @ObservationIgnored private var startToken = 0
+    /// The shortcut was pressed to finish while the microphone was still opening.
+    @ObservationIgnored private var finishWhenOpen = false
     @ObservationIgnored private var origin: NSRunningApplication?
     @ObservationIgnored private var escape: HotKey?
     @ObservationIgnored private var breathing: Task<Void, Never>?
@@ -138,6 +140,10 @@ final class Session {
         switch (preferences.triggerMode, phase) {
         case (_, .idle), (_, .discarded), (_, .clipboard): begin()
         case (.tap, .listening), (.tap, .paused): finish()
+        // Pressed again while the microphone is still opening (a slow
+        // Bluetooth headset takes a second): kept, and done once it is open.
+        // Ignored, the dictation ran on until the next press.
+        case (.tap, .starting): finishWhenOpen = true
         case (_, .failed(_, let canRetry)):
             // Nothing kept to send ("Kein Schlüssel", "Nichts gehört"): the
             // shortcut starts over instead of failing the same way again.
@@ -330,6 +336,7 @@ final class Session {
     private func startRecording() {
         startToken += 1
         let mine = startToken
+        finishWhenOpen = false
         phase = .starting
         onRecord()
         levels = Array(repeating: 0, count: levels.count)
@@ -363,6 +370,10 @@ final class Session {
                 stopping[index].end = stopping[index].recorder.sampleCount
             }
             phase = .listening
+            if finishWhenOpen {
+                finishWhenOpen = false
+                finish()
+            }
         }
     }
 

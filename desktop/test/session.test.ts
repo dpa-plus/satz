@@ -19,7 +19,9 @@ class FakeSource implements AudioSource {
   private tail: (() => void) | null = null
   holdTail = false
   constructor(readonly script: string) {}
-  async start() {}
+  /** Milliseconds the microphone takes to open, like a Bluetooth headset. */
+  opening = 0
+  async start() { if (this.opening) await new Promise(resolve => setTimeout(resolve, this.opening)) }
   get sampleCount() { return this.revealed * K }
   /** The speaker says the next `chars` characters. */
   say(chars = this.script.length - this.revealed) { this.revealed = Math.min(this.script.length, this.revealed + chars) }
@@ -45,12 +47,12 @@ const decode = (samples: Float32Array) => {
 const tick = (ms = 0) => new Promise(resolve => setTimeout(resolve, ms))
 async function settle() { for (let i = 0; i < 8; i++) await tick() }
 
-function setup(scripts: string[], options: { mode?: 'tap' | 'hold'; transcribe?: (s: Float32Array) => Promise<string> } = {}) {
+function setup(scripts: string[], options: { mode?: 'tap' | 'hold'; transcribe?: (s: Float32Array) => Promise<string>; opening?: number } = {}) {
   const sources: FakeSource[] = []
   const delivered: string[] = []
   let mode = options.mode ?? 'tap'
   const session = new Session({
-    makeSource: () => { const s = new FakeSource(scripts[sources.length] ?? ''); sources.push(s); return s },
+    makeSource: () => { const s = new FakeSource(scripts[sources.length] ?? ''); s.opening = options.opening ?? 0; sources.push(s); return s },
     transcribe: options.transcribe ?? (async samples => decode(samples)),
     replacements: () => [],
     hasKey: () => true,
@@ -223,5 +225,16 @@ test('music pauses for recording, not for the card that says nothing was heard',
   session.press(); await settle()
   assert.equal(session.phase.kind, 'failed')
   assert.equal(records, 1)
+  session.dispose()
+})
+
+test('a press while the microphone is still opening finishes once it is open', async () => {
+  const { session, sources, delivered } = setup(['Hallo'], { opening: 50 })
+  session.press()
+  sources[0].say()
+  session.press(); await settle()
+  assert.equal(session.phase.kind, 'starting')
+  await tick(80); await settle()
+  assert.deepEqual(delivered, ['Hallo'])
   session.dispose()
 })
