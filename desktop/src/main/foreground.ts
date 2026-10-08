@@ -18,13 +18,15 @@ export interface Foreground {
   current(): Promise<string | null>
   /** Brings the window back to the front. False if it is gone or will not come. */
   restore(window: string): Promise<boolean>
+  /** A terminal, which pastes with Ctrl+Shift+V: Ctrl+V did nothing there. */
+  isTerminal(window: string): Promise<boolean>
   prepare(): void
 }
 
 export function foreground(log: (message: string) => void): Foreground {
   if (process.platform === 'win32') return new WindowsForeground(log)
   if (process.platform === 'linux' && !isWayland()) return new X11Foreground()
-  return { current: async () => null, restore: async () => true, prepare: () => {} }
+  return { current: async () => null, restore: async () => true, isTerminal: async () => false, prepare: () => {} }
 }
 
 // MARK: - Windows
@@ -121,6 +123,9 @@ class WindowsForeground implements Foreground {
     return answer === 'ok' || answer.startsWith('error')
   }
 
+  /** Windows terminals take Ctrl+V. */
+  async isTerminal() { return false }
+
   /** PowerShell takes a second or two to start: started with satz. */
   prepare() { this.start().catch(error => this.log(`window helper: ${(error as Error).message}`)) }
 }
@@ -148,5 +153,15 @@ class X11Foreground implements Foreground {
     return false
   }
 
+  async isTerminal(window: string) {
+    const output = (await run('xprop', ['-id', window, 'WM_CLASS']))?.toLowerCase() ?? ''
+    return TERMINALS.some(name => output.includes(`"${name}"`))
+  }
+
   prepare() {}
 }
+
+/** WM_CLASS names of terminals, which paste with Ctrl+Shift+V. */
+const TERMINALS = ['gnome-terminal', 'gnome-terminal-server', 'kgx', 'org.gnome.console', 'ptyxis', 'konsole', 'xterm', 'uxterm',
+  'alacritty', 'kitty', 'tilix', 'terminator', 'xfce4-terminal', 'lxterminal', 'mate-terminal', 'qterminal', 'org.wezfurlong.wezterm',
+  'wezterm', 'urxvt', 'rxvt', 'st-256color', 'foot', 'terminology', 'deepin-terminal', 'blackbox', 'com.raggesilver.blackbox', 'tabby', 'hyper']

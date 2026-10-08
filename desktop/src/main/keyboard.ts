@@ -14,7 +14,8 @@ import { isWayland } from './paste'
  */
 export interface Keyboard {
   description: string
-  paste(): void
+  /** @param shift Ctrl+Shift+V, for terminals. */
+  paste(shift?: boolean): void
   /** Lets go of the keyboard devices, so quitting does not wait for a key. */
   stop(): void
 }
@@ -67,7 +68,11 @@ export async function startKeyboard(handlers: Handlers): Promise<Keyboard> {
     handlers.log(`keyboard hook did not start: ${(error as Error).message}`)
     return { description: 'keyboard hook unavailable: desktop shortcut running "satz --toggle"', paste: noKeystrokes, stop: () => {} }
   }
-  return { description: 'right Ctrl twice', paste: () => uIOhook.keyTap(UiohookKey.V, [UiohookKey.Ctrl]), stop: () => uIOhook.stop() }
+  return {
+    description: 'right Ctrl twice',
+    paste: shift => uIOhook.keyTap(UiohookKey.V, shift ? [UiohookKey.Ctrl, UiohookKey.Shift] : [UiohookKey.Ctrl]),
+    stop: () => uIOhook.stop(),
+  }
 }
 
 // MARK: - Linux evdev

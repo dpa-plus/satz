@@ -143,7 +143,8 @@ async function start() {
         historyChanged()
         return { pasted: false, reason: de('Auf der Zwischenablage, das Fenster ist nicht mehr da.', 'On the clipboard, the window is gone.') }
       }
-      const outcome = await deliver(text, () => keyboard?.paste(), store.prefs.keepsOnClipboard, log)
+      const terminal = window ? await windows.isTerminal(window) : false
+      const outcome = await deliver(text, () => keyboard?.paste(terminal), store.prefs.keepsOnClipboard, log)
       log(`paste: ${outcome.pasted ? 'sent Ctrl+V' : 'clipboard only'}, ${text.length} characters`)
       store.addHistory(text, outcome.pasted)
       delivered.push(text)
