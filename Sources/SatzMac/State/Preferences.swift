@@ -77,9 +77,14 @@ final class Preferences {
     /// user's own rules stay; a predefined one they removed comes back.
     private func swapPredefinedReplacements(from old: Language, to new: Language) {
         guard old != new else { return }
-        let predefined = Set(Replacements.standard(for: old).map { $0.spoken.lowercased() })
-        let own = replacements.filter { !predefined.contains($0.spoken.lowercased()) }
-        replacements = Replacements.standard(for: new) + own
+        // Shipped only while unchanged: a rule the user turned on or gave
+        // another symbol ("Klammer auf" to "[") was dropped by its phrase.
+        let shipped = Replacements.standard(for: old)
+        let own = replacements.filter { rule in
+            !shipped.contains { $0.spoken.caseInsensitiveCompare(rule.spoken) == .orderedSame && $0.written == rule.written && $0.isOn == rule.isOn }
+        }
+        let ownPhrases = Set(own.map { $0.spoken.lowercased() })
+        replacements = Replacements.standard(for: new).filter { !ownPhrases.contains($0.spoken.lowercased()) } + own
     }
 
     /// Where the user dragged the card, as an offset from where it starts:
@@ -211,7 +216,11 @@ final class Preferences {
 
     init(defaults: UserDefaults? = .standard) {
         self.defaults = defaults
-        provider = defaults?.string(forKey: Key.provider).flatMap(Provider.init(rawValue:)) ?? .openAI
+        // OpenRouter with MAI-Transcribe 2, as the README says. Someone who
+        // set up satz before with an OpenAI key and never touched the switch
+        // has no stored provider: they stay on OpenAI.
+        provider = defaults?.string(forKey: Key.provider).flatMap(Provider.init(rawValue:))
+            ?? (defaults != nil && Secrets.exists(for: .openAI) && !Secrets.exists(for: .openRouter) ? .openAI : .openRouter)
         models = defaults?.dictionary(forKey: Key.models) as? [String: String] ?? [:]
         customBaseURL = defaults?.string(forKey: Key.customBaseURL) ?? ""
         words = defaults?.stringArray(forKey: Key.words)

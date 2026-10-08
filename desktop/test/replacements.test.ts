@@ -100,3 +100,11 @@ test('a spoken phrase with a hyphen works and never breaks the dictation', () =>
   assert.equal(applyReplacements(rules, 'Schick es an meine E-Mail bitte'), 'Schick es an eli@example.com bitte')
   assert.equal(applyReplacements(rules, 'Klammer auf hallo'), '(hallo')
 })
+
+test('a built-in rule the user changed survives a language switch and back', () => {
+  const mine = german.map(r => (r.spoken === 'Klammer auf' ? { ...r, written: '[' } : r.spoken === 'Punkt' ? { ...r, isOn: true } : r))
+  const back = swapPredefined(swapPredefined(mine, 'de', 'en'), 'en', 'de')
+  assert.equal(back.find(r => r.spoken === 'Klammer auf')?.written, '[')
+  assert.equal(back.find(r => r.spoken === 'Punkt')?.isOn, true)
+  assert.equal(back.filter(r => r.spoken === 'Klammer auf').length, 1)
+})

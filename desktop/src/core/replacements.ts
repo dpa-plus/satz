@@ -63,8 +63,12 @@ export function standardReplacements(language: Language): Replacement[] {
 /** The predefined rules of one language make way for the other's; the user's own stay. */
 export function swapPredefined(rules: Replacement[], from: Language, to: Language): Replacement[] {
   if (from === to) return rules
-  const predefined = new Set(standardReplacements(from).map(r => r.spoken.toLowerCase()))
-  return [...standardReplacements(to), ...rules.filter(r => !predefined.has(r.spoken.toLowerCase()))]
+  // Shipped only while unchanged: a rule the user turned on or gave another
+  // symbol ("Klammer auf" to "[") was dropped by its phrase.
+  const shipped = standardReplacements(from)
+  const own = rules.filter(rule => !shipped.some(s => s.spoken.toLowerCase() === rule.spoken.toLowerCase() && s.written === rule.written && s.isOn === rule.isOn))
+  const ownPhrases = new Set(own.map(r => r.spoken.toLowerCase()))
+  return [...standardReplacements(to).filter(r => !ownPhrases.has(r.spoken.toLowerCase())), ...own]
 }
 
 /** The spoken side of every rule that is on, for the model's word list. */

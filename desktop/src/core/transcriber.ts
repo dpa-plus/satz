@@ -39,7 +39,8 @@ export interface TranscriberSettings {
   backupAfter?: number | null
 }
 
-export type FailureKind = 'noKey' | 'unauthorized' | 'rateLimited' | 'offline' | 'timedOut' | 'server' | 'unreadableResponse'
+/** tooLarge: the provider's upload limit (25 MB, about 13 minutes at OpenAI and Groq); Retry would fail the same way. */
+export type FailureKind = 'noKey' | 'unauthorized' | 'rateLimited' | 'offline' | 'timedOut' | 'server' | 'unreadableResponse' | 'tooLarge'
 
 export class TranscriptionFailure extends Error {
   constructor(readonly kind: FailureKind, readonly status?: number, readonly detail?: string) {
@@ -56,6 +57,7 @@ export class TranscriptionFailure extends Error {
       case 'timedOut': return de('Zeitüberschreitung', 'Timed out')
       case 'server': return de('Fehler beim Anbieter', 'Provider error')
       case 'unreadableResponse': return de('Antwort unlesbar', 'Unreadable answer')
+      case 'tooLarge': return de('Zu lang für den Anbieter', 'Too long for the provider')
     }
   }
 }
@@ -193,6 +195,7 @@ async function attempt(settings: TranscriberSettings, wav: Uint8Array, apiKey: s
     }
     if (response.status === 401 || response.status === 403) throw new TranscriptionFailure('unauthorized', response.status)
     if (response.status === 429) throw new TranscriptionFailure('rateLimited', 429)
+    if (response.status === 413) throw new TranscriptionFailure('tooLarge', 413)
     if (response.status < 200 || response.status >= 300) throw new TranscriptionFailure('server', response.status, messageIn(text))
     try {
       const value = JSON.parse(text)?.text

@@ -77,6 +77,9 @@ public struct Transcriber: Sendable {
         case timedOut
         case server(status: Int, message: String?)
         case unreadableResponse
+        /// The provider's upload limit (OpenAI and Groq take 25 MB, about 13
+        /// minutes): Retry would fail the same way.
+        case tooLarge
 
         /// Non-optional, so callers never have to invent a fallback string.
         public var message: String {
@@ -88,6 +91,7 @@ public struct Transcriber: Sendable {
             case .timedOut: de("Der Anbieter hat nicht rechtzeitig geantwortet.", en: "The provider did not answer in time.")
             case .server(let status, let message): message ?? de("Der Anbieter antwortete mit \(status).", en: "The provider answered with \(status).")
             case .unreadableResponse: de("Antwort des Anbieters nicht lesbar.", en: "Could not read the provider's answer.")
+            case .tooLarge: de("Die Aufnahme ist zu lang für den Anbieter. Den Text kopieren und neu ansetzen.", en: "The recording is too long for the provider. Copy the text and start again.")
             }
         }
 
@@ -258,6 +262,7 @@ public struct Transcriber: Sendable {
         switch status {
         case 401, 403: .unauthorized
         case 429: .rateLimited
+        case 413: .tooLarge
         default: .server(status: status, message: message(in: body))
         }
     }

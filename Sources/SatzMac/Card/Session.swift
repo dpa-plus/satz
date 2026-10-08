@@ -988,6 +988,7 @@ extension Transcriber.Failure {
         case .timedOut: de("Zeitüberschreitung", en: "Timed out")
         case .server: de("Fehler beim Anbieter", en: "Provider error")
         case .unreadableResponse: de("Antwort unlesbar", en: "Unreadable answer")
+        case .tooLarge: de("Zu lang für den Anbieter", en: "Too long for the provider")
         }
     }
 }

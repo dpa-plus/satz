@@ -55,6 +55,7 @@ public final class AudioRecorder: @unchecked Sendable {
     private var converter: AVAudioConverter?
     private var isCancelled = false
     private var isRunning = false
+    private var configurationObserver: NSObjectProtocol?
 
     public init(settings: Settings = Settings()) {
         self.settings = settings
@@ -76,11 +77,34 @@ public final class AudioRecorder: @unchecked Sendable {
             samples.removeAll(keepingCapacity: true)
             isCancelled = false
         }
+        try startEngine(device: settings.inputDeviceID)
+        lock.withLock { isRunning = true }
+        // A new input (AirPods connecting) or the chosen one unplugged stops
+        // the engine without a word: the card kept "listening" and every word
+        // after it was lost. It starts again on what is there now, adding to
+        // the same recording.
+        configurationObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil
+        ) { [weak self] _ in self?.restartAfterConfigurationChange() }
+    }
 
+    private func restartAfterConfigurationChange() {
+        guard lock.withLock({ isRunning && !isCancelled }) else { return }
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+        do {
+            try startEngine(device: settings.inputDeviceID)
+        } catch {
+            // The chosen microphone is gone: the system's own instead.
+            try? startEngine(device: nil)
+        }
+    }
+
+    private func startEngine(device: UInt32?) throws {
         let input = engine.inputNode
         #if os(macOS)
         // Must happen before the format is read: the format is the device's.
-        if let deviceID = settings.inputDeviceID, let unit = input.audioUnit {
+        if let deviceID = device, let unit = input.audioUnit {
             var device = deviceID
             AudioUnitSetProperty(
                 unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0,
@@ -100,6 +124,9 @@ public final class AudioRecorder: @unchecked Sendable {
         else {
             throw Failure.couldNotConvertAudio
         }
+        // All channels mixed to one: by default the converter keeps channel 1
+        // only, and a microphone on input 2 of an interface recorded silence.
+        converter.downmix = true
         lock.withLock { self.converter = converter }
 
         input.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
@@ -113,7 +140,6 @@ public final class AudioRecorder: @unchecked Sendable {
             input.removeTap(onBus: 0)
             throw Failure.engineFailed(error.localizedDescription)
         }
-        lock.withLock { isRunning = true }
     }
 
     /// Stops after the tail has elapsed and returns the recording as WAV bytes.
@@ -165,6 +191,8 @@ public final class AudioRecorder: @unchecked Sendable {
             return true
         }
         guard claimed else { return nil }
+        if let configurationObserver { NotificationCenter.default.removeObserver(configurationObserver) }
+        configurationObserver = nil
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
 

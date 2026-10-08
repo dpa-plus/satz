@@ -308,7 +308,13 @@ private struct ModelRow: View {
                 .frame(height: 48)
             }
         }
-        .onChange(of: provider) { typing = false }
+        // The field lets go first, with the new provider's model: its focus-out
+        // wrote the old provider's model into the new one.
+        .onChange(of: provider) {
+            draft = preferences.model
+            typing = false
+            idFocused = false
+        }
         .onChange(of: typing) { _, now in
             // Once the field is in the window: asked for as it appears, the
             // request was dropped (the same as the Wortschatz field).
