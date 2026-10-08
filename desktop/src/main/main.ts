@@ -6,9 +6,9 @@ import path from 'node:path'
 import { de, setLanguage } from '../core/language'
 import { Session, type AudioSource } from '../core/session'
 import { needsKey, providers, transcribe, TranscriptionFailure } from '../core/transcriber'
-import { downloadSize } from '../core/models'
+import { localModelIds } from '../core/localModels'
 import { DoubleTap } from '../core/trigger'
-import { encodeWAV } from '../core/wav'
+import { decodeWAV, encodeWAV, resample } from '../core/wav'
 import { CardWindow } from './card'
 import { startKeyboard, type Keyboard } from './keyboard'
 import { deliver, isWayland } from './paste'
@@ -17,6 +17,9 @@ import { Store } from './store'
 import { MediaPause, systemPlayers } from './media'
 import { ModelLists } from './modelLists'
 import { LocalModels } from './local'
+import { GermanErrors } from './localBenchmarks'
+import { machineName } from './localFiles'
+import { SpeedTests } from './speedTests'
 import { foreground } from './foreground'
 
 /**
@@ -99,8 +102,10 @@ async function start() {
   const roaming = path.join(app.getPath('userData'), 'models', 'local')
   const modelsDir = process.platform === 'win32' && process.env.LOCALAPPDATA && !fs.existsSync(roaming)
     ? path.join(process.env.LOCALAPPDATA, 'satz', 'models', 'local') : roaming
-  const local = new LocalModels(modelsDir, log, () => tellWindow('local:changed'))
+  const local = new LocalModels(modelsDir, log, () => tellWindow('local:changed'), app.getVersion())
   const localModel = () => store.prefs.models.local || providers.local.defaultModel
+  /** The ids Settings may download, measure or remove: the list's, and the one in use. */
+  const isListed = (id: unknown): id is string => typeof id === 'string' && localModelIds(localModel()).includes(id)
   /** What keeps the provider from working, in two or three words; null when it is ready. */
   function missing(): string | null {
     if (needsKey(store.prefs.provider)) return store.hasKey() ? null : new TranscriptionFailure('noKey').short
@@ -153,6 +158,28 @@ async function start() {
     },
   })
 
+  // The speed of a local model, measured on this computer with a 10 s public
+  // domain clip (assets/speedtest.txt): right after its download and when
+  // asked, once no dictation is under way (speedTests.ts says why).
+  const speedTests = new SpeedTests({
+    phase: () => session.phase.kind,
+    measure: id => {
+      let clip: Float32Array
+      try {
+        const { samples, sampleRate } = decodeWAV(fs.readFileSync(path.join(__dirname, '..', 'assets', 'speedtest.wav')))
+        clip = resample(samples, sampleRate)
+      } catch (error) { log(`local: no speed test clip (${(error as Error).message})`); return Promise.resolve('failed' as const) }
+      return local.measure(id, clip, store.transcriberSettings().vocabulary, store.spokenLanguage)
+    },
+    inUse: localModel,
+    isReady: id => local.isReady(id),
+    use: id => store.update({ models: { ...store.prefs.models, local: id } }),
+    localChosen: () => store.prefs.provider === 'local',
+    warmUp: id => local.warmUp(id),
+    log,
+  })
+  local.onArrived = id => speedTests.arrived(id)
+
   let pushQueued = false
   const pushState = () => {
     if (pushQueued) return
@@ -175,6 +202,7 @@ async function start() {
   let lastPhase = session.phase.kind
   session.onChange = () => {
     pushState()
+    speedTests.sessionChanged()
     if (session.phase.kind !== lastPhase) {
       lastPhase = session.phase.kind
       refreshTray()
@@ -296,8 +324,10 @@ async function start() {
 
   // The model menu: the provider's live list, the shipped one until it arrives.
   const modelLists = new ModelLists(app.getPath('userData'), provider => store.readKey(provider), log, () => tellWindow('models:changed'), net.fetch as never)
+  const germanErrors = new GermanErrors(app.getPath('userData'), log, () => tellWindow('local:changed'), net.fetch as never)
   ipcMain.handle('settings:get', () => {
     modelLists.refresh(store.prefs.provider)
+    if (store.prefs.provider === 'local') germanErrors.refresh()
     return {
       prefs: store.prefs,
       hasKey: store.hasKey(),
@@ -308,11 +338,18 @@ async function start() {
       startAtLogin: startAtLogin.get(),
       spokenLanguage: store.spokenLanguage,
       models: modelLists.get(store.prefs.provider),
-      local: { state: local.state(localModel()), size: downloadSize[localModel()] ?? null },
+      local: {
+        inUse: localModel(),
+        models: localModelIds(localModel()).map(id => ({ id, state: local.state(id), measuring: local.isMeasuring(id) || speedTests.isWaiting(id), speed: local.speed(id) })),
+        germanErrors: germanErrors.get(),
+        machine: machineName(),
+        version: app.getVersion(),
+      },
     }
   })
-  ipcMain.handle('local:download', () => local.download(localModel()))
-  ipcMain.handle('local:remove', () => local.remove(localModel(), folder => shell.trashItem(folder)))
+  ipcMain.handle('local:download', (_e, id: unknown) => { if (isListed(id)) local.download(id) })
+  ipcMain.handle('local:measure', (_e, id: unknown) => { if (isListed(id)) speedTests.request(id) })
+  ipcMain.handle('local:remove', (_e, id: unknown) => isListed(id) ? local.remove(id, folder => shell.trashItem(folder)) : undefined)
   ipcMain.handle('settings:update', (_e, change) => {
     store.update(change)
     // A loaded model is a gigabyte of memory: there only while "Lokal" is chosen.
@@ -363,7 +400,11 @@ async function start() {
   if (args.includes('--toggle')) void cardIsReady.then(() => session.toggle())
   if (args.includes('--settings')) openSettings()
 
-  if (devPort) startDevControl(Number(devPort), session, card, delivered, store, () => local.download(localModel()), () => local.state(localModel()))
+  if (devPort) startDevControl(Number(devPort), session, card, delivered, store, {
+    download: id => local.download(id ?? localModel()),
+    measure: id => speedTests.request(id ?? localModel()),
+    state: id => ({ state: local.state(id ?? localModel()), measuring: local.isMeasuring(id ?? localModel()), waiting: speedTests.isWaiting(id ?? localModel()), speed: local.speed(id ?? localModel()), inUse: localModel() }),
+  })
 }
 
 /** Windows: the registry's Run key through Electron. Linux: an autostart entry. */
@@ -394,7 +435,8 @@ const startAtLogin = {
  * notifications. Finished texts are recorded instead of pasted unless
  * --test-paste is given.
  */
-function startDevControl(port: number, session: Session, card: CardWindow, delivered: string[], store: Store, downloadLocal: () => void, localState: () => unknown) {
+function startDevControl(port: number, session: Session, card: CardWindow, delivered: string[], store: Store,
+  local: { download(id?: string): void; measure(id?: string): void; state(id?: string): unknown }) {
   const server = http.createServer(async (request, response) => {
     const url = new URL(request.url ?? '/', 'http://localhost')
     const command = url.pathname.slice(1)
@@ -421,9 +463,10 @@ function startDevControl(port: number, session: Session, card: CardWindow, deliv
         try { body = { result: await card.window.webContents.executeJavaScript(url.searchParams.get('code') ?? '') } } catch (error) { body = { error: String(error) } }
         break
       case 'quit': app.quit(); break
-      // What the Download button does, and the state it leads to (start with --provider local in the prefs).
-      case 'local-download': downloadLocal(); break
-      case 'local': body = localState(); break
+      // What a model's buttons do, and the state they lead to (?id=…, else the model in use; start with "provider": "local" in the prefs).
+      case 'local-download': local.download(url.searchParams.get('id') ?? undefined); break
+      case 'local-measure': local.measure(url.searchParams.get('id') ?? undefined); break
+      case 'local': body = local.state(url.searchParams.get('id') ?? undefined); break
       case 'state':
       default:
         body = {

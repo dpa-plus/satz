@@ -1,3 +1,4 @@
+import { localModels } from './localModels'
 import { providers, type Provider } from './transcriber'
 
 /**
@@ -50,15 +51,8 @@ export const known: Record<string, Known> = {
   'whisper-1': { name: 'Whisper', maker: 'OpenAI', errorRate: 4.1 },
   'whisper-large-v3-turbo': { name: 'Whisper Large v3 Turbo', maker: 'OpenAI', errorRate: 4.6 },
   'whisper-large-v3': { name: 'Whisper Large v3', maker: 'OpenAI' },
-  // On this computer: free, and AA measured neither of these builds.
-  'onnx-community/whisper-large-v3-turbo': { name: 'Whisper Large v3 Turbo', maker: 'OpenAI', measured: 0 },
-  'onnx-community/whisper-small': { name: 'Whisper Small', maker: 'OpenAI', measured: 0 },
-}
-
-/** What a local model downloads once: the encoder at 8 bits, the decoder at 4. */
-export const downloadSize: Record<string, string> = {
-  'onnx-community/whisper-large-v3-turbo': '980 MB',
-  'onnx-community/whisper-small': '250 MB',
+  // On this computer: free, and AA measured none of these builds (localModels.ts has what is known).
+  ...Object.fromEntries(localModels.map(model => [model.id, { name: model.name, maker: 'OpenAI', measured: 0 }])),
 }
 
 const shipped: Record<Provider, string[]> = {
@@ -72,7 +66,7 @@ const shipped: Record<Provider, string[]> = {
   openai: ['gpt-transcribe', 'gpt-4o-transcribe', 'gpt-4o-mini-transcribe', 'whisper-1'],
   groq: ['whisper-large-v3-turbo', 'whisper-large-v3'],
   custom: [],
-  local: ['onnx-community/whisper-large-v3-turbo', 'onnx-community/whisper-small'],
+  local: localModels.map(model => model.id),
 }
 
 /** The list satz ships with: before the provider's list arrives, and whenever it cannot. */

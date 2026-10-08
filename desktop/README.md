@@ -14,7 +14,7 @@ On first start satz opens its settings for the API key, and switches on start at
 
 ## Without the internet
 
-Provider **Local** runs Whisper Large v3 Turbo on the computer itself (transformers.js on ONNX Runtime, CPU). *Download* in Settings fetches it once from Hugging Face (980 MB, into satz's own folder); after that nothing is sent anywhere. Whisper finds the language itself per recording. The word list goes in as Whisper's prompt, but only where it costs no words: with a prompt, Whisper dropped an English sentence from a German recording, so satz decodes with and without it and keeps the prompted text only if it is as long. The Windows packages carry Microsoft's C++ runtime DLLs next to ONNX Runtime (`build/vcruntime.py` fetches them from Microsoft's redistributable); a fresh Windows has none.
+Provider **Local** runs Whisper on the computer itself (transformers.js on ONNX Runtime, CPU). Settings lists the models to choose from (`src/core/localModels.ts`): Whisper Large v3 Turbo (981 MB, the default), Large v3 (1.4 GB, most accurate, slow), Small (328 MB) and Base (149 MB, fastest, rough). Each row shows the size, the German error rate on FLEURS (the Open ASR Leaderboard's file, fetched once a day, or the shipped numbers) and, once measured, how long the model takes for 10 s of speech on this computer. *Download* fetches a model once from Hugging Face into satz's own folder, beside the model in use, which stays loaded; satz then times it on a bundled 10 s clip (`assets/speedtest.wav`, two runs through the dictation path, the second counts; once no dictation is under way, so none waits for it, `src/main/speedTests.ts`) and keeps the result as `<id>.speed.json`. *Use* switches to it. A download only switches by itself when the model in use is not on the computer. After that nothing is sent anywhere. Whisper finds the language itself per recording. The word list goes in as Whisper's prompt, but only where it costs no words: with a prompt, Whisper dropped an English sentence from a German recording, so satz decodes with and without it and keeps the prompted text only if it is as long. The Windows packages carry Microsoft's C++ runtime DLLs next to ONNX Runtime (`build/vcruntime.py` fetches them from Microsoft's redistributable); a fresh Windows has none.
 
 ## Linux and Wayland
 
@@ -28,7 +28,7 @@ Wayland (Ubuntu's default) lets no app watch the keyboard or type into other app
 
 ```bash
 npm install
-npm test               # 62 tests: the shared core, ported from the Mac app
+npm test               # 93 tests: the shared core, ported from the Mac app
 npm run dist:win       # release/*.zip
 npm run dist:linux     # release/*.deb, *.tar.gz
 ```
@@ -37,7 +37,7 @@ Everything builds on a Mac. `npm start` runs it locally.
 
 ## Test mode
 
-`satz --dev-control 48700 --test-audio a.wav:b.wav` plays WAV files instead of the microphone and takes commands on `http://127.0.0.1:48700/<command>`: `press`, `release`, `mic`, `discard`, `undo`, `restore`, `eye`, `caret?at=N`, `state`, `picture`, `js?code=…`, `local` and `local-download` (the local model's state, and its Download button; set `"provider": "local"` in preferences.json first). Texts are recorded instead of pasted unless `--test-paste` is given. Windows takes `;` between the files.
+`satz --dev-control 48700 --test-audio a.wav:b.wav` plays WAV files instead of the microphone and takes commands on `http://127.0.0.1:48700/<command>`: `press`, `release`, `mic`, `discard`, `undo`, `restore`, `eye`, `caret?at=N`, `state`, `picture`, `js?code=…`, `local`, `local-download` and `local-measure` (a local model's state, its Download button and its speed test; `?id=…` names the model, else the one in use; set `"provider": "local"` in preferences.json first). Texts are recorded instead of pasted unless `--test-paste` is given. Windows takes `;` between the files.
 
 ## What was verified (04.10.2026)
 

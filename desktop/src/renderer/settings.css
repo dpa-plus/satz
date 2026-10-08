@@ -13,8 +13,31 @@ section { display: flex; flex-direction: column; }
 input[type=text], input[type=password], select { background: rgba(0,0,0,.18); color: var(--ink); border: 1px solid var(--control); border-radius: 8px; padding: 6px 9px; font: inherit; min-width: 0; }
 input.grow { flex: 1; }
 button { background: none; color: var(--ink); border: 1px solid var(--control); border-radius: 8px; padding: 5px 12px; font: inherit; cursor: pointer; }
-#local-row progress { width: 140px; accent-color: var(--accent); }
-#local-row .percent { font-variant-numeric: tabular-nums; color: var(--secondary); min-width: 3.5em; text-align: right; }
+/* A local model: name and tag over its facts, its actions on the right. */
+.row.model { padding-top: 9px; padding-bottom: 9px; }
+.row.model .about { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.row.model .name { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 8px; }
+.row.model .tag, .row.model .facts { color: var(--secondary); font-size: 12.5px; }
+.row.model .actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.row.model .status { display: inline-flex; align-items: center; gap: 7px; color: var(--secondary); font-size: 12.5px; }
+.row.model .status.in-use { color: var(--ink); }
+.row.model progress { width: 110px; accent-color: var(--accent); }
+.row.model .percent { font-variant-numeric: tabular-nums; color: var(--secondary); min-width: 3.5em; text-align: right; font-size: 12.5px; }
+/* Wrapped between facts, never inside one. */
+.facts { font-variant-numeric: tabular-nums; }
+.facts > * { white-space: nowrap; }
+button.compact { padding: 2px 9px; font-size: 12.5px; border-radius: 7px; }
+button.quiet { border: none; padding: 0; color: var(--secondary); text-decoration: underline; text-underline-offset: 2px; font-size: inherit; }
+button.quiet:hover { color: var(--ink); }
+/* A measured speed: reads like the facts around it until the pointer finds it. */
+button.quiet.measure-again { text-decoration: none; }
+button.quiet.measure-again:hover, button.quiet.measure-again:focus-visible { text-decoration: underline; }
+button:disabled { opacity: .45; cursor: default; }
+.spinner { width: 12px; height: 12px; border: 2px solid var(--line); border-top-color: var(--secondary); border-radius: 50%; animation: spin .9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+/* A caption under a box, as the one under the local models. */
+.box + .hint:not(:empty) { padding-top: 8px; }
 button.accent { background: var(--accent); color: var(--ground); border-color: var(--accent); font-weight: 600; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 14px; }
 /* Never wider than the box: a long word pushed its × out of reach. */

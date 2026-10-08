@@ -16,3 +16,10 @@ test('every channel the pages use is allowed by the preload', () => {
   }
   assert.deepEqual(missing, [])
 })
+
+test('every channel the preload lets through is answered by main.ts, and nothing else is', () => {
+  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.ts'), 'utf8')
+  const handled = new Set([...main.matchAll(/ipcMain\.handle\(\s*'([^']+)'/g)].map(([, channel]) => channel))
+  assert.deepEqual([...invoke].filter(channel => !handled.has(channel)), [])
+  assert.deepEqual([...handled].filter(channel => !invoke.has(channel)), [])
+})

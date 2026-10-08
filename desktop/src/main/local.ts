@@ -1,13 +1,14 @@
 import { utilityProcess, type UtilityProcess } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
-import { isDownloaded, markerPath, type LocalState } from './localFiles'
+import { secondsPer10, type Speed } from '../core/localModels'
+import { gaveWay, isDownloaded, isModelId, machineName, markerPath, readSpeed, writeSpeed, type LocalState } from './localFiles'
 
 export type { LocalState } from './localFiles'
 
 /**
  * Whisper on this computer, for the provider "Lokal": transformers.js on ONNX
- * Runtime, the model downloaded once from Hugging Face into satz's own
+ * Runtime, the models downloaded once from Hugging Face into satz's own
  * folder. Nothing leaves the computer and nothing costs anything; the price
  * is the download and the memory a loaded model takes. Like
  * LocalModels.swift on the Mac, which runs Whisper through WhisperKit.
@@ -19,22 +20,35 @@ export type { LocalState } from './localFiles'
  */
 export class LocalModels {
   private states = new Map<string, LocalState>()
+  /** Models whose speed test is running. */
+  private measuring = new Set<string>()
   private worker: UtilityProcess | null = null
-  private waiting = new Map<number, { resolve: (value: string) => void; reject: (error: Error) => void }>()
+  private waiting = new Map<number, { resolve: (value: Record<string, unknown>) => void; reject: (error: Error) => void }>()
   private requests = 0
+  /** A download that arrived complete: satz may start using it, and measures its speed. */
+  onArrived: (id: string) => void = () => {}
 
-  constructor(private dir: string, private log: (message: string) => void, private changed: () => void) {}
+  constructor(private dir: string, private log: (message: string) => void, private changed: () => void, private version: string) {}
 
   state(id: string): LocalState {
     return this.states.get(id) ?? (isDownloaded(this.dir, id) ? { kind: 'ready' } : { kind: 'missing' })
   }
 
   isReady(id: string) { return this.state(id).kind === 'ready' }
+  isMeasuring(id: string) { return this.measuring.has(id) }
+  speed(id: string): Speed | null { return readSpeed(this.dir, id) }
+
+  /** One download at a time: two at once halved both, and the second one's button was what the user was waiting on. */
+  get downloading() {
+    return [...this.states.values()].some(state => state.kind === 'downloading' || state.kind === 'preparing')
+  }
 
   private set(id: string, state: LocalState) {
+    const was = this.states.get(id)?.kind
     // Ready and missing come from the disk from now on.
     if (state.kind === 'ready' || state.kind === 'missing') this.states.delete(id)
     else this.states.set(id, state)
+    if (state.kind === 'ready' && (was === 'downloading' || was === 'preparing')) this.onArrived(id)
     this.changed()
   }
 
@@ -55,16 +69,16 @@ export class LocalModels {
     return worker
   }
 
-  private receive(message: { type: string; id?: string; state?: LocalState; message?: string; request?: number; text?: string }) {
+  private receive(message: { type: string; id?: string; state?: LocalState; message?: string; request?: number }) {
     switch (message.type) {
       case 'state': this.set(message.id!, message.state!); break
       case 'log': this.log(message.message!); break
-      case 'result': case 'done': this.waiting.get(message.request!)?.resolve(message.text ?? ''); this.waiting.delete(message.request!); break
+      case 'result': case 'done': this.waiting.get(message.request!)?.resolve(message); this.waiting.delete(message.request!); break
       case 'error': this.waiting.get(message.request!)?.reject(new Error(message.message)); this.waiting.delete(message.request!); break
     }
   }
 
-  private ask(message: Record<string, unknown>): Promise<string> {
+  private ask(message: Record<string, unknown>): Promise<Record<string, unknown>> {
     return new Promise((resolve, reject) => {
       const request = ++this.requests
       this.waiting.set(request, { resolve, reject })
@@ -72,16 +86,45 @@ export class LocalModels {
     })
   }
 
+  /** Fetches the files beside the model in use, which stays loaded. */
   download(id: string) {
-    const now = this.state(id).kind
-    if (now === 'downloading' || now === 'preparing') return
+    if (!isModelId(id) || this.downloading) return
     this.set(id, { kind: 'downloading', fraction: 0 })
     this.helper().postMessage({ type: 'download', id })
   }
 
-  /** The folder goes to the Trash, like everything satz removes, once Whisper has let go of it. */
+  /**
+   * Times the model on `clip` (16 kHz mono) through the dictations' own path
+   * and queue, and keeps the answer beside it. A model that is not in use is
+   * loaded for the test alone.
+   */
+  async measure(id: string, clip: Float32Array, vocabulary: string[], spoken: 'de' | 'en'): Promise<'done' | 'deferred' | 'failed'> {
+    if (!this.isReady(id) || this.measuring.has(id)) return 'failed'
+    this.measuring.add(id)
+    this.changed()
+    try {
+      const { ms } = await this.ask({ type: 'measure', id, samples: clip, vocabulary, spoken })
+      const speed: Speed = { secondsPer10: secondsPer10(Number(ms), clip.length / 16_000), date: new Date().toISOString(), version: this.version, machine: machineName() }
+      writeSpeed(this.dir, id, speed)
+      this.log(`local: ${id} takes ${speed.secondsPer10.toFixed(1)} s per 10 s of speech`)
+      return 'done'
+    } catch (error) {
+      if ((error as Error).message === gaveWay) {
+        this.log(`local: ${id}'s speed test gave way to a dictation, again later`)
+        return 'deferred'
+      }
+      this.log(`local: measuring ${id} failed: ${(error as Error).message}`)
+      return 'failed'
+    } finally {
+      this.measuring.delete(id)
+      this.changed()
+    }
+  }
+
+  /** The folder goes to the Trash, like everything satz removes, once Whisper has let go of it. The model in use stays loaded when another goes. */
   async remove(id: string, trash: (folder: string) => Promise<void>) {
-    await this.unload()
+    if (!isModelId(id)) return
+    if (this.worker) await this.ask({ type: 'release', id }).catch(() => {})
     const folder = path.join(this.dir, id)
     if (fs.existsSync(folder)) await trash(folder)
     fs.rmSync(markerPath(this.dir, id), { force: true })
@@ -101,6 +144,6 @@ export class LocalModels {
 
   /** @param samples 16 kHz mono, as recorded. @param spoken the language set in Settings, for clips too short to tell. */
   transcribe(samples: Float32Array, id: string, vocabulary: string[], spoken: 'de' | 'en'): Promise<string> {
-    return this.ask({ type: 'transcribe', id, vocabulary, samples, spoken })
+    return this.ask({ type: 'transcribe', id, vocabulary, samples, spoken }).then(({ text }) => String(text ?? ''))
   }
 }

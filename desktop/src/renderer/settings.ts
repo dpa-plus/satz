@@ -1,4 +1,5 @@
 import { satz } from './bridge'
+import { localFacts, localModel, measuredHere, type Speed } from '../core/localModels'
 import { choiceFor, type ModelChoice } from '../core/models'
 
 /**
@@ -18,8 +19,15 @@ interface Info {
   hasKey: boolean; keyboard: string; wayland: boolean; platform: string; startAtLogin: boolean; spokenLanguage: 'de' | 'en'
   /** The provider's live list, or the shipped one until it arrives. */
   models: ModelChoice[]
-  /** The local model chosen, whether it is on this computer, and how big it is. */
-  local: { state: LocalState; size: string | null }
+  /** The models for "Lokal", one row each, and the one in use. */
+  local: {
+    inUse: string
+    models: { id: string; state: LocalState; measuring: boolean; speed: Speed | null }[]
+    /** German error rate per original model, today's or the shipped one. */
+    germanErrors: Record<string, number>
+    /** This computer and satz, to tell a speed measured here from one brought along. */
+    machine: string; version: string
+  }
 }
 
 const app = document.getElementById('settings-page')!
@@ -117,8 +125,7 @@ function render() {
     const id = modelField.value.trim()
     typingModel = false
     if (redraw) update({ models: { ...p.models, [p.provider]: id } })
-    // Quietly, but the Local row follows: it still showed the old model's state.
-    else satz.invoke('settings:update', { models: { ...p.models, [p.provider]: id } }).then(next => { info.prefs = next; if (p.provider === 'local') loadWhenFree() })
+    else satz.invoke('settings:update', { models: { ...p.models, [p.provider]: id } }).then(next => { info.prefs = next })
   }
   modelField.onchange = () => saveModel(false)
   modelField.onkeydown = event => {
@@ -140,9 +147,7 @@ function render() {
   modelMenu.append(el('option', { value: '', textContent: t('Anderes Modell …', 'Other model …') }))
   const chosen = choiceFor(info.models, currentModel)
   const known = chosen !== undefined
-  const facts = el('div', { className: 'hint', textContent: !chosen ? t('Ein Modell, das nicht in der Liste steht.', 'A model that is not in the list.')
-    : p.provider === 'local' ? t('Läuft auf diesem Computer, ohne Internet und kostenlos. Erkennt Deutsch und Englisch von selbst.',
-      'Runs on this computer, offline and free. Tells German from English by itself.') : [
+  const facts = el('div', { className: 'hint', textContent: !chosen ? t('Ein Modell, das nicht in der Liste steht.', 'A model that is not in the list.') : [
     chosen.errorRate === undefined ? t('Noch ohne Fehlerquote von Artificial Analysis', 'No error rate from Artificial Analysis yet')
       : t(`${number(chosen.errorRate, 1)} % falsche Wörter laut Artificial Analysis`, `${number(chosen.errorRate, 1)} % wrong words per Artificial Analysis`),
     ...(chosen.dollarsPerHour === undefined ? [] : [t(`${number(chosen.dollarsPerHour, 2)} $ pro Stunde Sprechen`, `$${number(chosen.dollarsPerHour, 2)} per hour of talking`)]),
@@ -154,14 +159,19 @@ function render() {
     update({ models: { ...p.models, [p.provider]: modelMenu.value } })
   }
   const showsModelField = p.provider === 'custom' || typingModel || !known
+  // Local models are a list to choose from, each with its size, speed and
+  // errors: nothing to paste (they are downloaded) and no id to type (an id
+  // satz cannot run downloaded fine and then failed every dictation).
+  const isLocal = p.provider === 'local'
   const providerBox = el('div', { className: 'box' },
     el('div', { className: 'row' }, el('span', { className: 'grow', textContent: t('Anbieter', 'Provider') }),
       select(p.provider, [['openrouter', 'OpenRouter'], ['openai', 'OpenAI'], ['groq', 'Groq'], ['custom', t('Eigener', 'Custom')], ['local', t('Lokal', 'Local')]], v => { editingKey = false; typingModel = false; update({ provider: v }) }, t('Anbieter', 'Provider'), 'provider')),
-    // Nothing to paste for a model on this computer: it is downloaded instead.
-    ...(p.provider === 'local' ? [] : [keyRow]),
-    ...(p.provider === 'custom' ? [] : [el('div', { className: 'row' }, el('span', { textContent: t('Modell', 'Model') }), modelMenu), facts]),
-    ...(p.provider === 'local' ? [localRow()] : []),
-    ...(showsModelField ? [el('div', { className: 'row' }, el('span', { textContent: p.provider === 'custom' ? t('Modell', 'Model') : t('Modell-ID', 'Model ID') }), modelField)] : []))
+    ...(isLocal ? localRows() : [
+      keyRow,
+      ...(p.provider === 'custom' ? [] : [el('div', { className: 'row' }, el('span', { textContent: t('Modell', 'Model') }), modelMenu), facts]),
+      ...(showsModelField ? [el('div', { className: 'row' }, el('span', { textContent: p.provider === 'custom' ? t('Modell', 'Model') : t('Modell-ID', 'Model ID') }), modelField)] : []),
+    ]))
+  const localCaption = isLocal ? [el('div', { className: 'hint', textContent: t('Läuft auf diesem Computer, ohne Internet und kostenlos.', 'Runs on this computer, offline and free.') })] : []
   if (p.provider === 'custom') {
     const url = el('input', { type: 'text', id: 'custom-url', className: 'grow', value: p.customBaseURL, placeholder: 'https://…/v1' })
     url.onchange = () => update({ customBaseURL: url.value.trim() })
@@ -267,7 +277,7 @@ function render() {
   const focused = (document.activeElement as HTMLElement | null)?.id || null
   app.replaceChildren(
     section(t('Kurzbefehl', 'Shortcut'), shortcut, shortcutHint),
-    section(t('Anbieter', 'Provider'), providerBox, ...(keyProblem ? [el('div', { className: 'error', textContent: keyProblem })] : [])),
+    section(t('Anbieter', 'Provider'), providerBox, ...localCaption, ...(keyProblem ? [el('div', { className: 'error', textContent: keyProblem })] : [])),
     section(t('Wortschatz', 'Vocabulary'), el('div', { className: 'box' }, words)),
     section(t('Ersetzungen', 'Replacements'), replacementBox),
     section(t('Allgemein', 'General'), general),
@@ -280,42 +290,89 @@ function render() {
   selectModelId = false
 }
 
-/** Whether the local model is on this computer, and the one button that changes that. */
-function localRow() {
-  const { state, size } = info.local
-  const row = el('div', { className: 'row', id: 'local-row' })
-  const sized = (de: string, en: string) => t(size ? `${de}, ${size}` : de, size ? `${en}, ${size}` : en)
-  switch (state.kind) {
-    case 'ready': {
-      const remove = el('button', { textContent: t('Entfernen', 'Remove'), title: t('Legt das Modell in den Papierkorb', 'Moves the model to the trash') })
-      remove.onclick = () => satz.invoke('local:remove').then(load)
-      row.append(el('span', { className: 'grow', textContent: `✓ ${sized('Auf diesem Computer', 'On this computer')}` }), remove)
-      break
+/**
+ * One row per local model: the name, a quiet tag where it is a trade-off,
+ * its one action on the right; below, its size, its speed on this computer
+ * once measured, and its errors in German. Download, then use: a download
+ * never switches the model by itself (main.ts says when it does).
+ */
+function localRows(): HTMLElement[] {
+  const { inUse, models, germanErrors, machine, version } = info.local
+  const language = info.prefs.language
+  // One download at a time.
+  const busy = models.some(model => model.state.kind === 'downloading' || model.state.kind === 'preparing')
+  return models.map(({ id, state, measuring, speed }) => {
+    const catalog = localModel(id)
+    const key = id.replace(/[^\w-]/g, '-')
+    const button = (name: string, label: string, onClick: () => unknown, className = '') => {
+      const b = el('button', { id: `${name}-${key}`, className, textContent: label })
+      b.onclick = () => { onClick() }
+      return b
     }
-    case 'missing': {
-      const download = el('button', { className: 'accent', textContent: sized('Laden', 'Download') })
-      download.onclick = () => satz.invoke('local:download').then(load)
-      row.append(el('span', { className: 'grow', textContent: t('Noch nicht auf diesem Computer', 'Not on this computer yet') }), download)
-      break
+    const status = (text: string) => el('span', { className: 'status' }, el('span', { className: 'spinner', ariaHidden: 'true' }), text)
+    const actions = el('div', { className: 'actions' })
+    switch (state.kind) {
+      case 'missing': {
+        const download = button('download', t('Laden', 'Download'), () => satz.invoke('local:download', id).then(load), 'accent')
+        download.disabled = busy
+        if (busy) download.title = t('Wenn das andere Modell geladen ist', 'Once the other model has downloaded')
+        actions.append(download)
+        break
+      }
+      case 'downloading': {
+        const bar = el('progress', { value: state.fraction, max: 1 })
+        bar.setAttribute('aria-label', t('Fortschritt', 'Progress'))
+        actions.append(bar, el('span', { className: 'percent', textContent: `${Math.floor(state.fraction * 100)} %` }))
+        break
+      }
+      case 'preparing':
+        actions.append(status(t('Wird vorbereitet', 'Getting ready')))
+        break
+      case 'failed': {
+        const retry = button('download', t('Nochmal', 'Try again'), () => satz.invoke('local:download', id).then(load))
+        retry.disabled = busy
+        actions.append(el('span', { className: 'status', textContent: t('Laden fehlgeschlagen', 'Download failed'), title: state.message }), retry)
+        break
+      }
+      case 'ready': {
+        const remove = button('remove', t('Entfernen', 'Remove'), () => satz.invoke('local:remove', id).then(load), 'compact')
+        remove.title = t('Legt das Modell in den Papierkorb', 'Moves the model to the trash')
+        if (measuring) actions.append(status(t('Tempo wird gemessen', 'Measuring speed')))
+        else if (id === inUse) actions.append(el('span', { className: 'status in-use', textContent: `✓ ${t('In Benutzung', 'In use')}` }))
+        else actions.append(button('use', t('Benutzen', 'Use'), () => update({ models: { ...info.prefs.models, local: id } }), 'accent'))
+        actions.append(remove)
+        break
+      }
     }
-    case 'downloading': {
-      const bar = el('progress', { value: state.fraction, max: 1 })
-      bar.setAttribute('aria-label', t('Fortschritt', 'Progress'))
-      row.append(el('span', { className: 'grow', textContent: t('Wird geladen', 'Downloading') }), bar,
-        el('span', { className: 'percent', textContent: `${Math.floor(state.fraction * 100)} %` }))
-      break
+
+    // The facts, each with where it comes from as its help. A model on the
+    // computer that was never measured here gets "Measure speed" right
+    // after where the speed goes.
+    const here = speed ? measuredHere(speed, machine, version) : false
+    const facts: HTMLElement[] = localFacts(id, language, { speed, here, errors: germanErrors }).map(fact => {
+      const span = el('span', { textContent: fact.text })
+      if (fact.help) span.title = fact.help
+      return span
+    })
+    const measure = () => satz.invoke('local:measure', id).then(load)
+    if (state.kind === 'ready' && !measuring && !here) {
+      facts.splice((catalog ? 1 : 0) + (speed ? 1 : 0), 0, button('measure', t('Tempo messen', 'Measure speed'), measure, 'quiet'))
+    } else if (state.kind === 'ready' && !measuring && speed) {
+      // The number itself measures again, as on the Mac: it changes with the
+      // word list, and a run can go wrong, and neither must stick.
+      const index = catalog ? 1 : 0
+      const again = button('measure-again', facts[index].textContent ?? '', measure, 'quiet measure-again')
+      again.title = `${facts[index].title}. ${t('Klicken misst neu.', 'Click to measure again.')}`
+      facts[index] = again
     }
-    case 'preparing':
-      row.append(el('span', { className: 'grow', textContent: t('Wird für diesen Computer vorbereitet …', 'Getting ready for this computer …') }))
-      break
-    case 'failed': {
-      const retry = el('button', { textContent: t('Nochmal', 'Try again') })
-      retry.onclick = () => satz.invoke('local:download').then(load)
-      row.append(el('span', { className: 'grow', textContent: t('Laden fehlgeschlagen', 'Download failed'), title: state.message }), retry)
-      break
-    }
-  }
-  return row
+    const line = el('div', { className: 'facts' })
+    facts.forEach((fact, index) => line.append(...(index ? [' · '] : []), fact))
+    if (!speed && state.kind !== 'ready') line.title = t('Das Tempo misst satz nach dem Laden', 'satz measures the speed after downloading')
+
+    const name = el('div', { className: 'name' }, el('span', { textContent: catalog?.name ?? id }))
+    if (catalog?.tag) name.append(el('span', { className: 'tag', textContent: catalog.tag[language] }))
+    return el('div', { className: 'row model' }, el('div', { className: 'grow about' }, name, ...(line.childNodes.length ? [line] : [])), actions)
+  })
 }
 
 async function load() {
