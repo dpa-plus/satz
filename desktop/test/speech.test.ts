@@ -53,3 +53,9 @@ test('a long dictation is cut in its quietest moment, and nothing is lost', () =
   assert.ok(Math.abs(pieces[0].length - 24.1 * rate) < rate / 5)
   assert.equal(pieces.reduce((sum, piece) => sum + piece.length, 0), audio.length)
 })
+
+test('a passage the prompt brought in is not kept', () => {
+  const plain = 'Schreib mir eine Funktion. Danach summieren.'
+  const prompted = 'Schreib mir eine Funktion. Danach summieren. Schreib mir eine Funktion, die alle Rechnungen liest.'
+  assert.equal(keepEveryWord(prompted, plain).chosen, 'plain')
+})

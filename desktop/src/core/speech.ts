@@ -57,7 +57,9 @@ export function keepEveryWord(prompted: string, plain: string): { text: string; 
   const a = words(plain), b = words(prompted)
   if (a.length === 0) return { text: plain, chosen: 'plain' }
   // Extra words in the prompted text prove nothing: a longer made-up phrase
-  // ("Vielen Dank fürs Zuschauen") must not beat a sentence it dropped.
-  if (b.length < 0.85 * a.length || longestGap(a, b) >= 3) return { text: plain, chosen: 'plain' }
+  // ("Vielen Dank fürs Zuschauen") must not beat a sentence it dropped. And
+  // five or more words in a row the plain text does not have are something
+  // the prompt brought in: it repeated a whole earlier passage once.
+  if (b.length < 0.85 * a.length || longestGap(a, b) >= 3 || longestGap(b, a) >= 5) return { text: plain, chosen: 'plain' }
   return { text: prompted, chosen: 'prompted' }
 }

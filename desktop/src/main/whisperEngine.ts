@@ -63,12 +63,15 @@ export class WhisperEngine {
       this.setState(id, fraction >= 0.999 ? { kind: 'preparing' } : { kind: 'downloading', fraction })
     }
     const started = Date.now()
-    this.unload()
+    this.retire(this.loaded)
     const model = this.load(id, progress, false)
     this.loaded = { id, model }
+    // The marker inside the chain: a full disk failing it left the download
+    // stuck at "preparing" for good.
     model.then(() => {
       fs.mkdirSync(this.dir, { recursive: true })
       fs.writeFileSync(markerPath(this.dir, id), new Date().toISOString())
+    }).then(() => {
       this.log(`local: ${id} ready after ${Math.round((Date.now() - started) / 1000)} s`)
       this.setState(id, { kind: 'ready' })
     }, error => {
@@ -87,19 +90,28 @@ export class WhisperEngine {
 
   /**
    * Gives the memory back, once the transcriptions already queued are done:
-   * disposed under one, it failed with "Session already disposed".
+   * disposed under one, it failed with "Session already disposed". Queued
+   * itself, so a transcription waiting in line that loads the model again
+   * does not leave that one in memory.
    */
   async unload(): Promise<void> {
-    const loaded = this.loaded
-    if (!loaded) return
-    this.loaded = null
-    await this.queue
-    await loaded.model.then(({ model }) => model.dispose(), () => {})
+    const job = this.queue.then(async () => {
+      const loaded = this.loaded
+      this.loaded = null
+      if (loaded) await loaded.model.then(({ model }) => model.dispose(), () => {})
+    })
+    this.queue = job.catch(() => {})
+    await job
+  }
+
+  /** A model replaced by another: disposed once the running transcription is done with it. */
+  private retire(loaded: { id: string; model: Promise<Loaded> } | null) {
+    if (loaded) void this.queue.then(() => loaded.model).then(({ model }) => model.dispose(), () => {})
   }
 
   private model(id: string): Promise<Loaded> {
     if (this.loaded?.id === id) return this.loaded.model
-    void this.unload()
+    this.retire(this.loaded)
     const started = Date.now()
     const model = this.load(id)
     this.loaded = { id, model }

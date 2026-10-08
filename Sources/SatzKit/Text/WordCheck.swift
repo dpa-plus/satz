@@ -15,8 +15,12 @@ public enum WordCheck {
         // Nothing heard: a prompt alone can make Whisper repeat the word list.
         guard !a.isEmpty else { return (plain, false) }
         // Extra words in the prompted text prove nothing: a longer made-up
-        // phrase must not beat a sentence it dropped.
-        if Double(b.count) < 0.85 * Double(a.count) || longestGap(in: a, against: b) >= 3 { return (plain, false) }
+        // phrase must not beat a sentence it dropped. And five or more words
+        // in a row the plain text does not have are something the prompt
+        // brought in: it repeated a whole earlier passage once.
+        if Double(b.count) < 0.85 * Double(a.count) || longestGap(in: a, against: b) >= 3 || longestGap(in: b, against: a) >= 5 {
+            return (plain, false)
+        }
         return (prompted, true)
     }
 

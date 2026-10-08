@@ -42,6 +42,8 @@ export class LocalModels {
     if (this.worker) return this.worker
     const worker = utilityProcess.fork(path.join(__dirname, 'local-worker.js'), [this.dir], { serviceName: 'satz Whisper' })
     worker.on('message', message => this.receive(message))
+    // A fatal error in the helper: logged; its exit then fails what waits.
+    worker.on('error', (type: string, location: string) => this.log(`local: helper error ${type} at ${location}`))
     worker.on('exit', code => {
       if (this.worker === worker) this.worker = null
       this.log(`local: helper stopped (${code})`)
