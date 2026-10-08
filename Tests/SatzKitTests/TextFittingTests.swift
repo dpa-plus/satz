@@ -71,3 +71,8 @@ private func insert(_ transcript: String, into text: String, after anchor: Strin
 @Test func aMidSentenceInsertBeforeANounLosesItsFullStop() {
     #expect(insert("Alte.", into: "Ich habe gestern die Rechnung bezahlt.", after: "die") == "Ich habe gestern die Alte Rechnung bezahlt.")
 }
+
+@Test func aMarkSaidOnItsOwnGetsNoSpaceBefore() {
+    #expect(insert("?", into: "Wie geht es dir", after: "dir") == "Wie geht es dir?")
+    #expect(insert(")", into: "Seite 4", after: "4") == "Seite 4)")
+}

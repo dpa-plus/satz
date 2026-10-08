@@ -56,3 +56,8 @@ test('a mid-sentence insert before a noun loses its full stop', () => {
   const at = text.indexOf('die') + 3
   assert.equal(fit('Alte.', text, { location: at, length: 0 }), ' Alte')
 })
+
+test('a mark said on its own gets no space before', () => {
+  const text = 'Wie geht es dir'
+  assert.equal(fit('?', text, { location: text.length, length: 0 }), '?')
+})

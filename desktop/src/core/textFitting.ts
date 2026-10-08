@@ -63,7 +63,9 @@ export function fit(transcript: string, text: string, range: { location: number;
 
   if (range.location > 0 && !startsLine) {
     const previous = [...text.slice(0, range.location)].pop() ?? ''
-    if (!/\s/.test(previous) && !'([{„"“'.includes(previous)) result = ' ' + result
+    // Not before a mark said on its own ("Fragezeichen"): "dir ?".
+    const closes = '.,;:!?)]}”«…'.includes([...result][0] ?? '')
+    if (!/\s/.test(previous) && !'([{„"“'.includes(previous) && !closes) result = ' ' + result
   }
   if (after !== null && (isLetter(after) || /\p{N}/u.test(after)) && !endsLine) result += ' '
   return result

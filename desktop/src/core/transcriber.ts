@@ -59,7 +59,8 @@ export class TranscriptionFailure extends Error {
       case 'rateLimited': return de('Anbieter drosselt', 'Provider busy')
       case 'offline': return de('Keine Verbindung', 'No connection')
       case 'timedOut': return de('Zeitüberschreitung', 'Timed out')
-      case 'server': return de('Fehler beim Anbieter', 'Provider error')
+      // With the status: a wrong model (404) and a server fault (500) read alike.
+      case 'server': return this.status ? de(`Fehler beim Anbieter (${this.status})`, `Provider error (${this.status})`) : de('Fehler beim Anbieter', 'Provider error')
       case 'unreadableResponse': return de('Antwort unlesbar', 'Unreadable answer')
       case 'tooLarge': return de('Zu lang für den Anbieter', 'Too long for the provider')
       case 'noCredit': return de('Kein Guthaben beim Anbieter', 'No credit left')
@@ -145,7 +146,9 @@ export async function transcribe(settings: TranscriberSettings, wav: Uint8Array,
   // OpenRouter only, where the slow answers were measured; counted from the
   // start of the upload, so a second more for every ten seconds of audio.
   if (base === null || settings.provider !== 'openrouter') return attempt(settings, wav, apiKey, fetcher, sleep)
-  const delay = base + Math.max(0, wav.length - 44) / 32_000 / 10
+  // Plus the time the upload takes at 1 Mbit/s: on a slow line the second
+  // copy started while the first was still sending, and both ran out of time.
+  const delay = base + (Math.max(0, wav.length - 44) * 8) / 1_000_000
 
   const controllers: AbortController[] = []
   const ask = () => { const c = new AbortController(); controllers.push(c); return attempt(settings, wav, apiKey, fetcher, sleep, c.signal) }

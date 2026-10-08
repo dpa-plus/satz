@@ -994,6 +994,8 @@ extension Transcriber.Failure {
         case .rateLimited: de("Anbieter drosselt", en: "Provider busy")
         case .offline: de("Keine Verbindung", en: "No connection")
         case .timedOut: de("Zeitüberschreitung", en: "Timed out")
+        // With the status: a wrong model (404) and a server fault (500) read alike.
+        case .server(let status, _) where status > 0: de("Fehler beim Anbieter (\(status))", en: "Provider error (\(status))")
         case .server: de("Fehler beim Anbieter", en: "Provider error")
         case .unreadableResponse: de("Antwort unlesbar", en: "Unreadable answer")
         case .tooLarge: de("Zu lang für den Anbieter", en: "Too long for the provider")

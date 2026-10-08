@@ -37,7 +37,9 @@ public enum TextFitting {
 
         if range.location > 0, !startsLine {
             let previous = character(in: text, at: range.location - 1)
-            if !previous.isWhitespace, !"([{„\"“".contains(previous) { result = " " + result }
+            // Not before a mark said on its own ("Fragezeichen"): "dir ?".
+            let closes = result.first.map { ".,;:!?)]}”«…".contains($0) } ?? false
+            if !previous.isWhitespace, !"([{„\"“".contains(previous), !closes { result = " " + result }
         }
         if let after, after.isLetter || after.isNumber, !endsLine { result += " " }
         return result

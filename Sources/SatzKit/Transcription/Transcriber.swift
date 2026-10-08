@@ -56,6 +56,10 @@ public struct Transcriber: Sendable {
         public init(provider: Provider, model: String = "", customBaseURL: URL? = nil) {
             if let url = provider.baseURL ?? customBaseURL {
                 baseURL = url
+            } else if provider == .custom {
+                // Never OpenAI's address: a custom key and the recording went
+                // there when the address was cleared. This host cannot exist.
+                baseURL = URL(string: "https://address-missing.invalid")!
             }
             let chosen = model.trimmingCharacters(in: .whitespaces)
             self.model = chosen.isEmpty ? provider.defaultModel : chosen
@@ -116,7 +120,10 @@ public struct Transcriber: Sendable {
         // Counted from the start of the upload, so a long recording, whose
         // upload alone takes a while, waits longer before a second copy goes.
         guard settings.format == .openRouter, let base = settings.backupAfter else { return try await attempt(wav: wav, apiKey: apiKey) }
-        let delay = base + Double(max(0, wav.count - 44)) / 32_000 / 10
+        // Plus the time the upload takes at 1 Mbit/s: on a slow line the second
+        // copy started while the first was still sending, and both ran out of
+        // time sharing it.
+        let delay = base + Double(max(0, wav.count - 44)) * 8 / 1_000_000
 
         enum Event: Sendable {
             case answer(Result<String, any Error>)
@@ -259,6 +266,9 @@ public struct Transcriber: Sendable {
     static func translate(_ error: URLError) -> Failure {
         switch error.code {
         case .timedOut: .timedOut
+        // Plain http to a named host (http://whisper.fritz.box): macOS refuses it.
+        case .appTransportSecurityRequiresSecureConnection:
+            .server(status: error.errorCode, message: de("Diese Adresse braucht https.", en: "This address needs https."))
         case .notConnectedToInternet, .networkConnectionLost, .cannotFindHost, .cannotConnectToHost:
             .offline
         default: .server(status: error.errorCode, message: error.localizedDescription)
