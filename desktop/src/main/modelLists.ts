@@ -12,7 +12,9 @@ import type { Provider } from '../core/transcriber'
 export class ModelLists {
   private fetching = new Set<Provider>()
 
-  constructor(private dir: string, private readKey: (provider: Provider) => string | null, private log: (message: string) => void, private changed: () => void) {}
+  /** @param fetcher Electron's net.fetch in the app: the system proxy and certificates. */
+  constructor(private dir: string, private readKey: (provider: Provider) => string | null, private log: (message: string) => void, private changed: () => void,
+    private fetcher: typeof fetch = fetch) {}
 
   private file(provider: Provider) { return path.join(this.dir, 'models', `${provider}.json`) }
 
@@ -33,7 +35,7 @@ export class ModelLists {
     const key = provider === 'openrouter' ? null : this.readKey(provider)
     if (provider !== 'openrouter' && !key) return
     this.fetching.add(provider)
-    fetch(url, { headers: key ? { Authorization: `Bearer ${key}` } : {}, signal: AbortSignal.timeout(15_000) })
+    this.fetcher(url, { headers: key ? { Authorization: `Bearer ${key}` } : {}, signal: AbortSignal.timeout(15_000) })
       .then(async response => {
         if (!response.ok) throw new Error(`status ${response.status}`)
         const list = parse(await response.json(), provider)

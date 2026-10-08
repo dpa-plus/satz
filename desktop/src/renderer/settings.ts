@@ -55,8 +55,10 @@ function section(title: string, ...children: Node[]) {
 }
 
 /** `label` names the menu for screen readers, which otherwise read only its value. */
-function select<T extends string>(value: T, options: [T, string][], onChange: (v: T) => void, label?: string) {
+/** `id` lets focus come back to the menu after the page is drawn again. */
+function select<T extends string>(value: T, options: [T, string][], onChange: (v: T) => void, label?: string, id?: string) {
   const s = el('select')
+  if (id) s.id = id
   if (label) s.setAttribute('aria-label', label)
   for (const [v, label] of options) s.append(el('option', { value: v, textContent: label, selected: v === value }))
   s.onchange = () => onChange(s.value as T)
@@ -71,7 +73,7 @@ function render() {
     el('div', { className: 'row' }, el('span', { className: 'grow', textContent: p.triggerMode === 'tap'
       ? t('Rechte Strg-Taste zweimal tippen: starten, nochmal: einfügen', 'Tap right Ctrl twice to start, again to paste')
       : t('Rechte Strg-Taste zweimal tippen und halten: sprechen, loslassen: einfügen', 'Tap right Ctrl twice and hold to talk, let go to paste') }),
-      select(p.triggerMode, [['tap', t('Tippen', 'Tap')], ['hold', t('Halten', 'Hold')]], v => update({ triggerMode: v }), t('Tippen oder halten', 'Tap or hold'))))
+      select(p.triggerMode, [['tap', t('Tippen', 'Tap')], ['hold', t('Halten', 'Hold')]], v => update({ triggerMode: v }), t('Tippen oder halten', 'Tap or hold'), 'trigger-mode')))
   // Only worth a line when something is missing.
   const shortcutHint = el('div', { className: 'hint', textContent: '' })
   if (info.wayland && info.keyboard?.startsWith('Wayland')) {
@@ -153,7 +155,7 @@ function render() {
   const showsModelField = p.provider === 'custom' || typingModel || !known
   const providerBox = el('div', { className: 'box' },
     el('div', { className: 'row' }, el('span', { className: 'grow', textContent: t('Anbieter', 'Provider') }),
-      select(p.provider, [['openrouter', 'OpenRouter'], ['openai', 'OpenAI'], ['groq', 'Groq'], ['custom', t('Eigener', 'Custom')], ['local', t('Lokal', 'Local')]], v => { editingKey = false; typingModel = false; update({ provider: v }) }, t('Anbieter', 'Provider'))),
+      select(p.provider, [['openrouter', 'OpenRouter'], ['openai', 'OpenAI'], ['groq', 'Groq'], ['custom', t('Eigener', 'Custom')], ['local', t('Lokal', 'Local')]], v => { editingKey = false; typingModel = false; update({ provider: v }) }, t('Anbieter', 'Provider'), 'provider')),
     // Nothing to paste for a model on this computer: it is downloaded instead.
     ...(p.provider === 'local' ? [] : [keyRow]),
     ...(p.provider === 'custom' ? [] : [el('div', { className: 'row' }, el('span', { textContent: t('Modell', 'Model') }), modelMenu), facts]),
@@ -166,7 +168,7 @@ function render() {
   }
   // Only MAI-Transcribe has a clean mode; elsewhere the switch would do nothing.
   if (currentModel.includes('mai-transcribe')) {
-    const box = el('input', { type: 'checkbox', checked: p.removesFillers })
+    const box = el('input', { type: 'checkbox', id: 'removes-fillers', checked: p.removesFillers })
     box.onchange = () => update({ removesFillers: box.checked })
     providerBox.append(el('div', { className: 'row' }, el('label', { className: 'switch' }, t('Füllwörter weglassen', 'Remove filler words'), box)))
   }
@@ -186,12 +188,12 @@ function render() {
   words.append(newWord)
 
   // Ersetzungen
-  const useBox = el('input', { type: 'checkbox', checked: p.usesReplacements })
+  const useBox = el('input', { type: 'checkbox', id: 'uses-replacements', checked: p.usesReplacements })
   useBox.onchange = () => update({ usesReplacements: useBox.checked })
   const replacementBox = el('div', { className: 'box' }, el('div', { className: 'row' }, el('label', { className: 'switch' }, t('Gesprochene Zeichen ersetzen', 'Replace spoken symbols'), useBox)))
   if (p.usesReplacements) {
     replacementBox.append(el('div', { className: 'row' }, el('span', { className: 'grow', textContent: t('Gesprochen auf', 'Spoken in') }),
-      select(info.spokenLanguage, [['de', 'Deutsch'], ['en', 'English']], v => update({ spokenLanguage: v }), t('Gesprochen auf', 'Spoken in'))))
+      select(info.spokenLanguage, [['de', 'Deutsch'], ['en', 'English']], v => update({ spokenLanguage: v }), t('Gesprochen auf', 'Spoken in'), 'spoken-language')))
     const chips = el('div', { className: 'chips' })
     for (const rule of p.replacements.filter(r => r.isOn)) {
       const remove = el('button', { textContent: '×' })
@@ -212,12 +214,12 @@ function render() {
   }
 
   // General
-  const startBox = el('input', { type: 'checkbox', checked: info.startAtLogin })
+  const startBox = el('input', { type: 'checkbox', id: 'start-at-login', checked: info.startAtLogin })
   startBox.onchange = async () => { await satz.invoke('settings:start-at-login', startBox.checked); await load() }
-  const mediaBox = el('input', { type: 'checkbox', checked: p.pausesMedia })
+  const mediaBox = el('input', { type: 'checkbox', id: 'pauses-media', checked: p.pausesMedia })
   mediaBox.onchange = () => update({ pausesMedia: mediaBox.checked })
   // Off: whatever was copied before comes back after pasting.
-  const keepBox = el('input', { type: 'checkbox', checked: p.keepsOnClipboard })
+  const keepBox = el('input', { type: 'checkbox', id: 'keeps-clipboard', checked: p.keepsOnClipboard })
   keepBox.onchange = () => update({ keepsOnClipboard: keepBox.checked })
   // Deleting history asks first: one click on "Off" took every dictation.
   // Counted when asked: this page is not drawn again for every dictation.
@@ -244,7 +246,7 @@ function render() {
   show.onclick = () => satz.invoke('history:open')
   const general = el('div', { className: 'box' },
     el('div', { className: 'row' }, el('span', { className: 'grow', textContent: t('Sprache', 'Language') }),
-      select(p.language, [['de', 'Deutsch'], ['en', 'English']], v => update({ language: v }), t('Sprache', 'Language'))),
+      select(p.language, [['de', 'Deutsch'], ['en', 'English']], v => update({ language: v }), t('Sprache', 'Language'), 'language')),
     el('div', { className: 'row' }, el('label', { className: 'switch' }, t('Beim Anmelden starten', 'Start at login'), startBox)),
     el('div', { className: 'row' }, el('label', { className: 'switch' }, t('Musik beim Diktieren pausieren', 'Pause music while dictating'), mediaBox)),
     el('div', { className: 'row' }, el('label', { className: 'switch' }, t('Text in der Zwischenablage behalten', 'Keep text on the clipboard'), keepBox)),

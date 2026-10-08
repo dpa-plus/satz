@@ -1,3 +1,4 @@
+import { spawn, type ChildProcess } from 'node:child_process'
 import fs from 'node:fs'
 import { isWayland } from './paste'
 
@@ -14,12 +15,15 @@ import { isWayland } from './paste'
 export interface Keyboard {
   description: string
   paste(): void
+  /** Lets go of the keyboard devices, so quitting does not wait for a key. */
+  stop(): void
 }
 
 interface Handlers {
   trigger(down: boolean): void
   other(): void
-  escape(): void
+  /** @param withTrigger right Ctrl was down: Escape while holding to talk. */
+  escape(withTrigger: boolean): void
   log(message: string): void
 }
 
@@ -31,11 +35,11 @@ export async function startKeyboard(handlers: Handlers): Promise<Keyboard> {
     // not even loaded (paste.ts uses ydotool or the clipboard there).
     const devices = keyboardDevices()
     if (devices.length > 0) {
-      for (const device of devices) readEvdev(device, handlers)
-      return { description: `right Ctrl twice (keyboard devices: ${devices.length})`, paste: noKeystrokes }
+      const readers = new EvdevReaders(handlers)
+      return { description: `right Ctrl twice (keyboard devices: ${devices.length})`, paste: noKeystrokes, stop: () => readers.stop() }
     }
     handlers.log('Wayland without access to /dev/input: the shortcut is "satz --toggle" from a desktop shortcut')
-    return { description: 'Wayland: desktop shortcut running "satz --toggle"', paste: noKeystrokes }
+    return { description: 'Wayland: desktop shortcut running "satz --toggle"', paste: noKeystrokes, stop: () => {} }
   }
 
   let hook: typeof import('uiohook-napi')
@@ -45,19 +49,19 @@ export async function startKeyboard(handlers: Handlers): Promise<Keyboard> {
   } catch (error) {
     // satz still starts: "satz --toggle" works, texts go to the clipboard.
     handlers.log(`keyboard hook unavailable: ${(error as Error).message.split('\n')[0]}`)
-    return { description: 'keyboard hook unavailable: desktop shortcut running "satz --toggle"', paste: noKeystrokes }
+    return { description: 'keyboard hook unavailable: desktop shortcut running "satz --toggle"', paste: noKeystrokes, stop: () => {} }
   }
   const { uIOhook, UiohookKey } = hook
   uIOhook.on('keydown', event => {
     if (event.keycode === UiohookKey.CtrlRight) handlers.trigger(true)
-    else if (event.keycode === UiohookKey.Escape) { handlers.other(); handlers.escape() }
+    else if (event.keycode === UiohookKey.Escape) { handlers.other(); handlers.escape(event.ctrlKey) }
     else handlers.other()
   })
   uIOhook.on('keyup', event => {
     if (event.keycode === UiohookKey.CtrlRight) handlers.trigger(false)
   })
   uIOhook.start()
-  return { description: 'right Ctrl twice', paste: () => uIOhook.keyTap(UiohookKey.V, [UiohookKey.Ctrl]) }
+  return { description: 'right Ctrl twice', paste: () => uIOhook.keyTap(UiohookKey.V, [UiohookKey.Ctrl]), stop: () => uIOhook.stop() }
 }
 
 // MARK: - Linux evdev
@@ -84,23 +88,54 @@ function keyboardDevices(): string[] {
   return devices
 }
 
-function readEvdev(device: string, handlers: Handlers) {
-  // struct input_event on 64-bit Linux: 16 bytes of time, type, code, value.
-  const size = 24
-  let rest = Buffer.alloc(0)
-  const stream = fs.createReadStream(device)
-  stream.on('data', (chunk: Buffer | string) => {
-    rest = Buffer.concat([rest, chunk as Buffer])
-    while (rest.length >= size) {
-      const type = rest.readUInt16LE(16), code = rest.readUInt16LE(18), value = rest.readInt32LE(20)
-      rest = rest.subarray(size)
-      if (type !== EV_KEY || value === 2) continue // 2: the keyboard's own repeat
-      if (code === KEY_RIGHTCTRL) handlers.trigger(value === 1)
-      else if (value === 1) {
-        handlers.other()
-        if (code === KEY_ESC) handlers.escape()
+/**
+ * One `cat` per keyboard device, read through a pipe. fs streams read devices
+ * on libuv's thread pool, where each blocks a thread until a key is pressed:
+ * four keyboards starved name lookups and file reads, and quitting waited
+ * for a key. The devices are looked for again every few seconds, so a
+ * keyboard plugged in or paired later works too.
+ */
+class EvdevReaders {
+  private readers = new Map<string, ChildProcess>()
+  private timer: NodeJS.Timeout
+  private rightCtrl = false
+
+  constructor(private handlers: Handlers) {
+    this.scan()
+    this.timer = setInterval(() => this.scan(), 5000)
+  }
+
+  private scan() {
+    for (const device of keyboardDevices()) if (!this.readers.has(device)) this.read(device)
+  }
+
+  private read(device: string) {
+    // struct input_event on 64-bit Linux: 16 bytes of time, type, code, value.
+    const size = 24
+    let rest = Buffer.alloc(0)
+    const reader = spawn('cat', [device], { stdio: ['ignore', 'pipe', 'ignore'] })
+    this.readers.set(device, reader)
+    reader.stdout!.on('data', (chunk: Buffer) => {
+      rest = Buffer.concat([rest, chunk])
+      while (rest.length >= size) {
+        const type = rest.readUInt16LE(16), code = rest.readUInt16LE(18), value = rest.readInt32LE(20)
+        rest = rest.subarray(size)
+        if (type !== EV_KEY || value === 2) continue // 2: the keyboard's own repeat
+        if (code === KEY_RIGHTCTRL) { this.rightCtrl = value === 1; this.handlers.trigger(value === 1) }
+        else if (value === 1) {
+          this.handlers.other()
+          if (code === KEY_ESC) this.handlers.escape(this.rightCtrl)
+        }
       }
-    }
-  })
-  stream.on('error', error => handlers.log(`keyboard ${device}: ${error.message}`))
+    })
+    // Unplugged: forgotten, so the next scan opens it again when it is back.
+    reader.on('exit', () => { if (this.readers.get(device) === reader) this.readers.delete(device) })
+    reader.on('error', error => this.handlers.log(`keyboard ${device}: ${error.message}`))
+  }
+
+  stop() {
+    clearInterval(this.timer)
+    for (const reader of this.readers.values()) reader.kill()
+    this.readers.clear()
+  }
 }

@@ -150,6 +150,20 @@ export class Session {
     if (mode === 'hold' && p.kind === 'paused') return this.resume()
   }
 
+  /**
+   * "satz --toggle" from a desktop shortcut (Wayland, or no keyboard hook):
+   * start and finish like a tap, whatever the trigger mode. In hold mode a
+   * press never finished, and the dictation could only be thrown away.
+   */
+  toggle() {
+    const p = this.phase.kind
+    if (p === 'listening' || p === 'paused') return this.finish()
+    if (p === 'starting') { this.finishWhenOpen = true; return }
+    if (p === 'finishing') { this.startWhenDone = !this.startWhenDone; return }
+    if (p === 'failed') return this.press()
+    this.begin()
+  }
+
   /** The shortcut came up. Only meaningful while holding to talk. */
   release() {
     if (this.deps.triggerMode() !== 'hold') return

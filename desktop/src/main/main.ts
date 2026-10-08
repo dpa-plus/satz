@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, Menu, nativeImage, Notification, session as electronSession, shell, Tray } from 'electron'
+import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, Menu, nativeImage, net, Notification, session as electronSession, shell, Tray } from 'electron'
 import fs from 'node:fs'
 import http from 'node:http'
 import os from 'node:os'
@@ -101,7 +101,8 @@ async function start() {
     makeSource: (): AudioSource => (testMode && flag('--test-audio') !== undefined ? new FileSource(testAudio.shift() ?? null) : new MicRecorder(hub)),
     transcribe: samples => store.prefs.provider === 'local'
       ? local.transcribe(samples, localModel(), store.transcriberSettings().vocabulary, store.spokenLanguage)
-      : transcribe(store.transcriberSettings(), encodeWAV(samples), store.readKey() ?? ''),
+      // Electron's fetch: the system proxy and certificate store, which Node's ignores.
+      : transcribe(store.transcriberSettings(), encodeWAV(samples), store.readKey() ?? '', net.fetch as never),
     replacements: () => store.activeReplacements,
     missing,
     endpointMissing: () => store.endpointMissing,
@@ -187,8 +188,9 @@ async function start() {
   keyboard = await startKeyboard({
     trigger: (down: boolean) => (down ? doubleTap.keyDown(true) : doubleTap.keyUp(true)),
     other: () => doubleTap.keyDown(false),
-    // Only where Escape could not be taken as a shortcut (Wayland).
-    escape: () => { if (!escapeTaken && ['starting', 'listening'].includes(session.phase.kind)) session.discard() },
+    // Where Escape could not be taken as a shortcut (Wayland), and Escape
+    // with right Ctrl held (hold mode), which the plain shortcut does not see.
+    escape: withTrigger => { if ((!escapeTaken || withTrigger) && ['starting', 'listening'].includes(session.phase.kind)) session.discard() },
     log,
   })
   log(`shortcut: ${keyboard.description}`)
@@ -197,7 +199,7 @@ async function start() {
   // the shortcut. Opened from the app menu again, satz shows the history:
   // without it, starting a running tray app looked like nothing happened.
   app.on('second-instance', (_e, argv) => {
-    if (argv.includes('--toggle')) session.press()
+    if (argv.includes('--toggle')) session.toggle()
     else if (argv.includes('--settings')) openSettings()
     else openHistory()
   })
@@ -261,7 +263,7 @@ async function start() {
   ipcMain.handle('history:open', () => openHistory())
 
   // The model menu: the provider's live list, the shipped one until it arrives.
-  const modelLists = new ModelLists(app.getPath('userData'), provider => store.readKey(provider), log, () => tellWindow('models:changed'))
+  const modelLists = new ModelLists(app.getPath('userData'), provider => store.readKey(provider), log, () => tellWindow('models:changed'), net.fetch as never)
   ipcMain.handle('settings:get', () => {
     modelLists.refresh(store.prefs.provider)
     return {
@@ -296,21 +298,23 @@ async function start() {
     if (quitting) return
     quitting = true
     event.preventDefault()
+    keyboard?.stop()
     mediaPause.quitting().finally(() => app.quit())
   })
   ipcMain.handle('settings:store-key', (_e, key: string) => { store.storeKey(key); return store.hasKey() })
   ipcMain.handle('settings:clear-history', () => { store.clearHistory(); historyChanged() })
-  ipcMain.handle('settings:start-at-login', (_e, on: boolean) => { startAtLogin.set(on); return startAtLogin.get() })
+  ipcMain.handle('settings:start-at-login', (_e, on: boolean) => { startAtLogin.set(on); store.update({ startsAtLogin: on }); return startAtLogin.get() })
   ipcMain.handle('settings:open-log', () => shell.openPath(path.join(app.getPath('userData'), 'satz.log')))
 
   // Start at login, on from the first launch; switched off, it stays off.
   if (!testMode && !store.prefs.startAtLoginDefaulted) {
     startAtLogin.set(true)
-    store.update({ startAtLoginDefaulted: true })
+    store.update({ startAtLoginDefaulted: true, startsAtLogin: true })
     log(`start at login: ${startAtLogin.get() ? 'on' : 'could not be switched on'}`)
-  } else if (!testMode && startAtLogin.get()) {
-    // Written again on every start, so it follows satz when it moves (from
-    // an unpacked folder to the installed package, say).
+  } else if (!testMode && (store.prefs.startsAtLogin ?? startAtLogin.get())) {
+    // Written again on every start, so it follows satz when it moves (an
+    // unzipped update in a new folder). Asked of the system, a moved satz on
+    // Windows looked switched off, and the old copy kept starting.
     startAtLogin.set(true)
   }
 

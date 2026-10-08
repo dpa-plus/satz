@@ -33,6 +33,8 @@ export interface Preferences {
   /** Where the user dragged the card, from its starting spot. */
   cardSpot: { x: number; y: number } | null
   startAtLoginDefaulted: boolean
+  /** The user's choice, so the entry follows satz when it moves (Windows keys it on the exe's path). */
+  startsAtLogin?: boolean
 }
 
 export interface HistoryEntry { id: string; text: string; date: string; pasted: boolean }
