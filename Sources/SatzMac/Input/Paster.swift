@@ -33,7 +33,12 @@ enum Paster {
         guard !text.isEmpty else { return .pasted }
 
         let pasteboard = NSPasteboard.general
-        let previous = copy(of: pasteboard)
+        // A paste right after another (Insert while a dictation finishes)
+        // keeps the clipboard the user had before both: saved now, it was the
+        // first transcript, and that came back instead.
+        let previous = waiting?.previous ?? copy(of: pasteboard)
+        waiting?.restore.cancel()
+        waiting = nil
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
         let ours = pasteboard.changeCount
@@ -63,13 +68,19 @@ enum Paster {
         if !keepsOnClipboard {
             // A second, not 400 ms: a busy app (Word, a remote desktop) took ⌘V
             // after the old clipboard was back and pasted that instead.
-            Task { @MainActor in
+            let restore = Task { @MainActor in
                 try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { return }
+                waiting = nil
                 putBack(previous, on: pasteboard, ifStill: ours)
             }
+            waiting = (previous, restore)
         }
         return .pasted
     }
+
+    /// The clipboard to give back, and the task that will.
+    private static var waiting: (previous: [NSPasteboardItem], restore: Task<Void, Never>)?
 
     /// Set by the app: closes satz's menu bar panel.
     static var closeMenus: @MainActor () -> Void = {}
@@ -146,11 +157,32 @@ enum Paster {
         pasteboard.writeObjects(previous)
     }
 
+    /// The key that types "v" with ⌘ in the current keyboard layout. Paste is
+    /// ⌘ and the letter, not the place: on Dvorak the US V key is K, and ⌘K
+    /// went out instead.
+    private static func keyForCommandV() -> CGKeyCode {
+        guard let source = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
+              let raw = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else { return CGKeyCode(kVK_ANSI_V) }
+        let data = Unmanaged<CFData>.fromOpaque(raw).takeUnretainedValue() as Data
+        return data.withUnsafeBytes { bytes -> CGKeyCode in
+            guard let layout = bytes.baseAddress?.assumingMemoryBound(to: UCKeyboardLayout.self) else { return CGKeyCode(kVK_ANSI_V) }
+            for code in 0 ..< 128 {
+                var dead: UInt32 = 0
+                var length = 0
+                var chars = [UniChar](repeating: 0, count: 4)
+                let status = UCKeyTranslate(layout, UInt16(code), UInt16(kUCKeyActionDown), UInt32((cmdKey >> 8) & 0xFF),
+                                            UInt32(LMGetKbdType()), OptionBits(kUCKeyTranslateNoDeadKeysBit), &dead, 4, &length, &chars)
+                if status == noErr, length == 1, chars[0] == UniChar(UInt8(ascii: "v")) { return CGKeyCode(code) }
+            }
+            return CGKeyCode(kVK_ANSI_V)
+        }
+    }
+
     private static func sendCommandV() {
         // .combinedSessionState so the event carries the real modifier state of
         // the session rather than a private one, which some applications check.
         guard let source = CGEventSource(stateID: .combinedSessionState) else { return }
-        let v = CGKeyCode(kVK_ANSI_V)
+        let v = keyForCommandV()
 
         let down = CGEvent(keyboardEventSource: source, virtualKey: v, keyDown: true)
         let up = CGEvent(keyboardEventSource: source, virtualKey: v, keyDown: false)

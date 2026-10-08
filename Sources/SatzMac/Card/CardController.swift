@@ -232,14 +232,17 @@ enum FocusedField {
         guard AXUIElementCopyAttributeValue(target, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
               let element = focused, CFGetTypeID(element) == AXUIElementGetTypeID() else { return false }
         let field = element as! AXUIElement
+        // The timeout is per element: the app's alone left this one unbounded.
+        AXUIElementSetMessagingTimeout(field, 0.25)
         var role: CFTypeRef?
         AXUIElementCopyAttributeValue(field, kAXRoleAttribute as CFString, &role)
-        if let role = role as? String, ["AXTextField", "AXTextArea", "AXComboBox", "AXSearchField"].contains(role) { return true }
-        // A slider's value is settable too; only text counts.
         var settable: DarwinBoolean = false
+        let canSet = AXUIElementIsAttributeSettable(field, kAXValueAttribute as CFString, &settable) == .success && settable.boolValue
+        // A read-only text view is an AXTextArea too, and refuses the paste.
+        if let role = role as? String, ["AXTextField", "AXTextArea", "AXComboBox", "AXSearchField"].contains(role), canSet { return true }
+        // A slider's value is settable too; only text counts.
         var value: CFTypeRef?
-        if AXUIElementIsAttributeSettable(field, kAXValueAttribute as CFString, &settable) == .success, settable.boolValue,
-           AXUIElementCopyAttributeValue(field, kAXValueAttribute as CFString, &value) == .success, value is String { return true }
+        if canSet, AXUIElementCopyAttributeValue(field, kAXValueAttribute as CFString, &value) == .success, value is String { return true }
         // Browsers mark what lies inside an editable web area.
         var ancestor: CFTypeRef?
         return AXUIElementCopyAttributeValue(field, "AXEditableAncestor" as CFString, &ancestor) == .success && ancestor != nil
@@ -256,6 +259,7 @@ enum FocusedField {
         guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
               let element = focused, CFGetTypeID(element) == AXUIElementGetTypeID() else { return nil }
         let field = element as! AXUIElement
+        AXUIElementSetMessagingTimeout(field, 0.25)
 
         var positionValue: CFTypeRef?
         var sizeValue: CFTypeRef?

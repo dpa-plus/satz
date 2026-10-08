@@ -72,6 +72,14 @@ final class TriggerMonitor {
         case .tapDisabledByTimeout, .tapDisabledByUserInput:
             // macOS switches a tap off if it is ever slow. Switch it back on.
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
+            // A release while it was off was never seen: held to talk, the
+            // dictation ran on until some later right-⌘ shortcut ended it.
+            lastTapUpAt = nil
+            interrupted = true
+            if holding, CGEventSource.flagsState(.combinedSessionState).rawValue & 0x10 == 0 {
+                holding = false
+                fire(onRelease)
+            }
         case .flagsChanged:
             modifierChanged(event)
         case .keyDown, .leftMouseDown, .rightMouseDown:
