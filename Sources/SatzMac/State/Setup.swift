@@ -59,7 +59,7 @@ final class Setup {
         // Assigned only on change: every assignment re-renders whatever
         // observes it, and this runs every few seconds.
         let key = preferences.provider.needsKey ? Secrets.exists(for: preferences.provider)
-            : LocalModels.shared.isReady(preferences.model, language: preferences.spokenLanguage)
+            : LocalModels.shared.isInstalled(preferences.model, language: preferences.spokenLanguage)
         let mic = Self.microphoneStatus()
         let paste = AXIsProcessTrusted()
         if key != hasKey { hasKey = key }

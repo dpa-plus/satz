@@ -573,7 +573,10 @@ final class Session {
             case .failure(let error):
                 Log.note("transcription failed: \(error.localizedDescription)")
                 // Kept: the final send at the shortcut tries it again.
-                segments[id]?.failure = (error as? Transcriber.Failure)?.short ?? de("Fehler", en: "Error")
+                // Said as precisely as it is known: a bare "Fehler" left the
+                // user retrying something that could not work.
+                segments[id]?.failure = (error as? Transcriber.Failure)?.short ?? (error as? LocalModels.Failure)?.short
+                    ?? (provider.needsKey ? de("Fehler", en: "Error") : de("Modell-Fehler", en: "Model error"))
             }
         }
     }

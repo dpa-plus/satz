@@ -39,6 +39,14 @@ final class LocalModels {
             case .language: de("Apples Spracherkennung kennt diese Sprache nicht.", en: "Apple's speech recognition does not know this language.")
             }
         }
+
+        /// Two or three words, for the card.
+        var short: String {
+            switch self {
+            case .notDownloaded: de("Modell fehlt", en: "Model missing")
+            case .language: de("Sprache fehlt", en: "Language missing")
+            }
+        }
     }
 
     private var states: [String: State] = [:]
@@ -75,6 +83,20 @@ final class LocalModels {
         state(of: model, language: language) == .ready
     }
 
+    /// On this Mac, even while it loads: Setup must not call a model that is
+    /// only being prepared after an update "missing".
+    func isInstalled(_ model: String, language: Language) -> Bool {
+        switch state(of: model, language: language) {
+        case .ready: true
+        case .preparing: model == ModelCatalog.apple || Self.folder(of: model) != nil
+        default: false
+        }
+    }
+
+    /// Whether the model is still the one chosen, asked when a download ends:
+    /// set by the app, so a model nobody picks any more is not loaded.
+    var isWanted: (String) -> Bool = { _ in true }
+
     /// Asks macOS whether Apple's model for the spoken language is installed.
     func check(_ model: String, language: Language) async {
         guard model == ModelCatalog.apple, #available(macOS 26, *) else { return }
@@ -82,7 +104,9 @@ final class LocalModels {
         if case .downloading = states[key] { return }
         let status = await Self.appleStatus(language)
         guard !isBusy(key) else { return }
-        states[key] = status
+        // A download macOS runs for someone else would sit at 0 % here
+        // forever: offered as Download instead, which joins it.
+        if case .downloading = status { states[key] = .missing } else { states[key] = status }
     }
 
     // MARK: - Download
@@ -101,15 +125,18 @@ final class LocalModels {
                     let fraction = progress.fractionCompleted
                     Task { @MainActor in self.progress(model, fraction) }
                 }
-                try folder.path.write(to: Self.marker(model), atomically: true, encoding: .utf8)
                 // Loaded once now, so the first dictation does not wait while
-                // macOS builds the model for this chip.
+                // macOS builds the model for this chip, and so the tokenizer,
+                // fetched at the first load, is there before the model counts
+                // as on this Mac (an offline first load failed otherwise).
                 states[model] = .preparing
                 if loaded?.variant == model { unload() }
                 let started = Date()
-                _ = try await kit(model).value
+                _ = try await kit(model, folder: folder).value
+                try folder.path.write(to: Self.marker(model), atomically: true, encoding: .utf8)
                 Log.note(String(format: "local: %@ ready after %.0f s", model, Date().timeIntervalSince(started)))
                 states[model] = .ready
+                if !isWanted(model) { unload() }
             } catch {
                 Log.note("local: \(model) failed: \(error.localizedDescription)")
                 states[model] = .failed(error.localizedDescription)
@@ -169,15 +196,19 @@ final class LocalModels {
         guard let loaded else { return }
         self.loaded = nil
         let task = loaded.kit
+        // Only once the transcriptions already queued are done: freed under
+        // one, it failed with "Fehler".
+        let pending = queue
         Task.detached {
+            _ = await pending?.value
             if let kit = try? await task.value { await kit.whisper.unloadModels() }
         }
     }
 
-    private func kit(_ variant: String) -> Task<Kit, any Error> {
+    private func kit(_ variant: String, folder: URL? = nil) -> Task<Kit, any Error> {
         if let loaded, loaded.variant == variant { return loaded.kit }
         unload()
-        let task = Task<Kit, any Error> { try await Self.load(variant) }
+        let task = Task<Kit, any Error> { try await Self.load(variant, folder: folder) }
         loaded = (variant, task)
         let started = Date()
         // macOS builds the model for this chip once per app and version:
@@ -200,14 +231,15 @@ final class LocalModels {
         return task
     }
 
-    /// Models this app, in this version, has loaded before.
+    /// Models this app, in this version and on this macOS build, has loaded
+    /// before: CoreML's compiled copy goes with a macOS update too.
     private static var prepared: Set<String> {
         get { Set(UserDefaults.standard.stringArray(forKey: "localPrepared") ?? []) }
         set { UserDefaults.standard.set(Array(newValue), forKey: "localPrepared") }
     }
 
     private static func preparedKey(_ variant: String) -> String {
-        "\(variant)@\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?")"
+        "\(variant)@\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?")@\(ProcessInfo.processInfo.operatingSystemVersionString)"
     }
 
     // MARK: - Transcribing
@@ -249,19 +281,25 @@ final class LocalModels {
         base.appendingPathComponent("\(variant).ready")
     }
 
-    nonisolated private static func load(_ variant: String) async throws -> Kit {
-        guard let folder = folder(of: variant) else { throw Failure.notDownloaded }
+    nonisolated private static func load(_ variant: String, folder given: URL?) async throws -> Kit {
+        guard let folder = given ?? folder(of: variant) else { throw Failure.notDownloaded }
         let config = WhisperKitConfig(model: variant, downloadBase: base, modelFolder: folder.path,
                                       verbose: false, logLevel: .error, prewarm: true, load: true, download: false)
         return Kit(try await WhisperKit(config))
     }
 
     nonisolated private static func whisperTranscribe(_ samples: [Float], kit: Kit, vocabulary: [String]) async throws -> String {
+        // Whisper makes something up for silence ("Vielen Dank.").
+        guard SpeechGate.hasSpeech(samples) else { return "" }
         let decode = { (prompt: [Int]?) async throws -> String in
             // Whisper finds the language itself, per recording, so German and
-            // English both work without a setting.
+            // English both work without a setting. With timestamps, a
+            // recording over 30 s goes on where a sentence ended instead of
+            // being cut at 30 s; and a clip under a second is decoded too
+            // (windowClipTime 1 skipped it).
             var options = DecodingOptions(task: .transcribe, language: nil, temperature: 0, usePrefillPrompt: true,
-                                          detectLanguage: true, skipSpecialTokens: true, withoutTimestamps: true)
+                                          detectLanguage: true, skipSpecialTokens: true, withoutTimestamps: false,
+                                          windowClipTime: 0)
             options.promptTokens = prompt
             let results = try await kit.whisper.transcribe(audioArray: samples, decodeOptions: options)
             return results.map(\.text).joined(separator: " ")
