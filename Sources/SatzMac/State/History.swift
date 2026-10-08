@@ -80,12 +80,12 @@ final class History {
         let manager = FileManager.default
         try? manager.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true,
                                      attributes: [.posixPermissions: 0o700])
-        // Created at 0600 before anything is written, so the text is never on
-        // disk with looser permissions.
-        if !manager.fileExists(atPath: file.path) {
-            manager.createFile(atPath: file.path, contents: nil, attributes: [.posixPermissions: 0o600])
-        }
-        try? data.write(to: file)
-        try? manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+        // Written beside it at 0600, so the text is never on disk with looser
+        // permissions, then moved over the old file in one step: written in
+        // place, an interrupted save left an empty history.
+        let temporary = file.deletingLastPathComponent().appendingPathComponent(".\(file.lastPathComponent).new")
+        try? manager.removeItem(at: temporary)
+        guard manager.createFile(atPath: temporary.path, contents: data, attributes: [.posixPermissions: 0o600]) else { return }
+        if rename(temporary.path, file.path) != 0 { try? manager.removeItem(at: temporary) }
     }
 }

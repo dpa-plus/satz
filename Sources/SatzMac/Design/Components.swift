@@ -215,6 +215,8 @@ struct Segmented<Value: Hashable>: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                // VoiceOver says which one is chosen.
+                .accessibilityAddTraits(chosen ? .isSelected : [])
             }
         }
         .padding(3)

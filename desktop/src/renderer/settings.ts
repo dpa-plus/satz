@@ -168,7 +168,8 @@ function render() {
     providerBox.append(el('div', { className: 'row' }, el('span', { textContent: t('Adresse', 'Address') }), url))
   }
   // Only MAI-Transcribe has a clean mode; elsewhere the switch would do nothing.
-  if (currentModel.includes('mai-transcribe')) {
+  // Only MAI-Transcribe 2 takes it: 1.5 refused the whole request with it.
+  if (currentModel.includes('mai-transcribe-2')) {
     const box = el('input', { type: 'checkbox', id: 'removes-fillers', checked: p.removesFillers })
     box.onchange = () => update({ removesFillers: box.checked })
     providerBox.append(el('div', { className: 'row' }, el('label', { className: 'switch' }, t('Füllwörter weglassen', 'Remove filler words'), box)))
@@ -211,9 +212,11 @@ function render() {
       // in the list while the first still won.
       const said = spoken.value.trim()
       const same = p.replacements.find(r => r.spoken.toLowerCase() === said.toLowerCase())
+      // "\n" typed as two characters means a line break, as on the Mac.
+      const symbol = written.value.replace(/\\n/g, '\n')
       update({ replacements: same
-        ? p.replacements.map(r => (r === same ? { ...r, written: written.value, isOn: true } : r))
-        : [...p.replacements, { id: `u${Date.now()}`, spoken: said, written: written.value, isOn: true }] })
+        ? p.replacements.map(r => (r === same ? { ...r, written: symbol, isOn: true } : r))
+        : [...p.replacements, { id: `u${Date.now()}`, spoken: said, written: symbol, isOn: true }] })
     }
     written.onkeydown = e => { if (e.key === 'Enter') add.click() }
     chips.append(spoken, written, add)

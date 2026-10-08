@@ -58,6 +58,9 @@ export class CardWindow {
       // Everything is see-through until the pointer is over the card itself.
       this.window.setIgnoreMouseEvents(true, { forward: true })
     }
+    // Its own page only: something dropped on the card was loaded there.
+    this.window.webContents.on('will-navigate', event => event.preventDefault())
+    this.window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
     this.window.loadFile(path.join(__dirname, 'card.html'))
 
     ipcMain.on('card:rect', (_e, rect: { x: number; y: number; width: number; height: number }) => {

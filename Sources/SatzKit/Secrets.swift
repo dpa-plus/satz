@@ -47,16 +47,18 @@ public enum Secrets {
                                         attributes: [.posixPermissions: 0o700])
             try manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
             let target = file(for: provider)
-            // Created empty with 0600 first, so the key is never on disk with
-            // looser permissions, not even for a moment.
-            if !manager.fileExists(atPath: target.path) {
-                manager.createFile(atPath: target.path, contents: nil, attributes: [.posixPermissions: 0o600])
+            // Written beside it at 0600, never with looser permissions, and
+            // only then moved over the old key in one step: emptied first, a
+            // failed write lost the key that worked.
+            let temporary = directory.appendingPathComponent(".\(provider.rawValue).new")
+            try? manager.removeItem(at: temporary)
+            guard manager.createFile(atPath: temporary.path, contents: Data(secret.utf8), attributes: [.posixPermissions: 0o600]) else {
+                throw CocoaError(.fileWriteUnknown)
             }
-            try manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: target.path)
-            let handle = try FileHandle(forWritingTo: target)
-            defer { try? handle.close() }
-            try handle.truncate(atOffset: 0)
-            try handle.write(contentsOf: Data(secret.utf8))
+            guard rename(temporary.path, target.path) == 0 else {
+                try? manager.removeItem(at: temporary)
+                throw CocoaError(.fileWriteUnknown)
+            }
         } catch {
             throw Failure.file(error.localizedDescription)
         }

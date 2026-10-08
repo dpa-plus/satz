@@ -60,7 +60,13 @@ export async function startKeyboard(handlers: Handlers): Promise<Keyboard> {
   uIOhook.on('keyup', event => {
     if (event.keycode === UiohookKey.CtrlRight) handlers.trigger(false)
   })
-  uIOhook.start()
+  try {
+    uIOhook.start()
+  } catch (error) {
+    // satz still starts: "satz --toggle" works, texts go to the clipboard.
+    handlers.log(`keyboard hook did not start: ${(error as Error).message}`)
+    return { description: 'keyboard hook unavailable: desktop shortcut running "satz --toggle"', paste: noKeystrokes, stop: () => {} }
+  }
   return { description: 'right Ctrl twice', paste: () => uIOhook.keyTap(UiohookKey.V, [UiohookKey.Ctrl]), stop: () => uIOhook.stop() }
 }
 

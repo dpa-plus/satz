@@ -185,7 +185,8 @@ private struct ProviderBlock: View {
                     LocalModelRow(preferences: preferences)
                 }
                 // Only MAI-Transcribe has a clean mode; elsewhere the switch would do nothing.
-                if preferences.model.contains("mai-transcribe") {
+                // Only MAI-Transcribe 2 takes it: 1.5 refused the whole request with it.
+                if preferences.model.contains("mai-transcribe-2") {
                     Rule()
                     Toggle(isOn: $preferences.removesFillers) { Text(de("Füllwörter weglassen", en: "Remove filler words")) }
                         .toggleStyle(AccentToggleStyle())

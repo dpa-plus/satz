@@ -39,8 +39,12 @@ export interface TranscriberSettings {
   backupAfter?: number | null
 }
 
-/** tooLarge: the provider's upload limit (25 MB, about 13 minutes at OpenAI and Groq); Retry would fail the same way. */
-export type FailureKind = 'noKey' | 'unauthorized' | 'rateLimited' | 'offline' | 'timedOut' | 'server' | 'unreadableResponse' | 'tooLarge'
+/**
+ * tooLarge: the provider's upload limit (25 MB, about 13 minutes at OpenAI and
+ * Groq); Retry would fail the same way. noCredit: the account is empty
+ * (OpenRouter 402, OpenAI 429 insufficient_quota), not a busy provider.
+ */
+export type FailureKind = 'noKey' | 'unauthorized' | 'rateLimited' | 'offline' | 'timedOut' | 'server' | 'unreadableResponse' | 'tooLarge' | 'noCredit'
 
 export class TranscriptionFailure extends Error {
   constructor(readonly kind: FailureKind, readonly status?: number, readonly detail?: string) {
@@ -58,6 +62,7 @@ export class TranscriptionFailure extends Error {
       case 'server': return de('Fehler beim Anbieter', 'Provider error')
       case 'unreadableResponse': return de('Antwort unlesbar', 'Unreadable answer')
       case 'tooLarge': return de('Zu lang für den Anbieter', 'Too long for the provider')
+      case 'noCredit': return de('Kein Guthaben beim Anbieter', 'No credit left')
     }
   }
 }
@@ -187,10 +192,21 @@ async function attempt(settings: TranscriberSettings, wav: Uint8Array, apiKey: s
       if ((error as Error).name === 'AbortError') throw new TranscriptionFailure('timedOut')
       throw new TranscriptionFailure('offline', undefined, (error as Error).message)
     }
-    const text = await response.text()
+    let text: string
+    try {
+      text = await response.text()
+    } catch (error) {
+      // Broken off while the answer came in: said as such, not a bare "Fehler".
+      clearTimeout(timer)
+      if ((error as Error).name === 'AbortError') throw new TranscriptionFailure('timedOut')
+      throw new TranscriptionFailure('offline', undefined, (error as Error).message)
+    }
     clearTimeout(timer)
+    if (response.status === 402 || (response.status === 429 && /insufficient_quota/.test(text))) throw new TranscriptionFailure('noCredit', response.status)
     if (response.status === 429 && attempt < attempts) {
       await sleep(retryDelay(response.headers.get('retry-after'), text) * 1000)
+      // The other request answered meanwhile, or the dictation was thrown away.
+      if (cancel?.aborted) throw new TranscriptionFailure('timedOut')
       continue
     }
     if (response.status === 401 || response.status === 403) throw new TranscriptionFailure('unauthorized', response.status)

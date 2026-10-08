@@ -217,9 +217,11 @@ satz.on('rec:start', async (id: number) => {
   } catch (error) {
     stop()
     const name = (error as Error).name
-    const message = name === 'NotFoundError' ? words('Kein Mikrofon', 'No microphone')
-      : name === 'NotAllowedError' ? words('Mikrofon nicht erlaubt', 'Microphone not allowed')
-      : (error as Error).message
+    // In the card's language, never Chromium's English.
+    const message = name === 'NotFoundError' || name === 'OverconstrainedError' ? words('Kein Mikrofon', 'No microphone')
+      : name === 'NotAllowedError' || name === 'SecurityError' ? words('Mikrofon nicht erlaubt', 'Microphone not allowed')
+      : name === 'NotReadableError' || name === 'AbortError' ? words('Mikrofon belegt', 'Microphone in use')
+      : words('Mikrofon geht nicht', 'Microphone not working')
     satz.send('rec:started', id, message)
   }
 })

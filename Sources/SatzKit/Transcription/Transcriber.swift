@@ -80,6 +80,9 @@ public struct Transcriber: Sendable {
         /// The provider's upload limit (OpenAI and Groq take 25 MB, about 13
         /// minutes): Retry would fail the same way.
         case tooLarge
+        /// The account is empty (OpenRouter 402, OpenAI 429 insufficient_quota),
+        /// not a provider that is busy for a moment.
+        case noCredit
 
         /// Non-optional, so callers never have to invent a fallback string.
         public var message: String {
@@ -92,6 +95,7 @@ public struct Transcriber: Sendable {
             case .server(let status, let message): message ?? de("Der Anbieter antwortete mit \(status).", en: "The provider answered with \(status).")
             case .unreadableResponse: de("Antwort des Anbieters nicht lesbar.", en: "Could not read the provider's answer.")
             case .tooLarge: de("Die Aufnahme ist zu lang für den Anbieter. Den Text kopieren und neu ansetzen.", en: "The recording is too long for the provider. Copy the text and start again.")
+            case .noCredit: de("Kein Guthaben beim Anbieter. Dort aufladen.", en: "No credit left at the provider. Top it up there.")
             }
         }
 
@@ -161,6 +165,9 @@ public struct Transcriber: Sendable {
         var attempt = 1
         while true {
             let (data, http) = try await send(request)
+            if http.statusCode == 402 || (http.statusCode == 429 && String(decoding: data, as: UTF8.self).contains("insufficient_quota")) {
+                throw Failure.noCredit
+            }
             if http.statusCode == 429, attempt < settings.attempts {
                 attempt += 1
                 try await Task.sleep(for: .seconds(Self.retryDelay(http: http, body: data)))

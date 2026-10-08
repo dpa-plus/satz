@@ -989,6 +989,7 @@ extension Transcriber.Failure {
         case .server: de("Fehler beim Anbieter", en: "Provider error")
         case .unreadableResponse: de("Antwort unlesbar", en: "Unreadable answer")
         case .tooLarge: de("Zu lang für den Anbieter", en: "Too long for the provider")
+        case .noCredit: de("Kein Guthaben beim Anbieter", en: "No credit left")
         }
     }
 }

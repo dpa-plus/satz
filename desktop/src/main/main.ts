@@ -251,6 +251,10 @@ async function start() {
       backgroundColor: '#16303C',
       webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
     })
+    // Its own pages only: a link or file dropped on the window was loaded
+    // there, with satz's bridge.
+    mainWindow.webContents.on('will-navigate', event => event.preventDefault())
+    mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
     mainWindow.loadFile(path.join(__dirname, 'window.html'), { query: { page } })
   }
   // Declared as functions, so the tray built above can name them before this

@@ -165,11 +165,22 @@ public enum ModelCatalog {
     /// `{"data": [{"id", "name"?, "pricing"?}]}`: OpenRouter's shape, and
     /// OpenAI's and Groq's, which list every model they have.
     static func parse(_ data: Data, for provider: Provider) throws -> [ModelChoice] {
+        /// A price as listed: usually a string, sometimes a number or something
+        /// else, which made the whole list fail to decode.
+        struct Price: Decodable {
+            let text: String?
+            init(from decoder: Decoder) throws {
+                let value = try decoder.singleValueContainer()
+                if let string = try? value.decode(String.self) { text = string }
+                else if let number = try? value.decode(Double.self) { text = String(number) }
+                else { text = nil }
+            }
+        }
         struct Listing: Decodable {
             struct Model: Decodable {
                 let id: String
                 let name: String?
-                let pricing: [String: String]?
+                let pricing: [String: Price]?
             }
             let data: [Model]
         }
@@ -183,7 +194,7 @@ public enum ModelCatalog {
                 guard !id.contains("realtime"), !id.contains("diarize") else { return nil }
             }
             guard known[model.id]?.hidden == nil else { return nil }
-            return describe(model.id, for: provider, listedName: model.name, pricing: model.pricing)
+            return describe(model.id, for: provider, listedName: model.name, pricing: model.pricing?.compactMapValues(\.text))
         }
         return sorted(models, default: provider.defaultModel)
     }

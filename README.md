@@ -51,7 +51,7 @@ All files are on the [releases page](https://github.com/dpa-plus/satz/releases/l
 ## Get started
 
 1. **Get a key.** Create one at [openrouter.ai/keys](https://openrouter.ai/keys) and add a few dollars of credit. With MAI-Transcribe 2 an hour of talking costs about 10 cents, so five dollars lasts a long time. OpenAI and Groq keys work too.
-2. **Open satz.** Setup asks for the key, the microphone, and on the Mac for permission to paste. It ends with a test sentence.
+2. **Open satz.** On the Mac, setup asks for the key, the microphone and permission to paste, and ends with a test sentence. On Windows and Linux, Settings opens for the key.
 3. **Dictate.** Click into any text field and tap the shortcut twice:
 
 | | Start and finish | Throw away |
@@ -65,14 +65,14 @@ Talk, tap twice again, and the text is pasted. satz starts by itself when you lo
 
 **While you talk**
 - **Pause** with the microphone button to think. Your text appears at each pause.
-- **Click anywhere in the text** and what you say next goes there. You can also type by hand.
+- **Click anywhere in the text** and what you say next goes there. On the Mac you can also type in it by hand.
 - **Hide the text** with the eye if you only want the small waveform.
 - **Throw it away** with ×, then *Undo* for a few seconds, or *Restore* from the menu bar after that.
 - **Move the card** anywhere. It stays where you put it and never leaves the screen.
 - **Music pauses by itself** while you talk (Spotify, Apple Music, YouTube in the browser, anything the system lists as playing) and plays on when you are done. Only what was playing, and only what satz paused.
 
 **Find it again**
-- **Open satz** from Applications, Spotlight or the Start menu and you get its window: **History** and **Settings**, one click (or ⌘1 / ⌘2) apart. History has everything you dictated, by day, with search. A click copies, × forgets one.
+- **Open satz** again (from Applications or Spotlight on the Mac, by starting satz again on Windows and Linux) and you get its window: **History** and **Settings**, one click (or ⌘1 / ⌘2) apart. History has everything you dictated, by day, with search. A click copies, × forgets one.
 - **Keep** the last 10, 50, 200 or all of them, or none. The menu bar shows the last four.
 - **Insert** (Mac): the button next to *Copy* in the menu bar puts your latest text into the text field you are in. It only works while a text field has the cursor.
 
@@ -82,7 +82,7 @@ Talk, tap twice again, and the text is pasted. satz starts by itself when you lo
 - **Spoken in:** German or English, separately from the app's language.
 - **Shortcut:** tap to start and stop, or hold while you talk. On the Mac also your own key combination or a mouse button.
 - **Keep text on the clipboard:** off by default, so whatever you had copied comes back after pasting. On, the dictated text stays there to paste again.
-- **Look:** four colours, light and dark, Liquid Glass on macOS 26.
+- **Look** (Mac): four colours, light and dark, Liquid Glass on macOS 26.
 
 ## Built not to lose your words
 
@@ -130,9 +130,9 @@ A few models OpenRouter lists are left out because they fail with dictation (no 
 | | Mac | Windows and Linux |
 |---|---|---|
 | Whisper Large v3 Turbo | 632 MB, via WhisperKit on the Neural Engine. About 1 s for a short dictation. | 980 MB, on the processor. About 1 to 4 s, depending on the computer. |
-| Apple's speech recognition | Built into macOS 26, nothing to download. Instant, but hears only the language set in *Spoken in* and barely uses your vocabulary. | |
+| Apple's speech recognition | Built into macOS 26; macOS may fetch its language pack once. Instant, but hears only the language set in *Spoken in* and barely uses your vocabulary. | |
 
-Whisper tells German from English by itself. The first time after the download, the Mac prepares the model for its chip, which takes a few minutes, once. Your vocabulary is given to Whisper as a hint, but only when it costs no words: with one, Whisper sometimes left out a sentence in another language, so satz checks against the text without it. *Remove* puts the model in the Trash.
+Whisper tells German from English by itself. The first time after the download, the Mac prepares the model for its chip, which takes a few minutes, once. Your vocabulary is given to Whisper as a hint, but only when that changes no more than a word here and there: with a hint, Whisper sometimes left out a sentence in another language or repeated an earlier one, so satz compares the text word by word with one made without the hint and keeps that one if words went missing or appeared. Silence is never sent to Whisper, which makes something up for it. A sentence in another language in the middle of a long recording can still get lost locally; the cloud models handle that better. *Remove* puts the model in the Trash.
 
 **Speed.** MAI-Transcribe usually answers in one or two seconds, but now and then a request hangs for ten. When no answer has come after 2.5 seconds, satz asks a second time and takes whichever answer comes first, for a fraction of a cent.
 

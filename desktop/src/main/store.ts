@@ -53,12 +53,21 @@ function readJSON<T>(name: string): T | null {
   try { return JSON.parse(fs.readFileSync(file(name), 'utf8')) as T } catch { return null }
 }
 
+/**
+ * Written beside the file (private from the start where it holds text) and
+ * moved over it in one step: written in place, an interrupted write reset the
+ * settings, emptied the history or lost the key.
+ */
+export function writeAtomically(target: string, content: string, mode?: number) {
+  const temporary = `${target}.new`
+  fs.rmSync(temporary, { force: true })
+  fs.writeFileSync(temporary, content, mode !== undefined ? { mode } : undefined)
+  fs.renameSync(temporary, target)
+}
+
 function writeJSON(name: string, value: unknown, mode?: number) {
   fs.mkdirSync(dir(), { recursive: true })
-  const target = file(name)
-  // Created private before anything is written, for files with text in them.
-  if (mode !== undefined && !fs.existsSync(target)) fs.writeFileSync(target, '', { mode })
-  fs.writeFileSync(target, JSON.stringify(value, null, 2), mode !== undefined ? { mode } : undefined)
+  writeAtomically(file(name), JSON.stringify(value, null, 2), mode)
 }
 
 export class Store {
@@ -144,8 +153,7 @@ export class Store {
   storeKey(key: string, provider = this.prefs.provider) {
     fs.mkdirSync(path.join(dir(), 'keys'), { recursive: true, mode: 0o700 })
     const target = this.keyFile(provider)
-    if (!fs.existsSync(target)) fs.writeFileSync(target, '', { mode: 0o600 })
-    fs.writeFileSync(target, key.trim(), { mode: 0o600 })
+    writeAtomically(target, key.trim(), 0o600)
   }
 
   // MARK: - History

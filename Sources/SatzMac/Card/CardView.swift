@@ -236,11 +236,17 @@ private struct Strip: View {
         .help(de("Verwerfen", en: "Discard"))
     }
 
+    /// Capped and cut short, whole on hover: a long microphone error grew the
+    /// pill past its window and was cut off on the left.
     private func label(_ text: String) -> some View {
         Text(text)
             .font(Typography.text(12, .medium))
             .foregroundStyle(theme.inkSecondary)
             .lineLimit(1)
+            .truncationMode(.tail)
+            .frame(maxWidth: 240, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .help(text)
     }
 }
 
