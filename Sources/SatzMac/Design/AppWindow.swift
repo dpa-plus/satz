@@ -24,6 +24,7 @@ final class AppWindow: NSObject, NSWindowDelegate {
     private let title: () -> String
     private let content: () -> AnyView
     private let startsWithoutFocus: Bool
+    private let freshEachTime: Bool
     var onClose: (() -> Void)?
 
     /// The content sets its own width; the window follows its preferred size.
@@ -34,9 +35,14 @@ final class AppWindow: NSObject, NSWindowDelegate {
     /// `startsWithoutFocus`: no field holds the keyboard when the window opens.
     /// Otherwise AppKit hands it to the first field (in the settings: the
     /// model), where typing meant for somewhere else quietly changes it.
-    init(title: @autoclosure @escaping () -> String, startsWithoutFocus: Bool = false, content: @escaping () -> AnyView) {
+    ///
+    /// `freshEachTime`: the content is built anew whenever the window opens.
+    /// The setup reopened at the step it was closed on, not at what is missing now.
+    init(title: @autoclosure @escaping () -> String, startsWithoutFocus: Bool = false, freshEachTime: Bool = false,
+         content: @escaping () -> AnyView) {
         self.title = title
         self.startsWithoutFocus = startsWithoutFocus
+        self.freshEachTime = freshEachTime
         self.content = content
     }
 
@@ -45,6 +51,8 @@ final class AppWindow: NSObject, NSWindowDelegate {
     func show() {
         if window == nil {
             window = make()
+        } else if freshEachTime && !counted {
+            window?.contentViewController = hosting()
         }
         window?.title = title()
         // Each time satz comes forward, not only the first: Settings opened
@@ -112,10 +120,14 @@ final class AppWindow: NSObject, NSWindowDelegate {
         }
     }
 
-    private func make() -> NSWindow {
+    private func hosting() -> NSViewController {
         let hosting = NSHostingController(rootView: content().themed())
         hosting.sizingOptions = [.preferredContentSize]
-        let window = NSWindow(contentViewController: hosting)
+        return hosting
+    }
+
+    private func make() -> NSWindow {
+        let window = NSWindow(contentViewController: hosting())
         window.styleMask = [.titled, .closable, .fullSizeContentView]
         // The title bar melts into the ground rather than sitting on top of it
         // as a grey strip.

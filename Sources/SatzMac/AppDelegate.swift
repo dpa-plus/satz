@@ -129,7 +129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                              shortcut: shortcut, launchAtLogin: launchAtLogin, models: models))
         }
         navigation.onChange = { [weak self] in self?.mainWindow.retitle() }
-        setupWindow = AppWindow(title: de("satz einrichten", en: "Set up satz")) { [unowned self] in
+        setupWindow = AppWindow(title: de("satz einrichten", en: "Set up satz"), freshEachTime: true) { [unowned self] in
             AnyView(SetupView(
                 preferences: preferences, setup: setup, shortcut: shortcut, history: history,
                 onDone: { [weak self] in self?.setupWindow.close() }
@@ -293,6 +293,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appItem = NSMenuItem()
         appItem.submenu = appMenu
         main.addItem(appItem)
+
+        // ⌘W, as in every other Mac window.
+        let file = NSMenu(title: de("Ablage", en: "File"))
+        file.addItem(withTitle: de("Fenster schließen", en: "Close Window"), action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        let fileItem = NSMenuItem()
+        fileItem.submenu = file
+        main.addItem(fileItem)
 
         let edit = NSMenu(title: de("Bearbeiten", en: "Edit"))
         edit.addItem(withTitle: de("Widerrufen", en: "Undo"), action: Selector(("undo:")), keyEquivalent: "z")

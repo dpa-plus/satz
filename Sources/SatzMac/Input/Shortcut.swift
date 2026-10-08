@@ -29,6 +29,9 @@ final class Shortcut {
     @ObservationIgnored private var hotKey: HotKey?
     @ObservationIgnored private var monitor: TriggerMonitor?
     @ObservationIgnored private var waiting: Task<Void, Never>?
+    /// The test copy never starts it; recording a trigger in its settings
+    /// must not arm one there either.
+    @ObservationIgnored private var started = false
 
     init(preferences: Preferences, onPress: @escaping () -> Void, onRelease: @escaping () -> Void) {
         self.preferences = preferences
@@ -38,6 +41,7 @@ final class Shortcut {
 
     /// Arms the current trigger, and re-arms whenever it changes.
     func start() {
+        started = true
         arm()
         watchForChanges()
     }
@@ -51,6 +55,7 @@ final class Shortcut {
     }
 
     func resume() {
+        guard started else { return }
         arm()
     }
 

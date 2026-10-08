@@ -29,6 +29,7 @@ enum SnapshotRenderer {
             ("setup-key", .german, { AnyView(setupSheet(.key).environment(\.theme, .light)) }),
             ("settings-local", .german, { AnyView(settingsSheet(.local).environment(\.theme, .dark)) }),
             ("setup-local", .german, { AnyView(setupSheet(.key, provider: .local).environment(\.theme, .light)) }),
+            ("setup-custom", .german, { AnyView(setupSheet(.key, provider: .custom).environment(\.theme, .light)) }),
             ("history", .german, { AnyView(historySheet.environment(\.theme, .light)) }),
             ("history-en", .english, { AnyView(historySheet.environment(\.theme, .dark)) }),
             ("setup-probe", .german, { AnyView(setupSheet(.probe).environment(\.theme, .light)) }),

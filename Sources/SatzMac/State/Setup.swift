@@ -29,7 +29,7 @@ final class Setup {
     var isComplete: Bool {
         let pasteNeeded = preferences?.trigger.needsEventTap ?? true
         return hasKey && microphone == .allowed && (canPaste || !pasteNeeded)
-            && !(preferences?.isEndpointMissing ?? false)
+            && !(preferences?.isEndpointMissing ?? false) && !(preferences?.isModelMissing ?? false)
     }
 
     /// nil for a fixture, whose values never change.

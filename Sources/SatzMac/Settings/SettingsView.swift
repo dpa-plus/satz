@@ -19,7 +19,7 @@ struct SettingsView: View {
             // ImageRenderer draws a ScrollView's content as nothing.
             content.background(theme.ground)
         } else {
-            ScrollView { content }
+            ScrollView { content.id(preferences.lookKey) }
                 .focusEffectDisabled()
                 .scrollIndicators(.never)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

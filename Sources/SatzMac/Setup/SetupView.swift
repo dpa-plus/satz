@@ -33,7 +33,7 @@ struct SetupView: View {
 
     /// Where a returning user picks up: the first thing that is missing.
     static func firstOpenStep(setup: Setup, preferences: Preferences) -> Step {
-        if !setup.hasKey || preferences.isEndpointMissing { return .key }
+        if !setup.hasKey || preferences.isEndpointMissing || preferences.isModelMissing { return .key }
         if setup.microphone != .allowed { return .microphone }
         if !setup.canPaste && preferences.trigger.needsEventTap { return .paste }
         return .probe
@@ -210,6 +210,7 @@ private struct KeyStep: View {
 
         if preferences.provider == .custom {
             customURLField
+            customModelField
         }
 
         if let problem {
@@ -273,9 +274,28 @@ private struct KeyStep: View {
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(theme.control, lineWidth: 1.5))
     }
 
+    private var customModelField: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "cube").font(.system(size: 13, weight: .medium)).foregroundStyle(theme.inkOnCard)
+            if isSnapshot {
+                Text(preferences.model.isEmpty ? de("Modell, z. B. whisper-1", en: "Model, e.g. whisper-1") : preferences.model)
+                Spacer()
+            } else {
+                TextField("", text: $preferences.model, prompt: Text(de("Modell, z. B. whisper-1", en: "Model, e.g. whisper-1")).foregroundStyle(theme.inkOnCard))
+                    .textFieldStyle(.plain)
+                    .onSubmit(next)
+            }
+        }
+        .font(Typography.mono(14))
+        .foregroundStyle(theme.ink)
+        .padding(.horizontal, 12)
+        .frame(height: 42)
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(theme.control, lineWidth: 1.5))
+    }
+
     private var canContinue: Bool {
         let typed = !input.trimmingCharacters(in: .whitespaces).isEmpty
-        return (typed || setup.hasKey) && !preferences.isEndpointMissing
+        return (typed || setup.hasKey) && !preferences.isEndpointMissing && !preferences.isModelMissing
     }
 
     private func next() {
@@ -289,7 +309,7 @@ private struct KeyStep: View {
                 return
             }
         }
-        guard setup.hasKey, !preferences.isEndpointMissing else { return }
+        guard setup.hasKey, !preferences.isEndpointMissing, !preferences.isModelMissing else { return }
         onNext()
     }
 }

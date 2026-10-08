@@ -24,10 +24,15 @@ struct MainView: View {
             .padding(.horizontal, 32)
             .padding(.top, 30)
             .padding(.bottom, 12)
+            // Every label is read again when the language changes. The settings
+            // do it inside their scroll view, which stays, and so keeps its
+            // place: the language and colour pickers sit at the bottom.
+            .id(preferences.lookKey)
 
             switch navigation.page {
             case .history:
                 HistoryView(history: history, preferences: preferences)
+                    .id(preferences.lookKey)
             case .settings:
                 SettingsView(preferences: preferences, setup: setup, shortcut: shortcut,
                              launchAtLogin: launchAtLogin, history: history, models: models)
@@ -36,8 +41,6 @@ struct MainView: View {
         .frame(width: 560, height: 760, alignment: .topLeading)
         .background(theme.ground)
         .focusEffectDisabled()
-        // Every label and colour is read again when language or theme changes.
-        .id(preferences.lookKey)
     }
 
     /// The page names are the headings: the open one in ink, the other one

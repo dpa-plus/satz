@@ -169,6 +169,11 @@ final class Preferences {
         provider == .custom && URL(string: customBaseURL.trimmingCharacters(in: .whitespaces))?.host == nil
     }
 
+    /// A custom endpoint has no default model; without one every request fails.
+    var isModelMissing: Bool {
+        provider == .custom && model.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
     func addWord(_ word: String) {
         let clean = word.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty, !words.contains(where: { $0.caseInsensitiveCompare(clean) == .orderedSame }) else { return }
