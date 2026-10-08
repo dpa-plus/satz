@@ -86,6 +86,8 @@ export class Session {
   /** The microphone starts: a new dictation, or more after a pause. The card
    *  also opens for messages, which are not a reason to pause the music. */
   onRecord: () => void = () => {}
+  /** A dictation begins: where the text will go is noted now. */
+  onBegin: () => void = () => {}
   onClose: () => void = () => {}
 
   private segments = new Map<number, Segment>()
@@ -290,6 +292,7 @@ export class Session {
     }
     this.activeID = this.newSegment(0)
     this.log('dictation started')
+    this.onBegin()
     this.onOpen()
     this.breathe()
     this.startRecording()

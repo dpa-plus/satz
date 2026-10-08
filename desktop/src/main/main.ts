@@ -17,6 +17,7 @@ import { Store } from './store'
 import { MediaPause, systemPlayers } from './media'
 import { ModelLists } from './modelLists'
 import { LocalModels } from './local'
+import { foreground } from './foreground'
 
 /**
  * satz for Windows and Linux. Double-tap right Ctrl, talk, double-tap again:
@@ -88,6 +89,9 @@ async function start() {
   ipcMain.on('rec:chunk', (_e, chunk: Float32Array) => hub.push(chunk))
 
   const delivered: string[] = []
+  // The window the text is for: noted when the dictation starts.
+  const windows = foreground(log)
+  let target: Promise<string | null> = Promise.resolve(null)
 
   // Whisper on this computer, for the provider "Lokal".
   // On Windows not in the roaming profile: a gigabyte synced at every sign-in.
@@ -128,6 +132,17 @@ async function start() {
       }
       // A moment for the shortcut's own keys to come up before Ctrl+V.
       await new Promise(resolve => setTimeout(resolve, 120))
+      // Back to the window the dictation started in, or onto the clipboard:
+      // pasted into whatever was in front, the text went to the wrong app.
+      const window = await target
+      if (window && !(await windows.restore(window))) {
+        await clipboard.writeText(text)
+        log('paste: the window the dictation started in is gone or would not come back')
+        store.addHistory(text, false)
+        delivered.push(text)
+        historyChanged()
+        return { pasted: false, reason: de('Auf der Zwischenablage, das Fenster ist nicht mehr da.', 'On the clipboard, the window is gone.') }
+      }
       const outcome = await deliver(text, () => keyboard?.paste(), store.prefs.keepsOnClipboard, log)
       log(`paste: ${outcome.pasted ? 'sent Ctrl+V' : 'clipboard only'}, ${text.length} characters`)
       store.addHistory(text, outcome.pasted)
@@ -169,6 +184,8 @@ async function start() {
   const mediaPause = new MediaPause(systemPlayers(log), () => store.prefs.pausesMedia && (!testMode || args.includes('--test-media')), log)
   session.onOpen = () => { card.show(); pushState() }
   session.onRecord = () => mediaPause.dictationStarted()
+  session.onBegin = () => { target = windows.current() }
+  windows.prepare()
   session.onClose = () => { card.hide(); refreshTray(); mediaPause.dictationEnded() }
 
   ipcMain.on('card:ready', pushState)
