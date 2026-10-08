@@ -145,7 +145,8 @@ struct HistoryView: View {
 }
 
 /// One dictation: the text in full up to three lines, where it went and when.
-/// The row copies on click; under the pointer it also offers to forget it.
+/// The row copies on click, and says so with the copy icon at its end; under
+/// the pointer it also offers to forget it.
 private struct HistoryRow: View {
     let entry: History.Entry
     let remove: () -> Void
@@ -164,13 +165,9 @@ private struct HistoryRow: View {
                         .lineLimit(3)
                         .foregroundStyle(theme.ink)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    HStack(spacing: 6) {
-                        Image(systemName: copied ? "checkmark" : (entry.pasted ? "arrow.down.to.line" : "doc.on.clipboard"))
-                            .font(.system(size: 10, weight: .semibold))
-                        Text(copied ? de("Kopiert", en: "Copied") : meta)
-                            .font(Typography.text(12.5))
-                    }
-                    .foregroundStyle(theme.inkSecondary)
+                    Text(copied ? de("Kopiert", en: "Copied") : meta)
+                        .font(Typography.text(12.5))
+                        .foregroundStyle(theme.inkSecondary)
                 }
                 .contentShape(Rectangle())
             }
@@ -188,6 +185,20 @@ private struct HistoryRow: View {
             .opacity(hovering ? 1 : 0)
             .help(de("Aus dem Verlauf entfernen", en: "Remove from history"))
             .accessibilityLabel(de("Entfernen", en: "Remove"))
+
+            // The same icon as Copy in the menu bar. The arrow that stood for
+            // "pasted" read as a download; where it went is in the words.
+            Button(action: copy) {
+                Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    .font(.system(size: 13, weight: .medium))
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(hovering || copied ? theme.ink : theme.inkSecondary)
+            .help(de("Kopieren", en: "Copy"))
+            // The row itself is the copy button for VoiceOver.
+            .accessibilityHidden(true)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 9)

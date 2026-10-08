@@ -4,6 +4,10 @@ import { satz } from './bridge'
  * Everything dictated, newest first, by day. What opens when satz is started
  * again from the app menu. Search narrows it, a click copies, × forgets one.
  */
+
+/** The same icons as the Mac's: two sheets for copy, a tick once copied. */
+const COPY_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 5.5V4.1A1.6 1.6 0 0 0 8.9 2.5H4.1A1.6 1.6 0 0 0 2.5 4.1v4.8a1.6 1.6 0 0 0 1.6 1.6h1.4" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>'
+const COPIED_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 interface Entry { id: string; text: string; date: string; pasted: boolean }
 interface Info { entries: Entry[]; limit: number; language: 'de' | 'en' }
 
@@ -44,7 +48,13 @@ function row(entry: Entry): HTMLElement {
   const remove = el('button', { className: 'remove', textContent: '×', title: t('Aus dem Verlauf entfernen', 'Remove from history') })
   remove.setAttribute('aria-label', t('Aus dem Verlauf entfernen', 'Remove from history'))
   remove.onclick = () => satz.invoke('history:remove', entry.id)
-  return el('div', { className: 'entry' }, copy, remove)
+  // Says what a click on the row does. The row is the button for the
+  // keyboard and screen readers, so this one is skipped by both.
+  const icon = el('button', { className: 'copy-icon', title: t('Kopieren', 'Copy'), tabIndex: -1,
+    innerHTML: entry.id === copiedId ? COPIED_ICON : COPY_ICON })
+  icon.setAttribute('aria-hidden', 'true')
+  icon.onclick = () => copy.click()
+  return el('div', { className: 'entry' }, copy, remove, icon)
 }
 
 function render() {
