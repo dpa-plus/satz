@@ -91,8 +91,10 @@ function kind(written: string, quote: { open: boolean }): Kind {
   }
 }
 
+// Not '-': with the u flag an escaped hyphen outside [] is a syntax error,
+// and one rule like "E-Mail" broke every dictation.
 function escape(s: string) {
-  return s.replace(/[.*+?^${}()|[\]\\/-]/g, '\\$&')
+  return s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')
 }
 
 /**
@@ -110,7 +112,12 @@ function pattern(spoken: string): RegExp | null {
   } else {
     body = words.map(escape).join('[\\s,.\\-]+')
   }
-  return new RegExp(`(?<![\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])`, 'giu')
+  // A rule that still cannot become a pattern is skipped, never the dictation.
+  try {
+    return new RegExp(`(?<![\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])`, 'giu')
+  } catch {
+    return null
+  }
 }
 
 interface Match { start: number; end: number; rule: Replacement }

@@ -94,3 +94,9 @@ test('a line break at the edge of a recording survives fitting', () => {
   const text = 'Erster Punkt.'
   assert.equal(text + fit(piece, text, { location: text.length, length: 0 }), 'Erster Punkt.\nZweiter Punkt.')
 })
+
+test('a spoken phrase with a hyphen works and never breaks the dictation', () => {
+  const rules = [{ id: 'm', spoken: 'meine E-Mail', written: 'eli@example.com', isOn: true }, { id: 'b', spoken: 'Klammer auf', written: '(', isOn: true }]
+  assert.equal(applyReplacements(rules, 'Schick es an meine E-Mail bitte'), 'Schick es an eli@example.com bitte')
+  assert.equal(applyReplacements(rules, 'Klammer auf hallo'), '(hallo')
+})
