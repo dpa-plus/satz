@@ -58,6 +58,12 @@ struct ShortcutChoice: View {
                 Notice(text: de("Braucht Bedienungshilfen", en: "Needs Accessibility"), action: (de("Erlauben", en: "Allow"), setup.requestPaste))
             } else if shortcut.status == .taken {
                 Notice(text: de("Von einem anderen Programm belegt", en: "Taken by another app"))
+            } else if shortcut.status == .takenByMacOS {
+                Notice(text: de("macOS nutzt diese Tasten schon, andere wählen", en: "macOS already uses these keys, pick others"))
+            } else if case .keys(let keyCode, let modifiers) = preferences.trigger,
+                      HotKey.isOftenClaimed(.init(keyCode: keyCode, modifiers: modifiers)) {
+                // Another app's hotkey cannot be seen, so said up front.
+                Notice(text: de("Oft von Raycast, Alfred oder ChatGPT belegt", en: "Often taken by Raycast, Alfred or ChatGPT"))
             }
         }
         .onDisappear(perform: stopRecording)

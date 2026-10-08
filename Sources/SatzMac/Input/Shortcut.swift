@@ -17,6 +17,8 @@ final class Shortcut {
         case needsAccessibility
         /// Another app registered the same key combination first.
         case taken
+        /// macOS itself uses it (Spotlight and the like), and wins.
+        case takenByMacOS
     }
 
     private(set) var status: Status = .needsAccessibility
@@ -63,12 +65,15 @@ final class Shortcut {
         switch trigger {
         case .keys(let keyCode, let modifiers):
             do {
+                let combination = HotKey.Combination(keyCode: keyCode, modifiers: modifiers)
                 hotKey = try HotKey(
-                    .init(keyCode: keyCode, modifiers: modifiers),
+                    combination,
                     onPress: { [weak self] in self?.onPress() },
                     onRelease: { [weak self] in self?.onRelease() }
                 )
-                status = .armed
+                // Registered either way, in case macOS's own use is switched
+                // off later; said, because until then nothing happens.
+                status = HotKey.isUsedByMacOS(combination) ? .takenByMacOS : .armed
             } catch {
                 status = .taken
             }

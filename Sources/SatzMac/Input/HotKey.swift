@@ -34,6 +34,31 @@ final class HotKey {
         }
     }
 
+    /// Whether macOS itself uses the combination (Spotlight, input sources,
+    /// screenshots…): those win, and satz never hears the keys. Another app's
+    /// hotkey cannot be seen: Carbon registers a second one without a word,
+    /// and even an exclusive registration only blocks apps that come later.
+    static func isUsedByMacOS(_ combination: Combination) -> Bool {
+        var list: Unmanaged<CFArray>?
+        guard CopySymbolicHotKeys(&list) == noErr, let array = list?.takeRetainedValue() as? [[String: Any]] else { return false }
+        let mask = UInt32(cmdKey | optionKey | controlKey | shiftKey)
+        return array.contains { entry in
+            guard (entry[kHISymbolicHotKeyEnabled as String] as? Bool) == true,
+                  let code = entry[kHISymbolicHotKeyCode as String] as? Int,
+                  let modifiers = entry[kHISymbolicHotKeyModifiers as String] as? Int else { return false }
+            return UInt32(code) == combination.keyCode && UInt32(modifiers) & mask == combination.modifiers & mask
+        }
+    }
+
+    /// Combinations launchers and AI apps usually claim (Raycast, Alfred,
+    /// ChatGPT, Spotlight): worth a warning, since a clash cannot be detected.
+    static func isOftenClaimed(_ combination: Combination) -> Bool {
+        guard combination.keyCode == UInt32(kVK_Space) else { return false }
+        let mask = UInt32(cmdKey | optionKey | controlKey | shiftKey)
+        return [UInt32(optionKey), UInt32(cmdKey), UInt32(controlKey), UInt32(cmdKey | optionKey), UInt32(controlKey | optionKey)]
+            .contains(combination.modifiers & mask)
+    }
+
     private var reference: EventHotKeyRef?
     private let id: UInt32
 
