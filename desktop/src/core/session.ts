@@ -1,6 +1,7 @@
 import { de } from './language'
 import { Doc, type Range } from './doc'
 import { applyReplacements, type Replacement } from './replacements'
+import { hasSpeech } from './speech'
 import { fit } from './textFitting'
 import { TranscriptionFailure } from './transcriber'
 
@@ -102,6 +103,8 @@ export class Session {
   private startToken = 0
   /** The shortcut was pressed to finish while the microphone was still opening. */
   private finishWhenOpen = false
+  /** The shortcut was pressed while the last dictation was being written. */
+  private startWhenDone = false
   private closeTimer: ReturnType<typeof setTimeout> | null = null
   private breathTimer: ReturnType<typeof setInterval> | null = null
   breathBright = true
@@ -115,6 +118,10 @@ export class Session {
   // MARK: - State for the card
 
   get hasRealText() { return this.doc.plain().trim() !== '' }
+  /** Anything a closing card would throw away: text, audio, a microphone in its tail, an answer on its way. */
+  private get hasWork() {
+    return this.hasRealText || [...this.segments.values()].some(s => s.audio.length > 0) || this.stopping.length > 0 || this.sends.size > 0
+  }
   get inFlight() { return this.sends.size }
   get canRestore() { return ['idle', 'discarded', 'clipboard'].includes(this.phase.kind) }
   get activeMarkerRange(): Range | null { return this.activeID ? this.doc.rangeOf('mark', this.activeID) : null }
@@ -132,9 +139,14 @@ export class Session {
     if (mode === 'tap' && p.kind === 'starting') { this.finishWhenOpen = true; return }
     if (p.kind === 'failed') {
       // Nothing kept to send ("Kein Schlüssel", "Nichts gehört"): start over.
-      if (p.canRetry || [...this.segments.values()].some(s => s.audio.length > 0)) return this.finish()
+      // Text on the card counts: starting over wiped it after a microphone
+      // failed on resume.
+      if (p.canRetry || this.hasWork) return this.finish()
       return this.begin()
     }
+    // The next dictation, started while this one is still being written: it
+    // begins once this one is out. Ignored, the words said meanwhile were lost.
+    if (mode === 'tap' && p.kind === 'finishing') { this.startWhenDone = !this.startWhenDone; return }
     if (mode === 'hold' && p.kind === 'paused') return this.resume()
   }
 
@@ -291,7 +303,9 @@ export class Session {
     }, error => {
       if (mine !== this.startToken) return
       this.phase = { kind: 'failed', message: String((error as Error)?.message ?? error), canRetry: false }
-      if (!this.hasRealText) this.closeLater(5000)
+      // Anything worth keeping stays for the shortcut or ×; an answer still
+      // on its way arrives on it.
+      if (!this.hasWork) this.closeLater(5000)
       this.changed()
     })
   }
@@ -368,7 +382,18 @@ export class Session {
   }
 
   private async deliver() {
-    const output = this.doc.plain().trim()
+    // Read before close() resets it.
+    const startNext = this.startWhenDone
+    try {
+      await this.deliverText()
+    } finally {
+      if (startNext) this.begin()
+    }
+  }
+
+  private async deliverText() {
+    // Spaces only: a line break at either end was said ("neue Zeile").
+    const output = this.doc.plain().replace(/^ +| +$/g, '')
     if (output === '') {
       const seconds = [...this.segments.values()].reduce((sum, s) => sum + s.audio.length, 0) / this.rate
       this.log(`nothing heard in ${seconds.toFixed(1)} s of audio`)
@@ -378,9 +403,22 @@ export class Session {
       this.closeLater(3000)
       return
     }
+    // Kept until it is out: a clipboard that refused the text lost the dictation.
+    const snapshot: Snapshot = { doc: this.doc.clone(), segments: new Map(this.segments), activeID: this.activeID, nextID: this.nextID, preview: output }
     // Gone before pasting, so the keyboard is back with the app it belongs to.
     this.close()
-    const outcome = await this.deps.deliver(output)
+    let outcome: { pasted: boolean; reason?: string }
+    try {
+      outcome = await this.deps.deliver(output)
+    } catch (error) {
+      this.log(`delivery failed: ${(error as Error)?.message ?? error}`)
+      this.discarded = snapshot
+      if (this.phase.kind !== 'idle') return
+      this.phase = { kind: 'failed', message: de('Nicht eingefügt, im Menü wiederherstellen', 'Not pasted, restore it from the menu'), canRetry: false }
+      this.onOpen()
+      this.changed()
+      return
+    }
     if (!outcome.pasted) {
       this.log(outcome.reason ?? 'clipboard only')
       // A new dictation started in the meantime: it stays.
@@ -415,8 +453,16 @@ export class Session {
       if (token !== this.sessionToken || this.sends.get(id)?.gen !== gen) return
       this.sends.delete(id)
       this.log(`sent ${(covered / this.rate).toFixed(1)} s of audio, answer after ${((Date.now() - started) / 1000).toFixed(1)} s`)
-      if (raw !== null) this.apply(applyReplacements(rules, raw), id, covered)
-      else { const s = this.segments.get(id); if (s) s.failure = failure ?? undefined }
+      if (raw !== null) {
+        const transcript = applyReplacements(rules, raw)
+        // Nothing back for audio with speech in it is a failure, not silence:
+        // applied, it wiped this spot's text, and "Nichts gehört" then threw
+        // the audio away.
+        if (transcript.trim() === '' && hasSpeech(audio, this.rate)) {
+          this.log(`empty answer for ${(covered / this.rate).toFixed(1)} s of speech, kept for another try`)
+          const s = this.segments.get(id); if (s) s.failure = de('Nichts verstanden', 'Not understood')
+        } else this.apply(transcript, id, covered)
+      } else { const s = this.segments.get(id); if (s) s.failure = failure ?? undefined }
       this.changed()
     })()
     this.sends.set(id, { promise, covers: covered, gen })
@@ -486,7 +532,9 @@ export class Session {
   private moveCaret(range: Range, length: number) {
     if (this.caret === null) return
     if (this.caret >= range.location + range.length) this.caret += length - range.length
-    else if (this.caret > range.location) this.caret = range.location + length
+    // A click inside text being replaced stays where it was: moved to the end,
+    // it landed on the recording's own placeholder.
+    else if (this.caret > range.location) this.caret = Math.min(this.caret, range.location + length)
   }
 
   /** A click between two letters goes to the nearer end of the word. */
@@ -548,6 +596,7 @@ export class Session {
   }
 
   private reset() {
+    this.startWhenDone = false
     this.doc.clear()
     this.segments.clear()
     this.activeID = null
@@ -569,6 +618,8 @@ export class Session {
     const shown = this.phase.kind
     this.closeTimer = setTimeout(() => {
       this.closeTimer = null
+      // An answer that arrived meanwhile stays on the card.
+      if (this.phase.kind === 'failed' && this.hasWork) return
       if (this.phase.kind === shown) this.close()
     }, ms)
   }

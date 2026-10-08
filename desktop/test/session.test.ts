@@ -21,7 +21,12 @@ class FakeSource implements AudioSource {
   constructor(readonly script: string) {}
   /** Milliseconds the microphone takes to open, like a Bluetooth headset. */
   opening = 0
-  async start() { if (this.opening) await new Promise(resolve => setTimeout(resolve, this.opening)) }
+  /** The microphone does not open (a Bluetooth headset switching profile). */
+  fails = false
+  async start() {
+    if (this.opening) await new Promise(resolve => setTimeout(resolve, this.opening))
+    if (this.fails) throw new Error('Microphone unavailable')
+  }
   get sampleCount() { return this.revealed * K }
   /** The speaker says the next `chars` characters. */
   say(chars = this.script.length - this.revealed) { this.revealed = Math.min(this.script.length, this.revealed + chars) }
@@ -47,12 +52,12 @@ const decode = (samples: Float32Array) => {
 const tick = (ms = 0) => new Promise(resolve => setTimeout(resolve, ms))
 async function settle() { for (let i = 0; i < 8; i++) await tick() }
 
-function setup(scripts: string[], options: { mode?: 'tap' | 'hold'; transcribe?: (s: Float32Array) => Promise<string>; opening?: number; missing?: string } = {}) {
+function setup(scripts: string[], options: { mode?: 'tap' | 'hold'; transcribe?: (s: Float32Array) => Promise<string>; opening?: number; missing?: string; failOn?: number } = {}) {
   const sources: FakeSource[] = []
   const delivered: string[] = []
   let mode = options.mode ?? 'tap'
   const session = new Session({
-    makeSource: () => { const s = new FakeSource(scripts[sources.length] ?? ''); s.opening = options.opening ?? 0; sources.push(s); return s },
+    makeSource: () => { const s = new FakeSource(scripts[sources.length] ?? ''); s.opening = options.opening ?? 0; s.fails = options.failOn === sources.length; sources.push(s); return s },
     transcribe: options.transcribe ?? (async samples => decode(samples)),
     replacements: () => [],
     missing: () => options.missing ?? null,
@@ -244,5 +249,60 @@ test('a local model not downloaded yet is said before anything is recorded', asy
   session.press(); await settle()
   assert.deepEqual(session.phase, { kind: 'failed', message: 'Modell fehlt', canRetry: false })
   assert.equal(sources.length, 0)
+  session.dispose()
+})
+
+const slow = (ms: number) => async (samples: Float32Array) => { await tick(ms); return decode(samples) }
+
+test('a microphone failing on resume keeps the text that arrives after it', async () => {
+  const { session, sources, delivered } = setup(['alpha bravo', 'charlie'], { failOn: 1, transcribe: slow(40) })
+  session.press(); await settle()
+  sources[0].say()
+  session.toggleMicrophone(); await settle()
+  session.toggleMicrophone(); await settle()
+  assert.equal(session.phase.kind, 'failed')
+  await tick(60); await settle()
+  // Kept on the card: it closed itself 5 s later and lost it all.
+  await tick(5200); await settle()
+  assert.equal(session.phase.kind, 'failed')
+  assert.equal(session.plainText().trim(), 'alpha bravo')
+  session.press(); await tick(60); await settle()
+  assert.deepEqual(delivered, ['alpha bravo'])
+  session.dispose()
+})
+
+test('a press while the text is being written starts the next dictation', async () => {
+  const { session, sources, delivered } = setup(['Hallo', 'Welt'], { transcribe: slow(40) })
+  session.press(); await settle()
+  sources[0].say()
+  session.press(); await settle()
+  assert.equal(session.phase.kind, 'finishing')
+  session.press(); await settle()
+  await tick(60); await settle()
+  assert.deepEqual(delivered, ['Hallo'])
+  assert.equal(sources.length, 2)
+  assert.equal(session.phase.kind, 'listening')
+  session.dispose()
+})
+
+test('an empty answer for real speech offers Retry instead of "Nothing heard"', async () => {
+  const speech = 'Wir treffen uns am Montag im Buero und besprechen das Budget. '.repeat(6)
+  let answers = 0
+  const { session, sources, delivered } = setup([speech], { transcribe: async samples => (answers++ === 0 ? '' : decode(samples)) })
+  session.press(); await settle()
+  sources[0].say()
+  session.press(); await settle()
+  assert.deepEqual(session.phase, { kind: 'failed', message: 'Not understood', canRetry: true })
+  session.retry(); await settle()
+  assert.deepEqual(delivered, [speech.trim()])
+  session.dispose()
+})
+
+test('a line break said at the end is pasted with it', async () => {
+  const { session, sources, delivered } = setup(['Erster Punkt'], { transcribe: async samples => `${decode(samples)}\n` })
+  session.press(); await settle()
+  sources[0].say()
+  session.press(); await settle()
+  assert.deepEqual(delivered, ['Erster Punkt\n'])
   session.dispose()
 })

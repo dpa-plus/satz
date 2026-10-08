@@ -67,6 +67,12 @@ final class Session {
         return !plainText().trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// Anything a closing card would throw away: text, audio, a microphone
+    /// still in its tail, or an answer still on its way.
+    private var hasWork: Bool {
+        hasRealText || segments.values.contains { !$0.audio.isEmpty } || !stopping.isEmpty || !sends.isEmpty
+    }
+
     /// The card's text. Changed by the user in the text view, by satz in `edit`.
     @ObservationIgnored let text = NSTextStorage()
     /// Where the user last put the caret, nil until they do.
@@ -123,6 +129,8 @@ final class Session {
     @ObservationIgnored private var startToken = 0
     /// The shortcut was pressed to finish while the microphone was still opening.
     @ObservationIgnored private var finishWhenOpen = false
+    /// The shortcut was pressed while the last dictation was being written.
+    @ObservationIgnored private var startWhenDone = false
     @ObservationIgnored private var origin: NSRunningApplication?
     @ObservationIgnored private var escape: HotKey?
     @ObservationIgnored private var breathing: Task<Void, Never>?
@@ -147,7 +155,13 @@ final class Session {
         case (_, .failed(_, let canRetry)):
             // Nothing kept to send ("Kein Schlüssel", "Nichts gehört"): the
             // shortcut starts over instead of failing the same way again.
-            if canRetry || segments.values.contains(where: { !$0.audio.isEmpty }) { finish() } else { begin() }
+            // Text on the card counts: starting over wiped it, hand
+            // corrections and all, after a microphone failed on resume.
+            if canRetry || hasWork { finish() } else { begin() }
+        // The next dictation, started while this one is still being written:
+        // it begins as soon as this one is out. Ignored, the words said
+        // meanwhile were never recorded.
+        case (.tap, .finishing): startWhenDone.toggle()
         case (.hold, .paused): resume()
         default: break
         }
@@ -369,8 +383,9 @@ final class Session {
                 guard mine == startToken else { return }
                 releaseEscape()
                 phase = .failed(error.localizedDescription, canRetry: false)
-                // Earlier text stays, so the card stays for the shortcut or ×.
-                if !hasRealText { closeLater(after: .seconds(5)) }
+                // Anything worth keeping stays, so the card stays for the
+                // shortcut or ×; text still on its way arrives on it.
+                if !hasWork { closeLater(after: .seconds(5)) }
                 return
             }
             // Thrown away while the permission dialog was up: close the
@@ -471,7 +486,12 @@ final class Session {
     }
 
     private func deliver() {
-        let output = plainText().trimmingCharacters(in: .whitespacesAndNewlines)
+        // Read before close() resets it.
+        let startNext = startWhenDone
+        defer { if startNext { begin() } }
+        // Spaces only: a line break at either end was said ("neue Zeile"),
+        // and a list dictated item by item needs it.
+        let output = plainText().trimmingCharacters(in: .whitespaces)
         guard !output.isEmpty else {
             let seconds = Double(segments.values.map(\.audio.count).reduce(0, +)) / 16_000
             Log.note(String(format: "nothing heard in %.1f s of audio", seconds))
@@ -569,7 +589,16 @@ final class Session {
             Log.note(String(format: "sent %.1f s of audio, answer after %.1f s", Double(covered) / 16_000, Date().timeIntervalSince(started)))
             switch result {
             case .success(let raw):
-                apply(Replacements.apply(rules, to: raw), to: id, covering: covered)
+                let transcript = Replacements.apply(rules, to: raw)
+                // Nothing back for audio with speech in it is a failure, not
+                // silence: applied, it wiped the text this spot already had,
+                // and "Nichts gehört" then threw the audio away.
+                if transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, SpeechGate.hasSpeech(audio) {
+                    Log.note(String(format: "empty answer for %.1f s of speech, kept for another try", Double(covered) / 16_000))
+                    segments[id]?.failure = de("Nichts verstanden", en: "Not understood")
+                } else {
+                    apply(transcript, to: id, covering: covered)
+                }
             case .failure(let error):
                 Log.note("transcription failed: \(error.localizedDescription)")
                 // Kept: the final send at the shortcut tries it again.
@@ -700,7 +729,10 @@ final class Session {
         if caret >= NSMaxRange(range) {
             self.caret = caret + length - range.length
         } else if caret > range.location {
-            self.caret = range.location + length
+            // A click inside text that is being replaced stays where it was:
+            // moved to the end, it landed on the recording's own placeholder
+            // and the next words went there instead of to the click.
+            self.caret = min(caret, range.location + length)
         }
     }
 
@@ -838,6 +870,7 @@ final class Session {
     }
 
     private func reset() {
+        startWhenDone = false
         edit { text.setAttributedString(NSAttributedString()) }
         segments = [:]
         activeID = nil
@@ -860,6 +893,8 @@ final class Session {
         closingLater = Task {
             try? await Task.sleep(for: delay)
             guard !Task.isCancelled, phase == shown else { return }
+            // An answer that arrived meanwhile stays on the card.
+            if case .failed = phase, hasWork { return }
             // A discarded text stays in the menu bar under "Zuletzt verworfen".
             close()
         }
