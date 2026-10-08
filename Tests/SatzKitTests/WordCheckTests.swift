@@ -37,6 +37,22 @@ import Testing
     #expect(SpeechGate.hasSpeech(click) == false)
 }
 
+@Test func aLongerMadeUpPhraseNeverBeatsADroppedSentence() {
+    let plain = "Schick mir die Unterlagen. Bitte die Rechnung nicht bezahlen."
+    let prompted = "Schick mir die Unterlagen. Vielen Dank fürs Zuschauen und bis zum nächsten Mal."
+    #expect(WordCheck.keepEveryWord(prompted: prompted, plain: plain).usedPrompt == false)
+}
+
+@Test func speechFromAQuietMicrophoneCounts() {
+    // Speech-like bursts at 2 % amplitude after a quiet start.
+    let quiet: [Float] = (0 ..< 48_000).map { k in
+        let burst = k > 8000 && (k / 2400) % 2 == 0
+        let phase = Double(k)
+        return burst ? Float(sin(phase * 0.2)) * 0.004 : Float(sin(phase)) * 0.0001
+    }
+    #expect(SpeechGate.hasSpeech(quiet))
+}
+
 @Test func quietSpeechCounts() {
     // A tone at -35 dBFS for half a second.
     let speech = (0 ..< 8_000).map { Float(sin(Double($0) * 0.2)) * 0.025 }

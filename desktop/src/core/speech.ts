@@ -3,21 +3,26 @@
  */
 
 /**
- * Whether a recording has any speech in it at all: at least a fifth of a
- * second of 30 ms frames louder than -45 dBFS. Whisper makes something up for
- * silence ("you", "Thank you.", "."), so silence is never sent to it.
+ * Whether a recording has any speech in it at all. Whisper makes something up
+ * for silence ("you", "Thank you.", "."), so silence is never sent to it.
+ * Speech is a fifth of a second of 30 ms frames above -45 dBFS, or, from a
+ * quiet microphone, above -60 dBFS and three times the recording's own quiet
+ * level: a fixed -45 dB alone dropped clear speech from a low-gain
+ * microphone, and steady quiet noise is not speech.
  */
 export function hasSpeech(samples: Float32Array, rate = 16_000): boolean {
   const frame = Math.max(1, Math.floor(rate * 0.03))
   const needed = Math.max(1, Math.floor(0.2 / 0.03))
-  const threshold = 0.0056
-  let loud = 0
+  const levels: number[] = []
   for (let start = 0; start + frame <= samples.length; start += frame) {
     let sum = 0
     for (let k = start; k < start + frame; k++) sum += samples[k] * samples[k]
-    if (Math.sqrt(sum / frame) > threshold && ++loud >= needed) return true
+    levels.push(Math.sqrt(sum / frame))
   }
-  return false
+  if (levels.length < needed) return false
+  const quiet = [...levels].sort((a, b) => a - b)[Math.floor(levels.length * 0.1)]
+  const threshold = Math.min(0.0056, Math.max(0.001, 3 * quiet))
+  return levels.filter(level => level > threshold).length >= needed
 }
 
 const words = (text: string) => text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean)
@@ -51,27 +56,8 @@ export function longestGap(a: string[], b: string[]): number {
 export function keepEveryWord(prompted: string, plain: string): { text: string; chosen: 'prompted' | 'plain' } {
   const a = words(plain), b = words(prompted)
   if (a.length === 0) return { text: plain, chosen: 'plain' }
-  const promptedLost = b.length < 0.85 * a.length || longestGap(a, b) >= 3
-  // Both can lose words (the plain text dropped a first sentence once): then
-  // the one that kept more.
-  if (promptedLost && longestGap(b, a) >= 3 && b.length > a.length) return { text: prompted, chosen: 'prompted' }
-  return promptedLost ? { text: plain, chosen: 'plain' } : { text: prompted, chosen: 'prompted' }
-}
-
-/**
- * Where Whisper's long-form decoding goes on after one 30 s window, from the
- * timestamp tokens in its answer (openai/whisper's rule): up to the end of
- * the last complete segment, so a sentence that runs past the window is
- * decoded again, whole, in the next one. `null` means the whole window was
- * used. Returns the tokens to keep (with their timestamps) and how far to go.
- */
-export function cutAtLastSegment(tokens: number[], timestampBegin: number): { keep: number[]; seconds: number | null } {
-  const isTime = tokens.map(t => t >= timestampBegin)
-  const singleEnding = tokens.length >= 2 ? !isTime[tokens.length - 2] && isTime[tokens.length - 1] : isTime[tokens.length - 1] === true
-  const consecutive: number[] = []
-  for (let k = 1; k < tokens.length; k++) if (isTime[k] && isTime[k - 1]) consecutive.push(k)
-  if (consecutive.length === 0) return { keep: tokens, seconds: null }
-  if (singleEnding) return { keep: tokens, seconds: null }
-  const last = consecutive[consecutive.length - 1]
-  return { keep: tokens.slice(0, last), seconds: (tokens[last - 1] - timestampBegin) * 0.02 }
+  // Extra words in the prompted text prove nothing: a longer made-up phrase
+  // ("Vielen Dank fürs Zuschauen") must not beat a sentence it dropped.
+  if (b.length < 0.85 * a.length || longestGap(a, b) >= 3) return { text: plain, chosen: 'plain' }
+  return { text: prompted, chosen: 'prompted' }
 }

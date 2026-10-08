@@ -84,8 +84,11 @@ async function start() {
 
   // Whisper on this computer, for the provider "Lokal".
   // On Windows not in the roaming profile: a gigabyte synced at every sign-in.
-  const modelsDir = process.platform === 'win32' && process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'satz') : app.getPath('userData')
-  const local = new LocalModels(path.join(modelsDir, 'models', 'local'), log, () => tellWindow('local:changed'))
+  // A model already downloaded to the old place there is used where it is.
+  const roaming = path.join(app.getPath('userData'), 'models', 'local')
+  const modelsDir = process.platform === 'win32' && process.env.LOCALAPPDATA && !fs.existsSync(roaming)
+    ? path.join(process.env.LOCALAPPDATA, 'satz', 'models', 'local') : roaming
+  const local = new LocalModels(modelsDir, log, () => tellWindow('local:changed'))
   const localModel = () => store.prefs.models.local || providers.local.defaultModel
   /** What keeps the provider from working, in two or three words; null when it is ready. */
   function missing(): string | null {

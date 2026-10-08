@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { cutAtLastSegment, hasSpeech, keepEveryWord } from '../src/core/speech'
+import { hasSpeech, keepEveryWord } from '../src/core/speech'
+import { windows } from '../src/core/windows'
 
 test('the word list is kept only when it costs no words', () => {
   const plain = 'Schreib mir eine Funktion. Thanks for the update, Thursday works for me.'
@@ -29,22 +30,26 @@ test('silence, room tone and a click have no speech; quiet speech does', () => {
   assert.equal(hasSpeech(speech), true)
 })
 
-test('a window goes on after its last complete segment', () => {
-  const T = 50000 // timestamp_begin; T + n is n * 0.02 s
-  const text = [1, 2, 3]
-  // <0.00> a b c <5.00><5.00> d e <9.00><9.00> f g   (last segment unfinished)
-  const tokens = [T, ...text, T + 250, T + 250, 4, 5, T + 450, T + 450, 6, 7]
-  const cut = cutAtLastSegment(tokens, T)
-  assert.equal(cut.seconds, 9)
-  assert.deepEqual(cut.keep, [T, 1, 2, 3, T + 250, T + 250, 4, 5, T + 450])
-  // Ends on a closing timestamp: the whole window is used.
-  assert.equal(cutAtLastSegment([T, 1, 2, T + 300], T).seconds, null)
-  // No timestamps at all: the whole window.
-  assert.equal(cutAtLastSegment([1, 2, 3], T).seconds, null)
+test('a longer made-up phrase never beats a dropped sentence', () => {
+  const plain = 'Schick mir die Unterlagen. Bitte die Rechnung nicht bezahlen.'
+  const prompted = 'Schick mir die Unterlagen. Vielen Dank fürs Zuschauen und bis zum nächsten Mal.'
+  assert.equal(keepEveryWord(prompted, plain).chosen, 'plain')
 })
 
-test('when both texts lost words, the one that kept more wins', () => {
-  const prompted = 'Erstens, der Bericht ist fertig. Zweitens, die Rechnung geht raus. Drittens, das Meeting.'
-  const plain = 'Bericht ist fertig. Zweitens, die Rechnung geht raus.'
-  assert.equal(keepEveryWord(prompted, plain).chosen, 'prompted')
+test('quiet speech counts, steady quiet noise does not', () => {
+  // Speech-like bursts at 2 % amplitude after a quiet start.
+  const quiet = Float32Array.from({ length: 48_000 }, (_, k) => (k > 8000 && Math.floor(k / 2400) % 2 === 0 ? Math.sin(k * 0.2) * 0.004 : Math.sin(k) * 0.0001))
+  assert.equal(hasSpeech(quiet), true)
+  const hum = Float32Array.from({ length: 48_000 }, (_, k) => Math.sin(k * 0.05) * 0.003)
+  assert.equal(hasSpeech(hum), false)
+})
+
+test('a long dictation is cut in its quietest moment, and nothing is lost', () => {
+  const rate = 16_000
+  const audio = new Float32Array(rate * 70).fill(0.5)
+  audio.fill(0, 24 * rate, 24 * rate + rate / 5)
+  const pieces = windows(audio, rate, 30 * rate - rate / 2)
+  assert.ok(pieces.every(piece => piece.length <= 29.5 * rate))
+  assert.ok(Math.abs(pieces[0].length - 24.1 * rate) < rate / 5)
+  assert.equal(pieces.reduce((sum, piece) => sum + piece.length, 0), audio.length)
 })

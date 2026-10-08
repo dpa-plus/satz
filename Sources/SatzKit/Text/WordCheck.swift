@@ -14,11 +14,10 @@ public enum WordCheck {
         let a = words(plain), b = words(prompted)
         // Nothing heard: a prompt alone can make Whisper repeat the word list.
         guard !a.isEmpty else { return (plain, false) }
-        let promptedLost = Double(b.count) < 0.85 * Double(a.count) || longestGap(in: a, against: b) >= 3
-        // Both can lose words (the plain text dropped a first sentence once):
-        // then the one that kept more.
-        if promptedLost, longestGap(in: b, against: a) >= 3, b.count > a.count { return (prompted, true) }
-        return promptedLost ? (plain, false) : (prompted, true)
+        // Extra words in the prompted text prove nothing: a longer made-up
+        // phrase must not beat a sentence it dropped.
+        if Double(b.count) < 0.85 * Double(a.count) || longestGap(in: a, against: b) >= 3 { return (plain, false) }
+        return (prompted, true)
     }
 
     static func words(_ text: String) -> [String] {
@@ -56,23 +55,24 @@ public enum WordCheck {
 /// up for silence ("Vielen Dank.", "Untertitelung des ZDF"), so silence is
 /// never sent to it.
 public enum SpeechGate {
-    /// At least a fifth of a second of 30 ms frames louder than -45 dBFS.
-    /// Room tone sits around -60 dB, quiet speech above -40 dB.
+    /// A fifth of a second of 30 ms frames above -45 dBFS, or, from a quiet
+    /// microphone, above -60 dBFS and three times the recording's own quiet
+    /// level: a fixed -45 dB alone dropped clear speech from a low-gain
+    /// microphone, and steady quiet noise is not speech.
     public static func hasSpeech(_ samples: [Float], sampleRate: Double = 16_000) -> Bool {
         let frame = max(1, Int(sampleRate * 0.03))
         let needed = max(1, Int(0.2 / 0.03))
-        let threshold: Float = 0.0056 // -45 dBFS
-        var loud = 0
+        var levels: [Float] = []
         var start = 0
         while start + frame <= samples.count {
             var sum: Float = 0
             for k in start ..< start + frame { sum += samples[k] * samples[k] }
-            if (sum / Float(frame)).squareRoot() > threshold {
-                loud += 1
-                if loud >= needed { return true }
-            }
+            levels.append((sum / Float(frame)).squareRoot())
             start += frame
         }
-        return false
+        guard levels.count >= needed else { return false }
+        let quiet = levels.sorted()[levels.count / 10]
+        let threshold = min(0.0056, max(0.001, 3 * quiet))
+        return levels.filter { $0 > threshold }.count >= needed
     }
 }

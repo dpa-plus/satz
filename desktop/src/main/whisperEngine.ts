@@ -1,5 +1,6 @@
 import fs from 'node:fs'
-import { cutAtLastSegment, hasSpeech, keepEveryWord } from '../core/speech'
+import { hasSpeech, keepEveryWord } from '../core/speech'
+import { windows } from '../core/windows'
 import { markerPath, type LocalState } from './localFiles'
 
 /**
@@ -23,8 +24,7 @@ const expectedBytes: Record<string, number> = {
 const contextTokens = 448
 const promptTokens = 223
 const rate = 16_000
-const windowSamples = 30 * rate
-/** Silence before each window: speech from the very first instant lost its first words. */
+/** Silence before each piece: speech from the very first instant lost its first words. */
 const lead = rate / 2
 
 export class WhisperEngine {
@@ -146,43 +146,36 @@ export class WhisperEngine {
     const token = (name: string) => tokenizer.convert_tokens_to_ids(name) as number
     const start = config.decoder_start_token_id as number
     const end = token('<|endoftext|>')
-    const timestampBegin = token('<|notimestamps|>') + 1
+    const notimestamps = token('<|notimestamps|>')
     const transcribeToken = token('<|transcribe|>')
     const languages = Object.values(config.lang_to_id) as number[]
     const said: string[] = []
-    // Whisper's own long-form decoding: 30 s at a time, each window going on
-    // where the previous one's last complete sentence ended, so no sentence is
-    // cut in half at a fixed point.
-    let seek = 0
-    while (seek < samples.length) {
-      const audio = samples.subarray(seek, Math.min(seek + windowSamples - lead, samples.length))
-      const last = seek + audio.length >= samples.length
-      if (!hasSpeech(audio)) { seek += audio.length; continue }
+    // 30 s at a time, cut at the quietest moment of each piece's last ten
+    // seconds. Whisper's own timestamps were tried for this: without its
+    // timestamp rules it often wrote none and a whole window went by, and
+    // with them it translated English sentences into German.
+    for (const audio of windows(samples, rate, 30 * rate - lead)) {
+      if (!hasSpeech(audio)) continue
       const piece = new Float32Array(lead + audio.length)
       piece.set(audio, lead)
       const { input_features } = await processor(piece)
       const decode = async (init: number[]) => {
         const output = await model.generate({ inputs: input_features, decoder_input_ids: [init], max_new_tokens: contextTokens - init.length })
         const ids = (output.tolist()[0] as (number | bigint)[]).map(Number).slice(init.length).filter(t => t !== end)
-        const cut = last ? { keep: ids, seconds: null } : cutAtLastSegment(ids, timestampBegin)
-        const text = (tokenizer.decode(cut.keep, { skip_special_tokens: true }) as string).replace(/<\|[^|]*\|>/g, ' ').replace(/\s+/g, ' ').trim()
-        return { text, seconds: cut.seconds }
+        return (tokenizer.decode(ids, { skip_special_tokens: true }) as string).replace(/<\|[^|]*\|>/g, ' ').replace(/\s+/g, ' ').trim()
       }
       // transformers.js takes English unless told otherwise. Whisper's first
       // word after the start is the language it hears, asked for in every
-      // window, so German and English both work without a setting: a language
-      // fixed from the first window dropped an English sentence at the start
-      // of the second. (Left to write the language itself, Whisper stopped
-      // after it here.)
-      // Under two seconds the guess is a coin toss ("Ja." came back as "Yeah."):
-      // there the language set in Settings.
+      // piece, so German and English both work without a setting. Under two
+      // seconds the guess is a coin toss ("Ja." came back as "Yeah."): there
+      // the language set in Settings.
       let language = token(`<|${spoken}|>`)
       if (samples.length >= 2 * rate) {
         const step = await model.forward({ input_features, decoder_input_ids: new Tensor('int64', [BigInt(start)], [1, 1]) })
         const logits = step.logits.data as Float32Array
         language = languages.reduce((best, next) => (logits[next] > logits[best] ? next : best))
       }
-      let chosen = await decode([start, language, transcribeToken])
+      let text = await decode([start, language, transcribeToken, notimestamps])
       // The word list, then what was said before this piece, as Whisper's own
       // prompt: text it takes as having come before, so it spells those
       // words the same way. Ends in a full stop: without one, sentences came
@@ -190,15 +183,12 @@ export class WhisperEngine {
       const before = [vocabulary.length ? `${vocabulary.join(', ')}.` : '', said.join(' ')].filter(Boolean).join(' ')
       if (before) {
         const prompt = (tokenizer.encode(` ${before}`, { add_special_tokens: false }) as number[]).slice(-promptTokens)
-        const prompted = await decode([token('<|startofprev|>'), ...prompt, start, language, transcribeToken])
-        const kept = keepEveryWord(prompted.text, chosen.text)
+        const prompted = await decode([token('<|startofprev|>'), ...prompt, start, language, transcribeToken, notimestamps])
+        const kept = keepEveryWord(prompted, text)
         if (kept.chosen === 'plain') this.log('local: the word list cost words here, kept the text without it')
-        else chosen = prompted
+        text = kept.text
       }
-      if (chosen.text) said.push(chosen.text)
-      // At least a second on: a window that ends in an unfinished first
-      // sentence must not be decoded forever.
-      seek += chosen.seconds === null ? audio.length : Math.max(rate, Math.round(chosen.seconds * rate) - lead)
+      if (text) said.push(text)
     }
     return said.join(' ').replace(/\s+/g, ' ').trim()
   }
