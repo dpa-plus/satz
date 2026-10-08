@@ -56,7 +56,9 @@ export function fit(transcript: string, text: string, range: { location: number;
   if (midSentence) result = lowerFirstWordIfSafe(result, text)
 
   const next = nextVisible(text, afterIndex)
-  const continues = next !== null && (isLowerLetter(next) || ',;:)'.includes(next))
+  // Mid-sentence any letter after the spot means the sentence goes on: "die
+  // alte. Rechnung" kept its full stop before every German noun.
+  const continues = next !== null && (isLowerLetter(next) || ',;:)'.includes(next) || (midSentence && isLetter(next)))
   if (continues && result.endsWith('.') && !result.endsWith('..')) result = result.slice(0, -1)
 
   if (range.location > 0 && !startsLine) {
@@ -81,6 +83,10 @@ export function looksEnglish(text: string): boolean {
 }
 
 /** Words that are never capitalised mid-sentence in German. */
+export const englishFunctionWords = new Set([
+  'the', 'a', 'an', 'and', 'but', 'or', 'nor', 'so', 'yet', 'to', 'of', 'in', 'on', 'at', 'for', 'with', 'from', 'by', 'as', 'about', 'into', 'onto', 'over', 'under', 'after', 'before', 'since', 'until', 'than', 'then', 'that', 'this', 'these', 'those', 'there', 'here', 'it', 'its', 'we', 'you', 'he', 'she', 'they', 'me', 'us', 'him', 'them', 'my', 'your', 'our', 'their', 'his', 'her', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'am', 'do', 'does', 'did', 'have', 'has', 'had', 'will', 'would', 'can', 'could', 'should', 'shall', 'may', 'might', 'must', 'not', 'no', 'if', 'when', 'while', 'because', 'although', 'though', 'which', 'who', 'whom', 'whose', 'what', 'where', 'why', 'how', 'all', 'some', 'any', 'each', 'every', 'more', 'most', 'very', 'really', 'just', 'also', 'only', 'even', 'still', 'please', 'maybe', 'perhaps', 'too',
+])
+
 export const germanFunctionWords = new Set([
   'der', 'die', 'das', 'den', 'dem', 'des', 'ein', 'eine', 'einen', 'einem', 'einer', 'eines',
   'und', 'oder', 'aber', 'denn', 'sondern', 'doch', 'nur', 'auch', 'noch', 'schon', 'sehr',
@@ -99,9 +105,11 @@ export function lowerFirstWordIfSafe(text: string, context = ''): string {
   // Acronyms and "I" stay as they are.
   const letters = [...first].filter(isLetter).join('')
   if (letters.length > 1 && letters === letters.toUpperCase()) return text
-  if (first === 'I' || first.startsWith("I'")) return text
+  if (first.replace(/^\p{P}+|\p{P}+$/gu, '') === 'I' || first.startsWith("I'") || first.startsWith('I’')) return text
   const lowered = first.toLowerCase()
   const bare = lowered.replace(/^\p{P}+|\p{P}+$/gu, '')
-  if (!looksEnglish(context + ' ' + text) && !germanFunctionWords.has(bare)) return text
+  // Only words that are never capitalised mid-sentence, in English too:
+  // lowering every first word made "alice Johnson" and "microsoft".
+  if (!(looksEnglish(context + ' ' + text) ? englishFunctionWords : germanFunctionWords).has(bare)) return text
   return initial.toLowerCase() + text.slice(initial.length)
 }

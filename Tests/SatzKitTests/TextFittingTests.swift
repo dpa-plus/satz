@@ -60,3 +60,14 @@ private func insert(_ transcript: String, into text: String, after anchor: Strin
     let ending = Replacements.apply(Replacements.standard(for: .german), to: "Erster Punkt, neuer Absatz.")
     #expect(TextFitting.fit(ending, into: "" as NSString, at: NSRange(location: 0, length: 0)) == "Erster Punkt\n\n")
 }
+
+@Test func englishKeepsNamesAndIAsTheyAre() {
+    #expect(TextFitting.lowerFirstWordIfSafe("Alice Johnson will join us.", context: "Tell the team that will join us.") == "Alice Johnson will join us.")
+    #expect(TextFitting.lowerFirstWordIfSafe("Microsoft sent the invoice.", context: "We heard that sent the invoice today.") == "Microsoft sent the invoice.")
+    #expect(TextFitting.lowerFirstWordIfSafe("I’m not sure.") == "I’m not sure.")
+    #expect(TextFitting.lowerFirstWordIfSafe("I, for one, agree.") == "I, for one, agree.")
+}
+
+@Test func aMidSentenceInsertBeforeANounLosesItsFullStop() {
+    #expect(insert("Alte.", into: "Ich habe gestern die Rechnung bezahlt.", after: "die") == "Ich habe gestern die Alte Rechnung bezahlt.")
+}

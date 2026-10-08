@@ -28,7 +28,9 @@ public enum TextFitting {
         if midSentence { result = lowerFirstWordIfSafe(result, context: text as String) }
 
         let next = nextVisible(in: text, from: afterIndex)
-        let continues = next.map { $0.isLowercase || ",;:)".contains($0) } ?? false
+        // Mid-sentence any letter after the spot means the sentence goes on:
+        // "die alte. Rechnung" kept its full stop before every German noun.
+        let continues = next.map { $0.isLowercase || ",;:)".contains($0) || (midSentence && $0.isLetter) } ?? false
         if continues, result.hasSuffix("."), !result.hasSuffix("..") {
             result.removeLast()
         }
@@ -77,15 +79,22 @@ public enum TextFitting {
         // Acronyms and "I" stay as they are.
         let letters = first.filter(\.isLetter)
         if letters.count > 1, letters == letters.uppercased() { return text }
-        if first == "I" || first.hasPrefix("I'") { return text }
+        let bare = first.trimmingCharacters(in: .punctuationCharacters)
+        if bare == "I" || first.hasPrefix("I'") || first.hasPrefix("I’") { return text }
 
         let lowered = first.lowercased()
+        let word = lowered.trimmingCharacters(in: .punctuationCharacters)
+        // Only words that are never capitalised mid-sentence, in English too:
+        // lowering every first word made "alice Johnson" and "microsoft".
         let english = NLLanguageRecognizer.dominantLanguage(for: context + " " + text) == .english
-        guard english || germanFunctionWords.contains(lowered.trimmingCharacters(in: .punctuationCharacters)) else {
-            return text
-        }
+        guard english ? englishFunctionWords.contains(word) : germanFunctionWords.contains(word) else { return text }
         return String(lowered.prefix(1)) + String(text.dropFirst(1))
     }
+
+    /// Words that are never capitalised mid-sentence in English.
+    static let englishFunctionWords: Set<String> = [
+        "the", "a", "an", "and", "but", "or", "nor", "so", "yet", "to", "of", "in", "on", "at", "for", "with", "from", "by", "as", "about", "into", "onto", "over", "under", "after", "before", "since", "until", "than", "then", "that", "this", "these", "those", "there", "here", "it", "its", "we", "you", "he", "she", "they", "me", "us", "him", "them", "my", "your", "our", "their", "his", "her", "is", "are", "was", "were", "be", "been", "being", "am", "do", "does", "did", "have", "has", "had", "will", "would", "can", "could", "should", "shall", "may", "might", "must", "not", "no", "if", "when", "while", "because", "although", "though", "which", "who", "whom", "whose", "what", "where", "why", "how", "all", "some", "any", "each", "every", "more", "most", "very", "really", "just", "also", "only", "even", "still", "please", "maybe", "perhaps", "too",
+    ]
 
     /// Words that are never capitalised mid-sentence in German.
     static let germanFunctionWords: Set<String> = [

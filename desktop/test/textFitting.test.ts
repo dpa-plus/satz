@@ -44,3 +44,15 @@ test('an emoji counts as one character', () => {
 test('an empty transcript inserts nothing', () => {
   assert.equal(fit('   ', 'abc', { location: 1, length: 0 }), '')
 })
+
+test('English keeps names and I as they are', () => {
+  assert.equal(lowerFirstWordIfSafe('Alice Johnson will join us.', 'Tell the team that will join us.'), 'Alice Johnson will join us.')
+  assert.equal(lowerFirstWordIfSafe('I’m not sure.'), 'I’m not sure.')
+  assert.equal(lowerFirstWordIfSafe('I, for one, agree.'), 'I, for one, agree.')
+})
+
+test('a mid-sentence insert before a noun loses its full stop', () => {
+  const text = 'Ich habe gestern die Rechnung bezahlt.'
+  const at = text.indexOf('die') + 3
+  assert.equal(fit('Alte.', text, { location: at, length: 0 }), ' Alte')
+})
