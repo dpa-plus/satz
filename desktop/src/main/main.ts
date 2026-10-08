@@ -83,7 +83,9 @@ async function start() {
   const delivered: string[] = []
 
   // Whisper on this computer, for the provider "Lokal".
-  const local = new LocalModels(path.join(app.getPath('userData'), 'models', 'local'), log, () => tellWindow('local:changed'))
+  // On Windows not in the roaming profile: a gigabyte synced at every sign-in.
+  const modelsDir = process.platform === 'win32' && process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'satz') : app.getPath('userData')
+  const local = new LocalModels(path.join(modelsDir, 'models', 'local'), log, () => tellWindow('local:changed'))
   const localModel = () => store.prefs.models.local || providers.local.defaultModel
   /** What keeps the provider from working, in two or three words; null when it is ready. */
   function missing(): string | null {
@@ -98,7 +100,7 @@ async function start() {
     // In test mode silence once the files run out: a test never records the room.
     makeSource: (): AudioSource => (testMode && flag('--test-audio') !== undefined ? new FileSource(testAudio.shift() ?? null) : new MicRecorder(hub)),
     transcribe: samples => store.prefs.provider === 'local'
-      ? local.transcribe(samples, localModel(), store.transcriberSettings().vocabulary)
+      ? local.transcribe(samples, localModel(), store.transcriberSettings().vocabulary, store.spokenLanguage)
       : transcribe(store.transcriberSettings(), encodeWAV(samples), store.readKey() ?? ''),
     replacements: () => store.activeReplacements,
     missing,
@@ -282,7 +284,7 @@ async function start() {
     // A loaded model is a gigabyte of memory: there only while "Lokal" is chosen.
     if ('provider' in change || 'models' in change) {
       if (store.prefs.provider === 'local') local.warmUp(localModel())
-      else local.unload()
+      else void local.unload()
     }
     if (change.pausesMedia) mediaPause.prepare()
     refreshTray()

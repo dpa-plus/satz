@@ -259,7 +259,7 @@ final class LocalModels {
             let kit = kit(model)
             job = Task {
                 _ = await previous?.value
-                return try await Self.whisperTranscribe(samples, kit: try await kit.value, vocabulary: vocabulary)
+                return try await Self.whisperTranscribe(samples, kit: try await kit.value, vocabulary: vocabulary, spoken: language)
             }
         }
         queue = Task { _ = await job.result }
@@ -288,7 +288,7 @@ final class LocalModels {
         return Kit(try await WhisperKit(config))
     }
 
-    nonisolated private static func whisperTranscribe(_ samples: [Float], kit: Kit, vocabulary: [String]) async throws -> String {
+    nonisolated private static func whisperTranscribe(_ samples: [Float], kit: Kit, vocabulary: [String], spoken: Language) async throws -> String {
         // Whisper makes something up for silence ("Vielen Dank.").
         guard SpeechGate.hasSpeech(samples) else { return "" }
         let decode = { (prompt: [Int]?) async throws -> String in
@@ -300,6 +300,12 @@ final class LocalModels {
             var options = DecodingOptions(task: .transcribe, language: nil, temperature: 0, usePrefillPrompt: true,
                                           detectLanguage: true, skipSpecialTokens: true, withoutTimestamps: false,
                                           windowClipTime: 0)
+            // Under two seconds the language guess is a coin toss ("Ja." came
+            // back as "Yeah." on Windows/Linux): the one set in Settings.
+            if samples.count < 32_000 {
+                options.language = spoken.rawValue
+                options.detectLanguage = false
+            }
             options.promptTokens = prompt
             let results = try await kit.whisper.transcribe(audioArray: samples, decodeOptions: options)
             return results.map(\.text).joined(separator: " ")

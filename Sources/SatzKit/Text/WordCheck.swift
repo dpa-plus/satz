@@ -14,8 +14,11 @@ public enum WordCheck {
         let a = words(plain), b = words(prompted)
         // Nothing heard: a prompt alone can make Whisper repeat the word list.
         guard !a.isEmpty else { return (plain, false) }
-        if Double(b.count) < 0.85 * Double(a.count) || longestGap(in: a, against: b) >= 3 { return (plain, false) }
-        return (prompted, true)
+        let promptedLost = Double(b.count) < 0.85 * Double(a.count) || longestGap(in: a, against: b) >= 3
+        // Both can lose words (the plain text dropped a first sentence once):
+        // then the one that kept more.
+        if promptedLost, longestGap(in: b, against: a) >= 3, b.count > a.count { return (prompted, true) }
+        return promptedLost ? (plain, false) : (prompted, true)
     }
 
     static func words(_ text: String) -> [String] {
