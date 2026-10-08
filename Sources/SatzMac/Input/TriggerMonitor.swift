@@ -36,7 +36,8 @@ final class TriggerMonitor {
         self.onPress = onPress
         self.onRelease = onRelease
 
-        let types: [CGEventType] = [.flagsChanged, .keyDown, .otherMouseDown, .otherMouseUp]
+        // Clicks too: two quick ⌘-clicks with the right command key read as two taps.
+        let types: [CGEventType] = [.flagsChanged, .keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown, .otherMouseUp]
         let mask = types.reduce(CGEventMask(0)) { $0 | (1 << $1.rawValue) }
 
         guard let tap = CGEvent.tapCreate(
@@ -73,11 +74,12 @@ final class TriggerMonitor {
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
         case .flagsChanged:
             modifierChanged(event)
-        case .keyDown:
-            // ⌘C with the right command key is not a tap.
+        case .keyDown, .leftMouseDown, .rightMouseDown:
+            // ⌘C or a ⌘-click with the right command key is not a tap.
             interrupted = true
             lastTapUpAt = nil
         case .otherMouseDown, .otherMouseUp:
+            if type == .otherMouseDown { interrupted = true; lastTapUpAt = nil }
             if case .mouseButton(let number) = trigger,
                event.getIntegerValueField(.mouseEventButtonNumber) == Int64(number) {
                 fire(type == .otherMouseDown ? onPress : onRelease)

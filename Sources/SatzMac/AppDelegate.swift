@@ -169,6 +169,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             ))
         }
+        Paster.closeMenus = { [weak self] in self?.menuBar.close() }
+        session.menuIsOpen = { [weak self] in self?.menuBar.isOpen ?? false }
+        session.closeMenu = { [weak self] in self?.menuBar.close() }
         devControl?.open = { [weak self] which in
             switch which {
             case "settings": self?.show(.settings)

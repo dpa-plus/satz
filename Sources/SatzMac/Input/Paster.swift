@@ -44,24 +44,35 @@ enum Paster {
         }
         // Started while satz itself was in front (its settings, say): ⌘V
         // would go to satz, and with no field there the text went nowhere.
-        guard origin != nil else {
+        guard let origin else {
             return .clipboardOnly(de("Auf der Zwischenablage.", en: "On the clipboard."))
         }
+        guard !origin.isTerminated else {
+            return .clipboardOnly(de("Auf der Zwischenablage, die App wurde beendet.", en: "On the clipboard, the app was closed."))
+        }
 
-        // Whether ⌘V landed cannot be seen. While some app holds Secure Input
-        // the text stays on the clipboard too, so ⌘V by hand always works.
-        let secure = IsSecureEventInputEnabled()
-        if secure { Log.note("paste: Secure Input is on (held by \(secureInputHolder())), sent ⌘V anyway and kept the text on the clipboard") }
-        restoreFocus(to: origin)
+        if IsSecureEventInputEnabled() { Log.note("paste: Secure Input is on (held by \(secureInputHolder())), sending ⌘V anyway") }
+        // satz's own menu had the keyboard (the Insert button, or the menu
+        // left open at the end of a dictation): ⌘V went to the menu.
+        closeMenus()
+        waitUntil(timeout: 0.2) { NSApp.keyWindow == nil }
+        guard bringForward(origin) else {
+            return .clipboardOnly(de("Auf der Zwischenablage, die App ließ sich nicht aktivieren.", en: "On the clipboard, the app could not be brought forward."))
+        }
         sendCommandV()
-        if !keepsOnClipboard, !secure {
+        if !keepsOnClipboard {
+            // A second, not 400 ms: a busy app (Word, a remote desktop) took ⌘V
+            // after the old clipboard was back and pasted that instead.
             Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(400))
+                try? await Task.sleep(for: .seconds(1))
                 putBack(previous, on: pasteboard, ifStill: ours)
             }
         }
         return .pasted
     }
+
+    /// Set by the app: closes satz's menu bar panel.
+    static var closeMenus: @MainActor () -> Void = {}
 
     /// nil when a synthesised Command+V will actually arrive somewhere.
     static func whatIsBlockingPaste() -> String? {
@@ -89,12 +100,27 @@ enum Paster {
 
     // MARK: - Private
 
-    private static func restoreFocus(to origin: NSRunningApplication?) {
-        guard let origin, !origin.isActive, !origin.isTerminated else { return }
+    /// The app comes to the front before ⌘V, and ⌘V waits until it is
+    /// there: after a fixed 120 ms it sometimes went to whatever app was in
+    /// front instead. False if it never comes.
+    private static func bringForward(_ origin: NSRunningApplication) -> Bool {
+        let isFront = { NSWorkspace.shared.frontmostApplication?.processIdentifier == origin.processIdentifier }
+        if isFront() { return true }
         origin.activate()
-        // Activation is asynchronous. Without a beat the keystroke lands in the
-        // old application. This is a compromise, not a guarantee.
-        Thread.sleep(forTimeInterval: 0.12)
+        waitUntil(timeout: 1, isFront)
+        guard isFront() else { return false }
+        // Front is not yet the key window taking keys: a beat more.
+        waitUntil(timeout: 0.05) { false }
+        return true
+    }
+
+    /// Lets the main run loop go on (activation and window changes arrive on
+    /// it) until the condition holds or the time is up.
+    private static func waitUntil(timeout: TimeInterval, _ condition: () -> Bool) {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition(), Date() < deadline {
+            RunLoop.current.run(mode: .default, before: min(deadline, Date().addingTimeInterval(0.02)))
+        }
     }
 
     /// Everything on the clipboard, in every form it was offered in. Only the

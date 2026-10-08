@@ -131,6 +131,9 @@ final class Session {
     @ObservationIgnored private var finishWhenOpen = false
     /// The shortcut was pressed while the last dictation was being written.
     @ObservationIgnored private var startWhenDone = false
+    /// Set by the app, for Escape while the menu bar panel is open.
+    @ObservationIgnored var menuIsOpen: () -> Bool = { false }
+    @ObservationIgnored var closeMenu: () -> Void = {}
     @ObservationIgnored private var origin: NSRunningApplication?
     @ObservationIgnored private var escape: HotKey?
     @ObservationIgnored private var breathing: Task<Void, Never>?
@@ -244,7 +247,7 @@ final class Session {
     /// "Rückgängig", while the card still says "Verworfen".
     func undoDiscard() {
         guard phase == .discarded, let snapshot = discarded.take() else { return }
-        restore(snapshot)
+        restore(snapshot, keepingOrigin: true)
     }
 
     /// Whether a discarded dictation can come back now: not over one that is
@@ -254,7 +257,9 @@ final class Session {
     }
 
     /// Brings a discarded dictation back, paused, from the card or the menu.
-    func restore(_ snapshot: Discarded.Snapshot) {
+    /// - Parameter keepingOrigin: the card's own Undo goes back to where it
+    ///   was started; "Zurückholen" from the menu pastes where the user is now.
+    func restore(_ snapshot: Discarded.Snapshot, keepingOrigin: Bool = false) {
         guard canRestore else { return }
         closingLater?.cancel()
         stopEverything()
@@ -263,7 +268,7 @@ final class Session {
         segments = snapshot.segments
         activeID = snapshot.activeID
         nextID = snapshot.nextID
-        origin = snapshot.origin ?? Self.frontmostOtherApp()
+        origin = keepingOrigin ? snapshot.origin ?? Self.frontmostOtherApp() : Self.frontmostOtherApp() ?? snapshot.origin
         if let activeID, markerRange(activeID) == nil {
             self.activeID = newSegment(at: text.length)
         }
@@ -904,7 +909,10 @@ final class Session {
 
     private func holdEscape() {
         guard takesEscape, escape == nil else { return }
-        escape = try? HotKey(.escape, onPress: { [weak self] in self?.discard() })
+        // With satz's menu open, Escape closes the menu, as everywhere else.
+        escape = try? HotKey(.escape, onPress: { [weak self] in
+            if self?.menuIsOpen() == true { self?.closeMenu() } else { self?.discard() }
+        })
     }
 
     private func releaseEscape() {

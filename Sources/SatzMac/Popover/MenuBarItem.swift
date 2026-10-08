@@ -47,6 +47,8 @@ final class MenuBarItem {
         }
     }
 
+    var isOpen: Bool { panel?.isVisible == true }
+
     @objc func toggle() {
         if panel?.isVisible == true { close() } else { open() }
     }
