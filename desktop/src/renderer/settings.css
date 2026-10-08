@@ -17,7 +17,9 @@ button { background: none; color: var(--ink); border: 1px solid var(--control); 
 #local-row .percent { font-variant-numeric: tabular-nums; color: var(--secondary); min-width: 3.5em; text-align: right; }
 button.accent { background: var(--accent); color: var(--ground); border-color: var(--accent); font-weight: 600; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 14px; }
-.chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--control); border-radius: 14px; padding: 2px 4px 2px 10px; }
+/* Never wider than the box: a long word pushed its × out of reach. */
+.chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--control); border-radius: 14px; padding: 2px 4px 2px 10px; max-width: 100%; min-width: 0; overflow-wrap: anywhere; }
+.chip > button { flex-shrink: 0; }
 .chip button { border: none; padding: 0 6px; color: var(--secondary); }
 .chip code { font-family: ui-monospace, Consolas, monospace; }
 .error { color: var(--accent); font-size: 12.5px; padding: 0 14px 10px; }

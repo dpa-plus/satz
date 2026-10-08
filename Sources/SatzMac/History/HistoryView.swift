@@ -120,10 +120,12 @@ struct HistoryView: View {
     private static func dayTitle(_ date: Date, calendar: Calendar) -> String {
         if calendar.isDateInToday(date) { return de("Heute", en: "Today") }
         if calendar.isDateInYesterday(date) { return de("Gestern", en: "Yesterday") }
+        // In satz's language, not the Mac's: "Heute" over "Thursday" read oddly.
+        let locale = Locale(identifier: Language.current == .english ? "en_US" : "de_DE")
         if calendar.isDate(date, equalTo: .now, toGranularity: .year) {
-            return date.formatted(.dateTime.weekday(.wide).day().month(.wide))
+            return date.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(locale))
         }
-        return date.formatted(.dateTime.weekday(.wide).day().month(.wide).year())
+        return date.formatted(.dateTime.weekday(.wide).day().month(.wide).year().locale(locale))
     }
 
     private var keeping: String {

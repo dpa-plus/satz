@@ -29,6 +29,7 @@ document.addEventListener('keydown', event => {
 })
 satz.on('window:page', (next: Page) => show(next))
 // The settings page says when the language changed.
-document.addEventListener('satz-language', event => { language = (event as CustomEvent).detail; show(page) })
-satz.invoke('settings:get').then(info => { language = info.prefs.language; show(page) })
+// The document's language too, for screen readers.
+document.addEventListener('satz-language', event => { language = (event as CustomEvent).detail; document.documentElement.lang = language; show(page) })
+satz.invoke('settings:get').then(info => { language = info.prefs.language; document.documentElement.lang = language; show(page) })
 show(page)

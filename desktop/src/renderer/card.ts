@@ -40,6 +40,8 @@ function render() {
   const showsText = state.showsText && state.hasRealText && canHoldText
   const statusOnly = !showsText && !['idle', 'starting', 'listening', 'paused'].includes(k)
 
+  // For screen readers: the language the card speaks.
+  document.documentElement.lang = state.language
   card.classList.toggle('hidden', k === 'idle')
   card.classList.toggle('pill', !showsText && !statusOnly)
   card.classList.toggle('status', statusOnly)
@@ -48,7 +50,11 @@ function render() {
 
   // The text, with the placeholders in the accent colour, breathing.
   const joined = state.runs.map(r => r.text).join('')
-  if (joined !== lastText || true) {
+  // Drawn anew only when the text changed: every pulse of the placeholder
+  // also wiped a selection in the text.
+  if (joined === lastText) {
+    text.querySelectorAll('.marker').forEach(marker => marker.classList.toggle('dim', !state!.bright))
+  } else {
     const fresh = joined.length > lastText.length
     text.replaceChildren(...state.runs.map(run => {
       const span = document.createElement('span')
@@ -117,6 +123,8 @@ satz.on('card:state', (value: State) => { state = value; render() })
 let dragging = false
 const actions: [HTMLElement, string][] = [[mic, 'mic'], [eye, 'eye'], [close, 'close']]
 document.addEventListener('mouseup', event => {
+  // The main button only: a right-click on × threw the dictation away.
+  if (event.button !== 0) return
   if (dragging) {
     dragging = false
     satz.send('card:drag', 'end')

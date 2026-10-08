@@ -117,7 +117,8 @@ function render() {
     const id = modelField.value.trim()
     typingModel = false
     if (redraw) update({ models: { ...p.models, [p.provider]: id } })
-    else satz.invoke('settings:update', { models: { ...p.models, [p.provider]: id } }).then(next => { info.prefs = next })
+    // Quietly, but the Local row follows: it still showed the old model's state.
+    else satz.invoke('settings:update', { models: { ...p.models, [p.provider]: id } }).then(next => { info.prefs = next; if (p.provider === 'local') loadWhenFree() })
   }
   modelField.onchange = () => saveModel(false)
   modelField.onkeydown = event => {
@@ -206,7 +207,13 @@ function render() {
     add.onclick = () => {
       if (!spoken.value.trim() || !written.value) return
       focusNext = 'new-spoken'
-      update({ replacements: [...p.replacements, { id: `u${Date.now()}`, spoken: spoken.value.trim(), written: written.value, isOn: true }] })
+      // The same phrase again changes the rule there is: a second one stayed
+      // in the list while the first still won.
+      const said = spoken.value.trim()
+      const same = p.replacements.find(r => r.spoken.toLowerCase() === said.toLowerCase())
+      update({ replacements: same
+        ? p.replacements.map(r => (r === same ? { ...r, written: written.value, isOn: true } : r))
+        : [...p.replacements, { id: `u${Date.now()}`, spoken: said, written: written.value, isOn: true }] })
     }
     written.onkeydown = e => { if (e.key === 'Enter') add.click() }
     chips.append(spoken, written, add)
@@ -310,6 +317,7 @@ function localRow() {
 
 async function load() {
   info = await satz.invoke('settings:get')
+  document.documentElement.lang = info.prefs.language
   document.dispatchEvent(new CustomEvent('satz-language', { detail: info.prefs.language }))
   render()
 }

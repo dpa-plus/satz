@@ -53,7 +53,10 @@ function render() {
   if (info.entries.length > 0) {
     // Kept when the page is drawn again, with the cursor where it was.
     const search = el('input', { type: 'text', id: 'search', className: 'search', placeholder: t('Suchen', 'Search'), value: query })
-    search.oninput = () => { query = search.value; render() }
+    // Not while an input method is composing (Pinyin): redrawn then, the
+    // field kept the letters typed so far next to the character chosen.
+    search.oninput = event => { if ((event as InputEvent).isComposing) return; query = search.value; render() }
+    search.addEventListener('compositionend', () => { query = search.value; render() })
     search.onkeydown = e => { if (e.key === 'Escape' && query) { query = ''; render() } }
     children.push(search)
   }

@@ -634,7 +634,7 @@ private struct WordsBlock: View {
                 FlowLayout(spacing: 8) {
                     ForEach(preferences.words, id: \.self) { word in
                         HStack(spacing: 6) {
-                            Text(word).font(Typography.text(14))
+                            Text(word).font(Typography.text(14)).lineLimit(1).truncationMode(.middle)
                             Button { remove(word) } label: {
                                 Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
                             }
@@ -771,10 +771,10 @@ private struct ReplacementsBlock: View {
             FlowLayout(spacing: 8) {
                 ForEach(preferences.replacements.filter(\.isOn)) { rule in
                     HStack(spacing: 6) {
-                        Text(rule.spoken).font(Typography.text(14))
+                        Text(rule.spoken).font(Typography.text(14)).lineLimit(1).truncationMode(.middle)
                         Image(systemName: "arrow.right").font(.system(size: 9, weight: .bold))
                             .foregroundStyle(theme.inkSecondary)
-                        Text(Self.shown(rule.written)).font(Typography.mono(13, .medium))
+                        Text(Self.shown(rule.written)).font(Typography.mono(13, .medium)).lineLimit(1).truncationMode(.middle)
                         Button { remove(rule) } label: {
                             Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
                         }
@@ -872,7 +872,14 @@ private struct ReplacementsBlock: View {
             adding = false
             return
         }
-        preferences.replacements.append(Replacement(spoken: said, written: result))
+        // The same phrase again changes the rule there is: a second one stayed
+        // in the list while the first still won.
+        if let index = preferences.replacements.firstIndex(where: { $0.spoken.caseInsensitiveCompare(said) == .orderedSame }) {
+            preferences.replacements[index].written = result
+            preferences.replacements[index].isOn = true
+        } else {
+            preferences.replacements.append(Replacement(spoken: said, written: result))
+        }
         spoken = ""
         written = ""
         adding = false
