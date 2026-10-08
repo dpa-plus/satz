@@ -76,8 +76,16 @@ export async function deliver(text: string, keyTap: KeyTap, keepsOnClipboard: bo
       return { pasted: false, reason: de('Auf der Zwischenablage. Einfügen ging nicht.', 'On the clipboard. Pasting did not work.') + ` (${(error as Error).message})` }
     }
   }
-  // Handed back once the paste has been taken, and only while the transcript
-  // is still what is there: something copied in the meantime stays.
-  if (!keepsOnClipboard) setTimeout(async () => { if ((await clipboard.readText()) === text) await restore(previous) }, 600)
+  // Handed back once the paste has been taken, and only while the clipboard
+  // still holds just the transcript: something copied in the meantime stays,
+  // also the same words copied with their formatting. An empty clipboard
+  // becomes empty again.
+  if (!keepsOnClipboard) setTimeout(async () => {
+    const items = await clipboard.read().catch(() => [] as ClipboardItem[])
+    const onlyText = items.length === 1 && items[0].types.every(type => type.startsWith('text/plain'))
+    if (!onlyText || (await clipboard.readText()) !== text) return
+    if (previous.length > 0) await restore(previous)
+    else clipboard.clear()
+  }, 600)
   return { pasted }
 }

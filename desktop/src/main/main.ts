@@ -63,11 +63,18 @@ async function start() {
   // The microphone, recorded in the card window.
   let recordingRequest = 0
   const pending = new Map<number, { resolve: () => void; reject: (e: Error) => void }>()
+  // The card records. Asked before its page was ready, the request went
+  // nowhere and the microphone stayed "opening" until satz restarted.
+  let cardReady = () => {}
+  const cardIsReady = new Promise<void>(resolve => { cardReady = resolve })
+  ipcMain.once('card:ready', () => cardReady())
   const hub = new MicHub({
     start: () => new Promise((resolve, reject) => {
       const id = ++recordingRequest
-      pending.set(id, { resolve, reject })
-      card.send('rec:start', id)
+      // An answer that never comes fails the start instead of hanging it.
+      const timer = setTimeout(() => { if (pending.delete(id)) reject(new Error(de('Das Mikrofon antwortet nicht.', 'The microphone does not answer.'))) }, 15_000)
+      pending.set(id, { resolve: () => { clearTimeout(timer); resolve() }, reject: error => { clearTimeout(timer); reject(error) } })
+      void cardIsReady.then(() => card.send('rec:start', id))
     }),
     stop: () => card.send('rec:stop', null),
   })
@@ -329,12 +336,18 @@ async function start() {
       : de('Bitte das Modell in den Einstellungen laden.', 'Please download the model in Settings.') }).show()
   }
 
+  // Started cold by a desktop shortcut ("satz --toggle") or the app menu
+  // ("satz --settings"): the same as when satz was already running.
+  if (args.includes('--toggle')) void cardIsReady.then(() => session.toggle())
+  if (args.includes('--settings')) openSettings()
+
   if (devPort) startDevControl(Number(devPort), session, card, delivered, store, () => local.download(localModel()), () => local.state(localModel()))
 }
 
 /** Windows: the registry's Run key through Electron. Linux: an autostart entry. */
 const startAtLogin = {
-  desktopFile: () => path.join(os.homedir(), '.config', 'autostart', 'satz.desktop'),
+  // Where the desktop session looks: XDG_CONFIG_HOME, else ~/.config.
+  desktopFile: () => path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'autostart', 'satz.desktop'),
   get(): boolean {
     if (process.platform === 'linux') return fs.existsSync(this.desktopFile())
     return app.getLoginItemSettings().openAtLogin
