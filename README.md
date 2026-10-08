@@ -125,12 +125,18 @@ The model menu is the provider's **live list**, so new models show up without a 
 
 A few models OpenRouter lists are left out because they fail with dictation (no German, speaker tags in the text, refused requests). "Other model" takes any model id by hand. Each provider keeps its own key and model, so you can switch back and forth.
 
-**On your own computer.** Choose *Local* and press *Download* once:
+**On your own computer.** Choose *Local* and Settings lists the models you can run. Each row shows the download size, how many words the model gets wrong in a published benchmark, and how long it takes for 10 s of speech. satz measures that on your computer right after the download, with a 10 s public-domain audiobook clip; before that, the Mac shows an estimate from Argmax's measurements on the nearest Apple chip. Pick one you like, press *Download*, then *Use*:
 
 | | Mac | Windows and Linux |
 |---|---|---|
-| Whisper Large v3 Turbo | 632 MB, via WhisperKit on the Neural Engine. About 1 s for a short dictation. | 980 MB, on the processor. About 1 to 4 s, depending on the computer. |
+| Whisper Large v3 Turbo | 646 MB, via WhisperKit on the Neural Engine. The default. On an M1, a 627 MB build that runs there. | 981 MB, on the processor. The default. |
+| Whisper Large v3 Turbo, full size | 1.6 GB, a little more accurate. | |
+| Whisper Large v3 | | 1.4 GB, the most accurate, and slow. |
+| Whisper Small | 486 MB, mostly for English. | 328 MB |
+| Whisper Base | | 149 MB, the fastest, and rough. |
 | Apple's speech recognition | Built into macOS 26; macOS may fetch its language pack once. Instant, but hears only the language set in *Spoken in* and barely uses your vocabulary. | |
+
+On the Mac the error rates are Argmax's, for the exact builds satz downloads (English, and German where they measured it); on Windows and Linux, German on FLEURS for the original models. Both are fetched once a day, with the numbers satz ships as a fallback. Click a measured speed to measure again.
 
 Whisper tells German from English by itself. The first time after the download, the Mac prepares the model for its chip, which takes a few minutes, once. Your vocabulary is given to Whisper as a hint, but only when that changes no more than a word here and there: with a hint, Whisper sometimes left out a sentence in another language or repeated an earlier one, so satz compares the text word by word with one made without the hint and keeps that one if words went missing or appeared. Silence is never sent to Whisper, which makes something up for it. A sentence in another language in the middle of a long recording can still get lost locally; the cloud models handle that better. *Remove* puts the model in the Trash.
 
