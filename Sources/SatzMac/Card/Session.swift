@@ -129,6 +129,9 @@ final class Session {
     @ObservationIgnored private var startToken = 0
     /// The shortcut was pressed to finish while the microphone was still opening.
     @ObservationIgnored private var finishWhenOpen = false
+    /// Where the keyboard was in `origin` when the dictation started.
+    @ObservationIgnored private var originWindow: AXUIElement?
+    @ObservationIgnored private var originField: AXUIElement?
     /// The shortcut was pressed while the last dictation was being written.
     @ObservationIgnored private var startWhenDone = false
     /// Set by the app, for Escape while the menu bar panel is open.
@@ -269,6 +272,7 @@ final class Session {
         activeID = snapshot.activeID
         nextID = snapshot.nextID
         origin = keepingOrigin ? snapshot.origin ?? Self.frontmostOtherApp() : Self.frontmostOtherApp() ?? snapshot.origin
+        (originWindow, originField) = keepingOrigin ? (nil, nil) : FocusedField.capture(in: origin)
         if let activeID, markerRange(activeID) == nil {
             self.activeID = newSegment(at: text.length)
         }
@@ -331,6 +335,7 @@ final class Session {
         stopEverything()
         reset()
         origin = Self.frontmostOtherApp()
+        (originWindow, originField) = FocusedField.capture(in: origin)
         // Checked before recording: finding out there is no key, or no model,
         // once you have finished speaking loses the whole message.
         if let missing = missingForProvider() {
@@ -497,6 +502,7 @@ final class Session {
         // Spaces only: a line break at either end was said ("neue Zeile"),
         // and a list dictated item by item needs it.
         let output = plainText().trimmingCharacters(in: .whitespaces)
+        let window = originWindow, field = originField
         guard !output.isEmpty else {
             let seconds = Double(segments.values.map(\.audio.count).reduce(0, +)) / 16_000
             Log.note(String(format: "nothing heard in %.1f s of audio", seconds))
@@ -517,7 +523,7 @@ final class Session {
             return
         }
         guard cardHadKeyboard else {
-            paste(output, into: origin)
+            paste(output, into: origin, window: window, field: field)
             return
         }
         // The keyboard has to get back to the other app before ⌘V, or the
@@ -525,15 +531,15 @@ final class Session {
         origin?.activate()
         Task {
             try? await Task.sleep(for: .milliseconds(150))
-            paste(output, into: origin)
+            paste(output, into: origin, window: window, field: field)
         }
     }
 
-    private func paste(_ output: String, into origin: NSRunningApplication?) {
+    private func paste(_ output: String, into origin: NSRunningApplication?, window: AXUIElement?, field: AXUIElement?) {
         // Which app is in front at the moment of ⌘V tells whether a paste
         // that did not arrive went to the wrong place or nowhere. Never the text.
         let front = NSWorkspace.shared.frontmostApplication?.localizedName ?? "?"
-        let outcome = Paster.deliver(output, into: origin, keepsOnClipboard: preferences.keepsOnClipboard)
+        let outcome = Paster.deliver(output, into: origin, window: window, field: field, keepsOnClipboard: preferences.keepsOnClipboard)
         Log.note("paste: \(outcome == .pasted ? "sent ⌘V" : "clipboard only") into \(origin?.localizedName ?? "?"), front was \(front), \(output.count) characters")
         history.add(output, app: origin?.localizedName, pasted: outcome == .pasted)
         if case .clipboardOnly(let reason) = outcome {
@@ -888,6 +894,8 @@ final class Session {
         stopEverything()
         reset()
         origin = nil
+        originWindow = nil
+        originField = nil
         phase = .idle
         onClose()
     }

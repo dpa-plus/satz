@@ -248,6 +248,24 @@ enum FocusedField {
         return AXUIElementCopyAttributeValue(field, "AXEditableAncestor" as CFString, &ancestor) == .success && ancestor != nil
     }
 
+    /// The window and the element that have the keyboard in `app` now, so a
+    /// paste can go back to them: switched to another window of the same app
+    /// meanwhile, the text landed there. nil where the app does not say.
+    static func capture(in app: NSRunningApplication?) -> (window: AXUIElement?, field: AXUIElement?) {
+        guard let app else { return (nil, nil) }
+        let target = AXUIElementCreateApplication(app.processIdentifier)
+        AXUIElementSetMessagingTimeout(target, 0.25)
+        var window: CFTypeRef?
+        var field: CFTypeRef?
+        AXUIElementCopyAttributeValue(target, kAXFocusedWindowAttribute as CFString, &window)
+        AXUIElementCopyAttributeValue(target, kAXFocusedUIElementAttribute as CFString, &field)
+        let element = { (value: CFTypeRef?) -> AXUIElement? in
+            guard let value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+            return (value as! AXUIElement)
+        }
+        return (element(window), element(field))
+    }
+
     /// In AppKit screen coordinates. nil when it cannot be known, or when
     /// what has focus is too big to be a text field (some apps report their
     /// whole web view), which would push the card off the screen.

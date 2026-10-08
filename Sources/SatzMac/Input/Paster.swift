@@ -29,7 +29,11 @@ enum Paster {
     ///     rather than wherever happens to be frontmost now.
     ///   - keepsOnClipboard: the transcript stays on the clipboard afterwards,
     ///     instead of what was copied before.
-    static func deliver(_ text: String, into origin: NSRunningApplication?, keepsOnClipboard: Bool = false) -> Outcome {
+    ///   - window, field: where the keyboard was in `origin` when the user
+    ///     started; brought back first if the user went to another window of
+    ///     the same app meanwhile.
+    static func deliver(_ text: String, into origin: NSRunningApplication?, window: AXUIElement? = nil, field: AXUIElement? = nil,
+                        keepsOnClipboard: Bool = false) -> Outcome {
         guard !text.isEmpty else { return .pasted }
 
         let pasteboard = NSPasteboard.general
@@ -63,6 +67,9 @@ enum Paster {
         waitUntil(timeout: 0.2) { NSApp.keyWindow == nil }
         guard bringForward(origin) else {
             return .clipboardOnly(de("Auf der Zwischenablage, die App ließ sich nicht aktivieren.", en: "On the clipboard, the app could not be brought forward."))
+        }
+        guard bringBack(window: window, field: field, in: origin) else {
+            return .clipboardOnly(de("Auf der Zwischenablage, das Fenster ist nicht mehr da.", en: "On the clipboard, the window is gone."))
         }
         sendCommandV()
         if !keepsOnClipboard {
@@ -122,6 +129,39 @@ enum Paster {
         guard isFront() else { return false }
         // Front is not yet the key window taking keys: a beat more.
         waitUntil(timeout: 0.05) { false }
+        return true
+    }
+
+    /// The window and field the dictation started in, if the user went to
+    /// another window of the same app meanwhile. False only when that window
+    /// is gone or will not come forward; apps that do not say where their
+    /// keyboard is are left as they are.
+    private static func bringBack(window: AXUIElement?, field: AXUIElement?, in origin: NSRunningApplication) -> Bool {
+        guard let window else { return true }
+        AXUIElementSetMessagingTimeout(window, 0.25)
+        let app = AXUIElementCreateApplication(origin.processIdentifier)
+        AXUIElementSetMessagingTimeout(app, 0.25)
+        let focusedWindow = { () -> AXUIElement? in
+            var value: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &value) == .success,
+                  let value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+            return (value as! AXUIElement)
+        }
+        guard let now = focusedWindow() else { return true }
+        if CFEqual(now, window) { return true }
+        // Still there? A closed window answers no more.
+        var role: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(window, kAXRoleAttribute as CFString, &role) == .success else { return false }
+        AXUIElementPerformAction(window, kAXRaiseAction as CFString)
+        AXUIElementSetAttributeValue(window, kAXMainAttribute as CFString, kCFBooleanTrue)
+        AXUIElementSetAttributeValue(app, kAXFocusedWindowAttribute as CFString, window)
+        waitUntil(timeout: 0.5) { focusedWindow().map { CFEqual($0, window) } ?? false }
+        guard focusedWindow().map({ CFEqual($0, window) }) ?? false else { return false }
+        if let field {
+            AXUIElementSetMessagingTimeout(field, 0.25)
+            AXUIElementSetAttributeValue(field, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+            waitUntil(timeout: 0.05) { false }
+        }
         return true
     }
 
