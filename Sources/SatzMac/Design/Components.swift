@@ -88,30 +88,33 @@ struct AccentButtonStyle: ButtonStyle {
     var height: CGFloat = 34
     /// For an icon on its own: as wide as it is tall.
     var square = false
+    /// The size of `.outlineCompact`, for a row with several actions.
+    var compact = false
 
     func makeBody(configuration: Configuration) -> some View {
-        AccentButton(configuration: configuration, height: height, square: square)
+        AccentButton(configuration: configuration, height: compact ? 26 : height, square: square, compact: compact)
     }
 
     private struct AccentButton: View {
         let configuration: ButtonStyleConfiguration
         let height: CGFloat
         let square: Bool
+        let compact: Bool
         @Environment(\.theme) private var theme
         @Environment(\.isEnabled) private var isEnabled
 
         var body: some View {
             configuration.label
-                .font(Typography.text(15, .semibold))
+                .font(Typography.text(compact ? 13 : 15, .semibold))
                 .foregroundStyle(theme.accentLabel)
-                .padding(.horizontal, square ? 0 : 16)
+                .padding(.horizontal, square ? 0 : compact ? 10 : 16)
                 .frame(minWidth: height, minHeight: height)
                 .frame(width: square ? height : nil)
                 .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    RoundedRectangle(cornerRadius: compact ? 8 : 10, style: .continuous)
                         .fill(theme.accent)
                         // On the shape, not the label, or the label gets a ghost.
-                        .shadow(color: theme.accentShadow, radius: 0, y: configuration.isPressed ? 1 : 3)
+                        .shadow(color: theme.accentShadow, radius: 0, y: configuration.isPressed ? 1 : compact ? 2 : 3)
                 )
                 .offset(y: configuration.isPressed ? 2 : 0)
                 .opacity(isEnabled ? 1 : 0.45)
@@ -173,6 +176,7 @@ struct IconButtonStyle: ButtonStyle {
 
 extension ButtonStyle where Self == AccentButtonStyle {
     static var accent: AccentButtonStyle { AccentButtonStyle() }
+    static var accentCompact: AccentButtonStyle { AccentButtonStyle(compact: true) }
 }
 
 extension ButtonStyle where Self == OutlineButtonStyle {
@@ -221,6 +225,42 @@ struct Segmented<Value: Hashable>: View {
         }
         .padding(3)
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(theme.hairline))
+    }
+}
+
+/// A thin bar for a download: drawn rather than AppKit's, so a snapshot
+/// shows it too, in the theme's colours.
+struct ProgressBar: View {
+    let fraction: Double
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        GeometryReader { space in
+            ZStack(alignment: .leading) {
+                Capsule().fill(theme.hairline)
+                Capsule().fill(theme.accent).frame(width: max(4, space.size.width * min(1, max(0, fraction))))
+            }
+        }
+        .frame(height: 5)
+    }
+}
+
+/// The small spinner, with a still ring in its place for snapshots, which
+/// cannot draw AppKit's.
+struct Spinner: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.isSnapshot) private var isSnapshot
+
+    var body: some View {
+        if isSnapshot {
+            Circle().trim(from: 0, to: 0.72)
+                .stroke(theme.inkSecondary, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .frame(width: 12, height: 12)
+                .padding(2)
+        } else {
+            ProgressView().controlSize(.small)
+        }
     }
 }
 

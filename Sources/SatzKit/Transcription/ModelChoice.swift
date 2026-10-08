@@ -110,30 +110,32 @@ public enum ModelCatalog {
 
     /// Apple's speech recognition, built into macOS 26.
     public static let apple = "apple"
-    /// Whisper Large v3 Turbo for WhisperKit, compressed to 632 MB for the
-    /// Neural Engine. The id is WhisperKit's name for it, so any other
-    /// WhisperKit model can be typed in under "Other model".
+    /// Whisper Large v3 Turbo for WhisperKit, compressed for the Neural
+    /// Engine. The id is WhisperKit's name for it, as for every local model
+    /// (see `LocalCatalog`).
     public static let whisperTurbo = "openai_whisper-large-v3-v20240930_turbo_632MB"
 
-    /// What runs on this Mac: Apple's only where macOS has it.
+    /// What runs on this Mac: Apple's only where macOS has it. Every build
+    /// satz offers, for the model-id lookups; which of them suits this Mac
+    /// is `LocalCatalog.offered`'s call, made where the chip is known.
     static var localModels: [String] {
-        if #available(macOS 26, *) { return [whisperTurbo, apple] }
-        return [whisperTurbo]
+        if #available(macOS 26, *) { return LocalCatalog.all.map(\.id) }
+        return LocalCatalog.whisperIDs
     }
 
-    /// Free to run; no error rate, because AA measured neither these builds.
+    /// Free to run; no error rate here, because AA measured none of these
+    /// builds (Argmax's numbers live in `LocalBenchmarks`).
     static var localKnown: [String: Known] {
-        [
-            apple: Known(name: de("Spracherkennung", en: "Speech recognition"), maker: "Apple", measured: 0),
-            whisperTurbo: Known(name: "Whisper Large v3 Turbo", maker: "OpenAI", measured: 0),
-        ]
+        Dictionary(uniqueKeysWithValues: LocalCatalog.all.map {
+            ($0.id, Known(name: $0.name, maker: $0.isApple ? "Apple" : "OpenAI", measured: 0))
+        })
     }
 
-    /// "632 MB" from a WhisperKit name ending in "_632MB"; nil for Apple's
-    /// and for a name without a size.
+    /// "646 MB": what the download weighs, from the files themselves (the
+    /// "632MB" in a build's name was 13 MB short). nil for Apple's and for
+    /// an id satz does not know.
     public static func downloadSize(of id: String) -> String? {
-        guard let last = id.split(separator: "_").last, last.hasSuffix("MB"), Int(last.dropLast(2)) != nil else { return nil }
-        return "\(last.dropLast(2)) MB"
+        LocalCatalog.model(id)?.bytes.map { LocalFacts.size($0) }
     }
 
     /// Where each provider lists its models. OpenRouter's list is public.

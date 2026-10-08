@@ -11,13 +11,17 @@ import SatzKit
 final class ModelStore {
 
     private(set) var lists: [Provider: [ModelChoice]] = [:]
+    /// What Argmax measured for the local models: errors, and speed per chip.
+    private(set) var benchmarks: LocalBenchmarks = .bundled
     @ObservationIgnored private var fetching: Set<Provider> = []
+    @ObservationIgnored private var fetchingBenchmarks = false
     @ObservationIgnored private let folder: URL?
 
     /// nil keeps everything in memory, for snapshots and tests.
     init(folder: URL? = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("satz/models", isDirectory: true)) {
         self.folder = folder
+        if let kept = keptBenchmarks() { benchmarks = kept.benchmarks }
     }
 
     func models(for provider: Provider) -> [ModelChoice] {
@@ -46,7 +50,41 @@ final class ModelStore {
         }
     }
 
+    /// Argmax's numbers again when the kept ones are older than a day; the
+    /// ones satz ships with until then, and whenever they cannot be read.
+    func refreshBenchmarks() {
+        guard folder != nil, !fetchingBenchmarks else { return }
+        if let kept = keptBenchmarks(), Date().timeIntervalSince(kept.fetched) < 24 * 3600 { return }
+        fetchingBenchmarks = true
+        Task {
+            defer { fetchingBenchmarks = false }
+            do {
+                let fresh = try await LocalBenchmarks.fetch()
+                benchmarks = fresh
+                if let folder, let data = try? JSONEncoder().encode(KeptBenchmarks(fetched: Date(), benchmarks: fresh)) {
+                    try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                    try? data.write(to: folder.appendingPathComponent(Self.benchmarksFile))
+                }
+                Log.note("models: local benchmarks from Argmax, \(fresh.speed.values.map(\.count).reduce(0, +)) chip speeds")
+            } catch {
+                Log.note("models: local benchmarks not fetched (\(error.localizedDescription)), keeping what there is")
+            }
+        }
+    }
+
     // MARK: - On disk
+
+    private static let benchmarksFile = "local-benchmarks.json"
+
+    private struct KeptBenchmarks: Codable {
+        let fetched: Date
+        let benchmarks: LocalBenchmarks
+    }
+
+    private func keptBenchmarks() -> KeptBenchmarks? {
+        guard let file = folder?.appendingPathComponent(Self.benchmarksFile), let data = try? Data(contentsOf: file) else { return nil }
+        return try? JSONDecoder().decode(KeptBenchmarks.self, from: data)
+    }
 
     private struct Kept: Codable {
         let fetched: Date

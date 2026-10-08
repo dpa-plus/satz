@@ -14,7 +14,8 @@ import WhisperKit
 final class LocalModels {
 
     /// One per app: a loaded model is large, and there is one microphone.
-    static let shared = LocalModels()
+    /// Replaced only by snapshots, with a stand-in in fixed states.
+    static var shared = LocalModels()
 
     enum State: Equatable {
         /// Needs a download first.
@@ -50,11 +51,49 @@ final class LocalModels {
     }
 
     private var states: [String: State] = [:]
+    /// How fast each model ran on this Mac, by id; kept in the preferences.
+    private(set) var speeds: [String: LocalSpeed] = [:]
+    /// Models being timed right now.
+    private(set) var measuring: Set<String> = []
+    /// The builds Argmax supports on this chip: WhisperKit's own copy of the
+    /// list at first, then the one in Argmax's repository, asked once a run.
+    private(set) var supported: Set<String> = Set(WhisperKit.recommendedModels().supported)
+    @ObservationIgnored private var askedForSupport = false
 
     /// The Whisper model in memory. Loading it takes seconds, so it stays.
     @ObservationIgnored private var loaded: (variant: String, kit: Task<Kit, any Error>)?
+    /// A model loaded beside the one in use, only to prepare and time it
+    /// after its download: the one in use stays loaded meanwhile. Taken over
+    /// as `loaded` if it is chosen before it is let go.
+    @ObservationIgnored private var spare: (variant: String, kit: Task<Kit, any Error>)?
     /// One transcription at a time: WhisperKit is not made for two at once.
+    /// Speed tests queue here too, so one never runs beside a dictation.
     @ObservationIgnored private var queue: Task<Void, Never>?
+    /// Speed tests, one after another, each with the load it needs: two at
+    /// once slowed each other's numbers down.
+    @ObservationIgnored private var tests: Task<Void, Never>?
+    /// The test using each model now. A model is let go only after it:
+    /// freed under a test, WhisperKit loaded it again inside the timed run,
+    /// and the number came out nearly twice as slow.
+    @ObservationIgnored private var inTest: [String: Task<Void, Never>] = [:]
+    /// Loads under way, and how many ever started: a timed run with a load
+    /// beside it shared the chip with it, so it does not count.
+    @ObservationIgnored private var loadsRunning = 0
+    @ObservationIgnored private var loadsStarted = 0
+
+    /// Whether a model's files are complete on this Mac. A stand-in answers
+    /// for snapshots.
+    @ObservationIgnored var isOnMac: (String) -> Bool = { LocalModels.folder(of: $0) != nil }
+    /// nil for a stand-in, whose speeds must not reach the preferences.
+    @ObservationIgnored private let defaults: UserDefaults?
+
+    init(defaults: UserDefaults? = .standard) {
+        self.defaults = defaults
+        if let data = defaults?.data(forKey: Self.speedsKey),
+           let kept = try? JSONDecoder().decode([String: LocalSpeed].self, from: data) {
+            speeds = kept
+        }
+    }
 
     /// Where WhisperKit keeps models and tokenizers.
     nonisolated static let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -76,7 +115,7 @@ final class LocalModels {
             return states[Self.appleKey(language)] ?? .ready
         }
         if let state = states[model] { return state }
-        return Self.folder(of: model) != nil ? .ready : .missing
+        return isOnMac(model) ? .ready : .missing
     }
 
     func isReady(_ model: String, language: Language) -> Bool {
@@ -88,14 +127,39 @@ final class LocalModels {
     func isInstalled(_ model: String, language: Language) -> Bool {
         switch state(of: model, language: language) {
         case .ready: true
-        case .preparing: model == ModelCatalog.apple || Self.folder(of: model) != nil
+        case .preparing: model == ModelCatalog.apple || isOnMac(model)
         default: false
         }
     }
 
-    /// Whether the model is still the one chosen, asked when a download ends:
-    /// set by the app, so a model nobody picks any more is not loaded.
+    /// Download, then use: a finished download becomes the model in use only
+    /// when the one in use is not on this Mac. One that is being prepared
+    /// is: its files are complete, it only waits for macOS. A second
+    /// download finishing in those minutes took its place, and unloaded it
+    /// halfway through its first load.
+    func takesOver(_ downloaded: String, inUse: String, language: Language) -> Bool {
+        guard downloaded != inUse else { return false }
+        switch state(of: inUse, language: language) {
+        case .ready, .preparing: return false
+        default: return true
+        }
+    }
+
+    /// Whether the model is the one in use, asked when a download ends: set
+    /// by the app, so a model nobody picks is loaded only beside it.
     var isWanted: (String) -> Bool = { _ in true }
+    /// A download's files are complete: the app makes it the model in use
+    /// when `takesOver` says so, so Lokal works at once.
+    @ObservationIgnored var onDownloaded: (String) -> Void = { _ in }
+    /// The word list as dictations send it, for timing a model the same way.
+    @ObservationIgnored var vocabulary: () -> [String] = { [] }
+    /// True while someone dictates: a speed test waits for it to end.
+    @ObservationIgnored var isDictating: () -> Bool = { false }
+
+    /// Only one download at a time: two at once halve each other's speed.
+    var isDownloading: Bool {
+        states.values.contains { if case .downloading = $0 { true } else { false } }
+    }
 
     /// Asks macOS whether Apple's model for the spoken language is installed.
     func check(_ model: String, language: Language) async {
@@ -120,34 +184,60 @@ final class LocalModels {
         states[model] = .downloading(0)
         Log.note("local: downloading \(model)")
         Task {
+            let folder: URL
             do {
-                let folder = try await WhisperKit.download(variant: model, downloadBase: Self.base) { progress in
+                folder = try await WhisperKit.download(variant: model, downloadBase: Self.base) { progress in
                     let fraction = progress.fractionCompleted
                     Task { @MainActor in self.progress(model, fraction) }
                 }
-                // Loaded once now, so the first dictation does not wait while
-                // macOS builds the model for this chip, and so the tokenizer,
-                // fetched at the first load, is there before the model counts
-                // as on this Mac (an offline first load failed otherwise).
-                states[model] = .preparing
-                if loaded?.variant == model { unload() }
-                let started = Date()
-                _ = try await kit(model, folder: folder).value
-                try folder.path.write(to: Self.marker(model), atomically: true, encoding: .utf8)
-                Log.note(String(format: "local: %@ ready after %.0f s", model, Date().timeIntervalSince(started)))
-                states[model] = .ready
-                if !isWanted(model) { unload() }
             } catch {
-                Log.note("local: \(model) failed: \(error.localizedDescription)")
-                states[model] = .failed(error.localizedDescription)
+                failed(model, error)
+                return
+            }
+            onDownloaded(model)
+            // Loaded once now, so the first dictation does not wait while
+            // macOS builds the model for this chip, and so the tokenizer,
+            // fetched at the first load, is there before the model counts
+            // as on this Mac (an offline first load failed otherwise).
+            // Then timed while it is in memory anyway: both after any test
+            // already running, and without letting the model go in between.
+            states[model] = .preparing
+            await inLane(model) {
+                let started = Date()
+                let kit: Task<Kit, any Error>
+                // A model not in use is loaded beside the one that is.
+                if self.isWanted(model) {
+                    if self.loaded?.variant == model { self.unload() }
+                    kit = self.kit(model, folder: folder)
+                } else {
+                    kit = self.loadSpare(model, folder: folder)
+                }
+                do {
+                    _ = try await kit.value
+                    try folder.path.write(to: Self.marker(model), atomically: true, encoding: .utf8)
+                } catch {
+                    self.failed(model, error)
+                    self.releaseSpare(model)
+                    return
+                }
+                Self.prepared.insert(Self.preparedKey(model))
+                Log.note(String(format: "local: %@ ready after %.0f s", model, Date().timeIntervalSince(started)))
+                self.states[model] = .ready
+                await self.time(model, language: language, kit: kit)
             }
         }
+    }
+
+    private func failed(_ model: String, _ error: any Error) {
+        Log.note("local: \(model) failed: \(error.localizedDescription)")
+        states[model] = .failed(error.localizedDescription)
     }
 
     /// Into the Trash, like everything satz removes.
     func remove(_ model: String) {
         guard model != ModelCatalog.apple, let folder = Self.folder(of: model) else { return }
         if loaded?.variant == model { unload() }
+        releaseSpare(model)
         try? FileManager.default.trashItem(at: folder, resultingItemURL: nil)
         try? FileManager.default.removeItem(at: Self.marker(model))
         states[model] = .missing
@@ -165,6 +255,7 @@ final class LocalModels {
                     Task { @MainActor in self.progress(key, fraction) }
                 }
                 states[key] = .ready
+                onDownloaded(ModelCatalog.apple)
             } catch {
                 states[key] = .failed(error.localizedDescription)
             }
@@ -178,7 +269,7 @@ final class LocalModels {
     private func isBusy(_ key: String) -> Bool {
         switch states[key] {
         case .downloading, .preparing: true
-        default: false
+        default: measuring.contains(key)
         }
     }
 
@@ -195,41 +286,84 @@ final class LocalModels {
     func unload() {
         guard let loaded else { return }
         self.loaded = nil
-        let task = loaded.kit
-        // Only once the transcriptions already queued are done: freed under
-        // one, it failed with "Fehler".
-        let pending = queue
+        free(loaded.kit, of: loaded.variant, note: "local: \(loaded.variant) unloaded")
+    }
+
+    /// Frees a model once nothing needs it any more: not the transcriptions
+    /// queued now (freed under one, it failed with "Fehler"), and not a speed
+    /// test using it.
+    private func free(_ kit: Task<Kit, any Error>, of variant: String, note: String) {
+        let pending = queue, test = inTest[variant]
         Task.detached {
             _ = await pending?.value
-            if let kit = try? await task.value { await kit.whisper.unloadModels() }
+            _ = await test?.value
+            if let kit = try? await kit.value { await kit.whisper.unloadModels() }
+            Log.note(note)
+        }
+    }
+
+    /// Every load goes through here, so a speed test knows when one runs.
+    private func startLoad(_ variant: String, folder: URL?) -> Task<Kit, any Error> {
+        loadsStarted += 1
+        loadsRunning += 1
+        return Task {
+            defer { loadsRunning -= 1 }
+            return try await Self.load(variant, folder: folder)
         }
     }
 
     private func kit(_ variant: String, folder: URL? = nil) -> Task<Kit, any Error> {
         if let loaded, loaded.variant == variant { return loaded.kit }
         unload()
-        let task = Task<Kit, any Error> { try await Self.load(variant, folder: folder) }
+        // Chosen while it was loaded for its speed test: kept, not loaded twice.
+        if let spare, spare.variant == variant {
+            self.spare = nil
+            loaded = spare
+            return spare.kit
+        }
+        let task = startLoad(variant, folder: folder)
         loaded = (variant, task)
         let started = Date()
         // macOS builds the model for this chip once per app and version:
         // minutes, during which a dictation would seem to hang. Said instead.
-        let firstTime = !Self.prepared.contains(Self.preparedKey(variant))
-        if firstTime, states[variant] == nil { states[variant] = .preparing }
+        // Only cleared here if set here: a download sets and clears its own.
+        let saysPreparing = !Self.prepared.contains(Self.preparedKey(variant)) && states[variant] == nil
+        if saysPreparing { states[variant] = .preparing }
         Task {
             switch await task.result {
             case .success:
                 Log.note(String(format: "local: %@ loaded in %.1f s", variant, Date().timeIntervalSince(started)))
                 Self.prepared.insert(Self.preparedKey(variant))
-                if states[variant] == .preparing, firstTime { states[variant] = nil }
             case .failure(let error):
                 // A failed load is tried again by the next dictation.
                 Log.note("local: loading \(variant) failed: \(error.localizedDescription)")
                 if loaded?.kit == task { loaded = nil }
-                if states[variant] == .preparing, firstTime { states[variant] = nil }
             }
+            if saysPreparing, states[variant] == .preparing { states[variant] = nil }
         }
         return task
     }
+
+    /// Loads a model beside the one in use. Only from the test lane, so there
+    /// is never more than one.
+    private func loadSpare(_ variant: String, folder: URL? = nil) -> Task<Kit, any Error> {
+        if let loaded, loaded.variant == variant { return loaded.kit }
+        if let spare, spare.variant == variant { return spare.kit }
+        releaseSpare()
+        let task = startLoad(variant, folder: folder)
+        spare = (variant, task)
+        return task
+    }
+
+    /// Lets the spare go once nothing needs it; only `variant`'s, if given.
+    private func releaseSpare(_ variant: String? = nil) {
+        guard let spare, variant == nil || spare.variant == variant else { return }
+        self.spare = nil
+        free(spare.kit, of: spare.variant, note: "local: \(spare.variant) let go after its speed test")
+    }
+
+    /// What is in memory, for the test mode's state file.
+    var inMemory: (loaded: String?, spare: String?) { (loaded?.variant, spare?.variant) }
 
     /// Models this app, in this version and on this macOS build, has loaded
     /// before: CoreML's compiled copy goes with a macOS update too.
@@ -246,24 +380,134 @@ final class LocalModels {
 
     /// - Parameter samples: 16 kHz mono, as recorded.
     func transcribe(_ samples: [Float], model: String, language: Language, vocabulary: [String]) async throws -> String {
-        let previous = queue
-        let job: Task<String, any Error>
         if model == ModelCatalog.apple {
             guard #available(macOS 26, *) else { throw Failure.language }
-            job = Task {
-                _ = await previous?.value
-                return try await Self.appleTranscribe(samples, language: language, vocabulary: vocabulary)
-            }
-        } else {
-            guard isReady(model, language: language) || loaded?.variant == model else { throw Failure.notDownloaded }
-            let kit = kit(model)
-            job = Task {
-                _ = await previous?.value
-                return try await Self.whisperTranscribe(samples, kit: try await kit.value, vocabulary: vocabulary, spoken: language)
-            }
+            return try await queued { try await Self.appleTranscribe(samples, language: language, vocabulary: vocabulary) }
+        }
+        guard isReady(model, language: language) || loaded?.variant == model else { throw Failure.notDownloaded }
+        let kit = kit(model)
+        return try await queued { try await Self.whisperTranscribe(samples, kit: try await kit.value, vocabulary: vocabulary, spoken: language) }
+    }
+
+    /// Runs `work` after everything queued before it.
+    private func queued<T: Sendable>(_ work: @escaping @Sendable () async throws -> T) async throws -> T {
+        let previous = queue
+        let job = Task {
+            _ = await previous?.value
+            return try await work()
         }
         queue = Task { _ = await job.result }
         return try await withTaskCancellationHandler { try await job.value } onCancel: { job.cancel() }
+    }
+
+    // MARK: - Speed
+
+    /// Times a model on this Mac, for its row in the list. Only on request
+    /// and right after a download: never in the background on its own.
+    func measure(_ model: String, language: Language) {
+        guard model != ModelCatalog.apple, isOnMac(model), !isBusy(model) else { return }
+        // Shown as being timed while it waits for a test before it.
+        measuring.insert(model)
+        Task { await inLane(model) { await self.time(model, language: language, kit: nil) } }
+    }
+
+    /// Runs `work` for `model` once the tests before it are done, and keeps
+    /// the model from being let go until `work` ends.
+    private func inLane(_ model: String, _ work: @escaping @MainActor @Sendable () async -> Void) async {
+        let previous = tests
+        let lane = Task {
+            _ = await previous?.value
+            let test = Task { await work() }
+            inTest[model] = test
+            await test.value
+            if inTest[model] == test { inTest[model] = nil }
+        }
+        tests = lane
+        await lane.value
+    }
+
+    /// satz's 10 s clip, through the transcription a dictation uses, with the
+    /// word list as it is (so a second pass with it counts too), in the
+    /// dictations' queue. Twice: the first run warms the model up, the
+    /// second is what a dictation feels. A model not in use is loaded for
+    /// this only, and let go after. Only from the test lane.
+    private func time(_ model: String, language: Language, kit given: Task<Kit, any Error>?) async {
+        measuring.insert(model)
+        defer {
+            measuring.remove(model)
+            releaseSpare(model)
+        }
+        do {
+            guard let clip = Self.speedClip else { throw Failure.notDownloaded }
+            let kit = given ?? (loaded?.variant == model || isWanted(model) ? self.kit(model) : loadSpare(model))
+            let whisper = try await kit.value
+            let vocabulary = vocabulary()
+            var elapsed: TimeInterval?
+            var runs = 0
+            // A run with another model loading beside it is run again: the
+            // load took the chip too, which no dictation has to share.
+            while elapsed == nil, runs < 5 {
+                // Never while someone is talking (their text would wait for
+                // it), nor while a model loads.
+                while isDictating() || loadsRunning > 0 { try await Task.sleep(for: .milliseconds(500)) }
+                let loadsBefore = loadsStarted
+                let took = try await queued {
+                    let started = Date()
+                    _ = try await Self.whisperTranscribe(clip, kit: whisper, vocabulary: vocabulary, spoken: language)
+                    return Date().timeIntervalSince(started)
+                }
+                runs += 1
+                if runs >= 2, loadsStarted == loadsBefore { elapsed = took }
+            }
+            guard let elapsed else {
+                Log.note("local: timing \(model) gave up, other models kept loading beside it")
+                return
+            }
+            let seconds = LocalSpeed.secondsPer10(elapsed: elapsed, clipSeconds: Double(clip.count) / 16_000)
+            speeds[model] = LocalSpeed(secondsPer10: seconds, measured: Date(), version: Self.version, machine: Chip.current ?? "?")
+            if let data = try? JSONEncoder().encode(speeds) { defaults?.set(data, forKey: Self.speedsKey) }
+            Log.note(String(format: "local: %@ takes %.1f s per 10 s of speech", model, seconds))
+        } catch {
+            Log.note("local: timing \(model) failed: \(error.localizedDescription)")
+        }
+    }
+
+    private static let speedsKey = "localSpeeds"
+
+    static var version: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+    }
+
+    /// The clip the speed is measured with (Resources/speedtest.wav, see
+    /// speedtest.txt): 10 s of a public-domain reading, 16 kHz mono.
+    nonisolated static let speedClip: [Float]? = {
+        guard let url = Bundle.main.url(forResource: "speedtest", withExtension: "wav"),
+              let data = try? Data(contentsOf: url), let clip = WAVDecoder.decode(data), clip.sampleRate == 16_000
+        else { return nil }
+        return clip.samples
+    }()
+
+    /// Which builds this chip runs, from Argmax's repository: once a run, in
+    /// the background, falling back to WhisperKit's copy when it cannot.
+    func refreshSupport() {
+        guard !askedForSupport else { return }
+        askedForSupport = true
+        Task {
+            let support = await WhisperKit.recommendedRemoteModels(downloadBase: Self.base)
+            if !support.supported.isEmpty { supported = Set(support.supported) }
+            let offered = LocalCatalog.offered(supported: supported, hasApple: false).map(\.id)
+            Log.note("local: \(support.supported.count) builds supported on \(WhisperKit.deviceName()), offered: \(offered.joined(separator: ", "))")
+        }
+    }
+
+    /// Fixed states, for snapshots.
+    func stage(states: [String: State], speeds: [String: LocalSpeed], supported: Set<String>, onMac: Set<String>, measuring: Set<String> = []) {
+        self.states = states
+        self.speeds = speeds
+        self.supported = supported
+        self.measuring = measuring
+        askedForSupport = true
+        isOnMac = { onMac.contains($0) }
     }
 
     // MARK: - Whisper
@@ -291,7 +535,7 @@ final class LocalModels {
     nonisolated private static func whisperTranscribe(_ samples: [Float], kit: Kit, vocabulary: [String], spoken: Language) async throws -> String {
         // Whisper makes something up for silence ("Vielen Dank.").
         guard SpeechGate.hasSpeech(samples) else { return "" }
-        let decode = { (prompt: [Int]?) async throws -> String in
+        let decode = { (prompt: [Int]?, limit: Int?) async throws -> String in
             // Whisper finds the language itself, per recording, so German and
             // English both work without a setting. With timestamps, a
             // recording over 30 s goes on where a sentence ended instead of
@@ -307,19 +551,30 @@ final class LocalModels {
                 options.detectLanguage = false
             }
             options.promptTokens = prompt
+            if let limit { options.sampleLength = limit }
+            // A poor prompted reading is thrown away anyway (keepEveryWord):
+            // WhisperKit's retries at higher temperatures only cost time,
+            // up to five more decodes (Small took 2.8 s instead of 1.0).
+            if prompt != nil { options.temperatureFallbackCount = 0 }
             let results = try await kit.whisper.transcribe(audioArray: samples, decodeOptions: options)
             return results.map(\.text).joined(separator: " ")
                 .split(whereSeparator: \.isWhitespace).joined(separator: " ")
         }
-        let plain = try await decode(nil)
-        guard !vocabulary.isEmpty, let tokenizer = kit.whisper.tokenizer else { return plain }
+        let plain = try await decode(nil, nil)
+        guard !vocabulary.isEmpty, !plain.isEmpty, let tokenizer = kit.whisper.tokenizer else { return plain }
         // The word list goes in as Whisper's own prompt: text it takes as
         // having come before, so it spells those words the same way. It
         // copies the prompt's style too: without the full stop, sentences
         // came back without theirs.
         let prompt = tokenizer.encode(text: " " + vocabulary.joined(separator: ", ") + ".")
             .filter { $0 < tokenizer.specialTokens.specialTokenBegin }
-        let kept = WordCheck.keepEveryWord(prompted: try await decode(prompt), plain: plain)
+        // Prompted with German trigger words, English speech sometimes came
+        // back as "Klammer zu Klammer zu …" until the token limit, seconds
+        // spent on text that is thrown away. Twice the plain text's length
+        // (plus room for timestamps) is more than any honest reading needs;
+        // one cut short loses words, so the plain text is kept.
+        let limit = 2 * tokenizer.encode(text: plain).count + 20
+        let kept = WordCheck.keepEveryWord(prompted: try await decode(prompt, limit), plain: plain)
         if !kept.usedPrompt { Log.note("local: the word list cost words here, kept the text without it") }
         return kept.text
     }

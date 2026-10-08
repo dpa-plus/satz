@@ -27,8 +27,10 @@ enum SnapshotRenderer {
             ("settings-dark", .german, { AnyView(settingsSheet.environment(\.theme, .dark)) }),
             ("settings-en", .english, { AnyView(settingsSheet.environment(\.theme, .dark)) }),
             ("setup-key", .german, { AnyView(setupSheet(.key).environment(\.theme, .light)) }),
-            ("settings-local", .german, { AnyView(settingsSheet(.local).environment(\.theme, .dark)) }),
-            ("setup-local", .german, { AnyView(setupSheet(.key, provider: .local).environment(\.theme, .light)) }),
+            ("settings-local", .german, { AnyView(localSettingsSheet.environment(\.theme, .dark)) }),
+            ("settings-local-en", .english, { AnyView(localSettingsSheet.environment(\.theme, .light)) }),
+            ("setup-local", .german, { AnyView(localSetupSheet.environment(\.theme, .light)) }),
+            ("setup-local-en", .english, { AnyView(localSetupSheet.environment(\.theme, .dark)) }),
             ("setup-custom", .german, { AnyView(setupSheet(.key, provider: .custom).environment(\.theme, .light)) }),
             ("history", .german, { AnyView(historySheet.environment(\.theme, .light)) }),
             ("history-en", .english, { AnyView(historySheet.environment(\.theme, .dark)) }),
@@ -219,17 +221,55 @@ enum SnapshotRenderer {
         )
     }
 
-    private static func setupSheet(_ step: SetupView.Step, provider: Provider = .openRouter) -> some View {
+    private static func setupSheet(_ step: SetupView.Step, provider: Provider = .openRouter, localModel: String? = nil) -> some View {
         let preferences = preferences
         preferences.provider = provider
+        if let localModel { preferences.localModel = localModel }
         return SetupView(
             preferences: preferences,
-            setup: Setup(hasKey: step != .key, microphone: .allowed, canPaste: true),
+            setup: Setup(hasKey: step != .key || localModel != nil, microphone: .allowed, canPaste: true),
             shortcut: shortcut,
             history: History(),
+            models: ModelStore(folder: nil),
             start: step,
             onDone: {}
         )
+    }
+
+    // MARK: - Local models
+
+    /// Builds a fixed chip supports, as on an M2 to M4: the list of an M5,
+    /// which Argmax does not know yet, is the same.
+    private static let supported: Set<String> = [LocalCatalog.turbo, LocalCatalog.turboFull, LocalCatalog.turboCompatible, LocalCatalog.small]
+
+    /// Settings: one in use and measured, one with Argmax's estimate, one
+    /// downloading (Small, with its tag), and Apple's.
+    private static var localSettingsSheet: some View {
+        let local = LocalModels(defaults: nil)
+        local.stage(
+            states: [LocalCatalog.small: .downloading(0.42)],
+            speeds: [LocalCatalog.turbo: LocalSpeed(secondsPer10: 0.71, measured: Date(timeIntervalSince1970: 1_791_000_000),
+                                                    version: LocalModels.version, machine: Chip.current ?? "Apple M5 Pro")],
+            supported: supported,
+            onMac: [LocalCatalog.turbo]
+        )
+        LocalModels.shared = local
+        return settingsSheet(.local)
+    }
+
+    /// Setup, where the card is narrow: one on the Mac but never timed, the
+    /// longest name failed (the tightest row), one being prepared, and
+    /// Apple's in use with its language.
+    private static var localSetupSheet: some View {
+        let local = LocalModels(defaults: nil)
+        local.stage(
+            states: [LocalCatalog.turboFull: .failed("The network connection was lost."), LocalCatalog.small: .preparing],
+            speeds: [:],
+            supported: supported,
+            onMac: [LocalCatalog.turbo]
+        )
+        LocalModels.shared = local
+        return setupSheet(.key, provider: .local, localModel: ModelCatalog.apple)
     }
 
 }

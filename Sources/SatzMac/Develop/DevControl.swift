@@ -13,7 +13,9 @@ import AppKit
 /// a private pasteboard that a paste hands every kind of content back,
 /// `strand`, which leaves the card's window on one other desktop, and
 /// `settings`, `setup`, `history`, `menu` and `close` for satz's own windows,
-/// and `quit`, which quits the way the menu does.
+/// `download:<model>`, `measure:<model>` and `local:<model>` for a model on
+/// this Mac (its download, its speed test, its state), and `quit`, which
+/// quits the way the menu does.
 @MainActor
 final class DevControl {
 
@@ -70,9 +72,17 @@ final class DevControl {
             } else if command.hasPrefix("download:") {
                 // What the Download button in Settings does, for a model on this Mac.
                 LocalModels.shared.download(String(command.dropFirst(9)), language: .german)
+            } else if command.hasPrefix("measure:") {
+                // What "Tempo messen" in Settings does.
+                LocalModels.shared.measure(String(command.dropFirst(8)), language: .german)
             } else if command.hasPrefix("local:") {
                 let model = String(command.dropFirst(6))
-                Log.note("local: \(model) is \(LocalModels.shared.state(of: model, language: .german))")
+                let local = LocalModels.shared
+                // What Settings asks when the list appears: once a run.
+                local.refreshSupport()
+                let speed = local.speeds[model].map { String(format: "%.2f s per 10 s", $0.secondsPer10) } ?? "not measured"
+                Log.note("local: \(model) is \(local.state(of: model, language: .german)), \(local.measuring.contains(model) ? "measuring" : speed), in memory: \(local.inMemory.loaded ?? "none") (+ \(local.inMemory.spare ?? "no spare"))")
+                dump()
             }
         }
     }
@@ -138,6 +148,18 @@ final class DevControl {
         Log.note("strand: card window now on desktops \(spacesOf()), active \(active)")
     }
 
+    /// What is in memory, what is being timed, and every speed measured.
+    private func localState() -> [String: Any] {
+        let local = LocalModels.shared
+        return [
+            "loaded": local.inMemory.loaded ?? NSNull(),
+            "spare": local.inMemory.spare ?? NSNull(),
+            "measuring": local.measuring.sorted(),
+            "speeds": local.speeds.mapValues { ["secondsPer10": $0.secondsPer10, "machine": $0.machine, "version": $0.version,
+                                                "measured": ISO8601DateFormatter().string(from: $0.measured)] },
+        ]
+    }
+
     private func dump() {
         let state: [String: Any] = [
             "phase": String(describing: session.phase),
@@ -146,6 +168,7 @@ final class DevControl {
             "sending": session.inFlight.count,
             "delivered": delivered,
             "window": card.frameDescription,
+            "local": localState(),
         ]
         if let data = try? JSONSerialization.data(withJSONObject: state, options: [.prettyPrinted, .sortedKeys]) {
             try? data.write(to: stateFile)

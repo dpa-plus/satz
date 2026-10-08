@@ -20,6 +20,13 @@ final class Preferences {
         set { models[provider.rawValue] = newValue }
     }
 
+    /// The model for Lokal, whichever provider is chosen now: a download
+    /// that finishes while another provider is chosen still sets it.
+    var localModel: String {
+        get { models[Provider.local.rawValue] ?? Provider.local.defaultModel }
+        set { models[Provider.local.rawValue] = newValue }
+    }
+
     /// Base URL for `.custom`, as typed. Ignored by the built-in providers.
     var customBaseURL: String {
         didSet { defaults?.set(customBaseURL, forKey: Key.customBaseURL) }

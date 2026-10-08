@@ -131,7 +131,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         navigation.onChange = { [weak self] in self?.mainWindow.retitle() }
         setupWindow = AppWindow(title: de("satz einrichten", en: "Set up satz"), freshEachTime: true) { [unowned self] in
             AnyView(SetupView(
-                preferences: preferences, setup: setup, shortcut: shortcut, history: history,
+                preferences: preferences, setup: setup, shortcut: shortcut, history: history, models: models,
                 onDone: { [weak self] in self?.setupWindow.close() }
             ))
         }
@@ -188,6 +188,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.note("setup: provider=\(preferences.provider.rawValue) key=\(setup.hasKey) microphone=\(setup.microphone) paste=\(setup.canPaste)")
         LocalModels.shared.isWanted = { [weak self] model in
             self?.preferences.provider == .local && self?.preferences.model == model
+        }
+        // Download, then use: a download never switches the model by itself,
+        // unless the one in use is not on this Mac (the first local model,
+        // or one that was removed). Setup relies on it.
+        LocalModels.shared.onDownloaded = { [weak self] model in
+            guard let self, LocalModels.shared.takesOver(model, inUse: preferences.localModel, language: preferences.spokenLanguage)
+            else { return }
+            Log.note("local: \(model) is now the model in use, \(preferences.localModel) is not on this Mac")
+            preferences.localModel = model
+        }
+        LocalModels.shared.vocabulary = { [weak self] in self?.preferences.transcriberSettings.vocabulary ?? [] }
+        LocalModels.shared.isDictating = { [weak self] in
+            switch self?.session.phase {
+            case .starting?, .listening?, .paused?, .finishing?: true
+            default: false
+            }
         }
         // A model on this Mac is loaded now, not at the first dictation.
         if !preferences.provider.needsKey {

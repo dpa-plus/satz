@@ -34,6 +34,8 @@ bundle:
 	cp -R Resources/Fonts "$(APP)/Contents/Resources/Fonts"
 	cp Resources/AppIcon.icns "$(APP)/Contents/Resources/AppIcon.icns"
 	cp -R Resources/en.lproj Resources/de.lproj "$(APP)/Contents/Resources/"
+	# The clip a local model is timed with, and where it comes from.
+	cp Resources/speedtest.wav Resources/speedtest.txt "$(APP)/Contents/Resources/"
 	# Reads what is playing, from inside /usr/bin/perl (see now-playing.m).
 	clang -dynamiclib -arch arm64 -arch x86_64 -mmacosx-version-min=14.0 -framework Foundation \
 		Resources/NowPlaying/now-playing.m -o "$(APP)/Contents/Resources/now-playing.dylib"

@@ -8,6 +8,7 @@ struct SetupView: View {
     let setup: Setup
     let shortcut: Shortcut
     let history: History
+    let models: ModelStore
     let onDone: () -> Void
 
     enum Step: Int, CaseIterable {
@@ -19,12 +20,13 @@ struct SetupView: View {
     @State private var step: Step
     @State private var furthest: Step
 
-    init(preferences: Preferences, setup: Setup, shortcut: Shortcut, history: History,
+    init(preferences: Preferences, setup: Setup, shortcut: Shortcut, history: History, models: ModelStore,
          start: Step? = nil, onDone: @escaping () -> Void) {
         self.preferences = preferences
         self.setup = setup
         self.shortcut = shortcut
         self.history = history
+        self.models = models
         self.onDone = onDone
         let first = start ?? Self.firstOpenStep(setup: setup, preferences: preferences)
         _step = State(initialValue: first)
@@ -71,7 +73,7 @@ struct SetupView: View {
     private var card: some View {
         VStack(alignment: .leading, spacing: 16) {
             switch step {
-            case .key: KeyStep(preferences: preferences, setup: setup, onNext: advance)
+            case .key: KeyStep(preferences: preferences, setup: setup, models: models, onNext: advance)
             case .microphone: MicrophoneStep(setup: setup)
             case .trigger: TriggerStep(preferences: preferences, setup: setup, shortcut: shortcut, onNext: advance)
             case .paste: PasteStep(preferences: preferences, setup: setup, onLater: advance)
@@ -182,6 +184,7 @@ private struct StepTitle: View {
 private struct KeyStep: View {
     @Bindable var preferences: Preferences
     let setup: Setup
+    let models: ModelStore
     let onNext: () -> Void
 
     @Environment(\.theme) private var theme
@@ -197,13 +200,9 @@ private struct KeyStep: View {
         if preferences.provider.needsKey {
             keyField
         } else {
-            // Nothing to paste here: the model is downloaded instead.
-            let choices = Provider.local.models
-            if choices.count > 1 {
-                Segmented(options: choices.map { (value: $0.id, label: $0.maker == "Apple" ? "Apple" : "Whisper") },
-                          selection: $preferences.model)
-            }
-            LocalModelRow(preferences: preferences)
+            // Nothing to paste here: a model is downloaded instead, the
+            // same list as in Settings.
+            LocalModelList(preferences: preferences, store: models)
                 .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(theme.card))
                 .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(theme.control, lineWidth: 1.5))
         }

@@ -131,9 +131,11 @@ func eachProviderIsAskedAtItsOwnEndpoint(provider: Provider, url: String, model:
 @Test func localModelsAreFreeAndSayHowBigTheirDownloadIs() {
     #expect(Provider.local.models.allSatisfy { $0.dollarsPerHour == 0 })
     #expect(Provider.local.models.allSatisfy { $0.errorRate == nil })
-    #expect(ModelCatalog.downloadSize(of: ModelCatalog.whisperTurbo) == "632 MB")
+    // What the files weigh, not the "632MB" in the name.
+    #expect(ModelCatalog.downloadSize(of: ModelCatalog.whisperTurbo) == "646 MB")
     #expect(ModelCatalog.downloadSize(of: ModelCatalog.apple) == nil)
-    #expect(ModelCatalog.downloadSize(of: "openai_whisper-small") == nil)
+    #expect(ModelCatalog.downloadSize(of: "openai_whisper-small") == "486 MB")
+    #expect(ModelCatalog.downloadSize(of: "openai_whisper-medium") == nil)
 }
 
 @Test func theLocalListIsNeverAskedFor() async throws {

@@ -1,13 +1,18 @@
 import SwiftUI
 
 /// Lays children out left to right and wraps to a new line when the row is
-/// full, like words in a paragraph. For the vocabulary chips.
+/// full, like words in a paragraph. For the vocabulary chips, and the facts
+/// under a local model.
 struct FlowLayout: Layout {
     var spacing: CGFloat = 8
+    /// Between rows; `spacing` when nil. Pieces of text want less.
+    var lineSpacing: CGFloat?
+
+    private var rowGap: CGFloat { lineSpacing ?? spacing }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let rows = arrange(subviews, width: proposal.width ?? .infinity)
-        let height = rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(0, rows.count - 1))
+        let height = rows.map(\.height).reduce(0, +) + rowGap * CGFloat(max(0, rows.count - 1))
         return CGSize(width: proposal.width ?? rows.map(\.width).max() ?? 0, height: height)
     }
 
@@ -20,7 +25,7 @@ struct FlowLayout: Layout {
                 subviews[index].place(at: CGPoint(x: x, y: y + (row.height - size.height) / 2), proposal: ProposedViewSize(size))
                 x += size.width + spacing
             }
-            y += row.height + spacing
+            y += row.height + rowGap
         }
     }
 
