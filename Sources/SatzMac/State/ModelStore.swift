@@ -17,9 +17,9 @@ final class ModelStore {
     @ObservationIgnored private var fetchingBenchmarks = false
     @ObservationIgnored private let folder: URL?
 
-    /// nil keeps everything in memory, for snapshots and tests.
-    init(folder: URL? = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("satz/models", isDirectory: true)) {
+    /// nil keeps everything in memory, for snapshots and tests. In test mode
+    /// with `--models-dir`, that folder, like every model file.
+    init(folder: URL? = LocalModels.root) {
         self.folder = folder
         if let kept = keptBenchmarks() { benchmarks = kept.benchmarks }
     }

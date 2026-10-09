@@ -1,4 +1,5 @@
 import AppKit
+import SatzKit
 
 /// Remote control for testing satz without a keyboard or a microphone.
 ///
@@ -13,9 +14,11 @@ import AppKit
 /// a private pasteboard that a paste hands every kind of content back,
 /// `strand`, which leaves the card's window on one other desktop, and
 /// `settings`, `setup`, `history`, `menu` and `close` for satz's own windows,
-/// `download:<model>`, `measure:<model>` and `local:<model>` for a model on
-/// this Mac (its download, its speed test, its state), and `quit`, which
-/// quits the way the menu does.
+/// `download:<model>`, `cancel:<model>`, `measure:<model>`, `use:<model>`
+/// and `local:<model>` for a model on this Mac (its download, stopping it,
+/// its speed test, dictating with it, its state), and `quit`, which quits
+/// the way the menu does. Downloads need `--models-dir <folder>`: a test
+/// never fills or empties the user's own models folder.
 @MainActor
 final class DevControl {
 
@@ -28,6 +31,10 @@ final class DevControl {
     var toggleEye: () -> Void = {}
     /// Opens satz's own windows: "settings", "setup", "menu"; "close" closes them.
     var open: (String) -> Void = { _ in }
+    /// The language set in Settings, which Canary and Apple's listen for.
+    var spoken: () -> Language = { .german }
+    /// What clicking one of "Your models" does: the model, and Lokal, in use.
+    var use: (String) -> Void = { _ in }
 
     init(session: Session, card: CardController, stateFile: URL) {
         self.session = session
@@ -70,18 +77,23 @@ final class DevControl {
             if command.hasPrefix("caret:"), let index = Int(command.dropFirst(6)) {
                 session.userMovedCaret(to: index)
             } else if command.hasPrefix("download:") {
-                // What the Download button in Settings does, for a model on this Mac.
-                LocalModels.shared.download(String(command.dropFirst(9)), language: .german)
+                // What clicking an available model in Settings does.
+                LocalModels.shared.download(String(command.dropFirst(9)), language: spoken())
+            } else if command.hasPrefix("cancel:") {
+                LocalModels.shared.cancel(String(command.dropFirst(7)))
             } else if command.hasPrefix("measure:") {
-                // What "Tempo messen" in Settings does.
-                LocalModels.shared.measure(String(command.dropFirst(8)), language: .german)
+                // What clicking the speed bar of a model on this Mac does.
+                LocalModels.shared.measure(String(command.dropFirst(8)), language: spoken())
+            } else if command.hasPrefix("use:") {
+                use(String(command.dropFirst(4)))
+                dump()
             } else if command.hasPrefix("local:") {
                 let model = String(command.dropFirst(6))
                 let local = LocalModels.shared
                 // What Settings asks when the list appears: once a run.
                 local.refreshSupport()
                 let speed = local.speeds[model].map { String(format: "%.2f s per 10 s", $0.secondsPer10) } ?? "not measured"
-                Log.note("local: \(model) is \(local.state(of: model, language: .german)), \(local.measuring.contains(model) ? "measuring" : speed), in memory: \(local.inMemory.loaded ?? "none") (+ \(local.inMemory.spare ?? "no spare"))")
+                Log.note("local: \(model) is \(local.state(of: model, language: spoken())), \(local.measuring.contains(model) ? "measuring" : speed), in memory: \(local.inMemory.loaded ?? "none") (+ \(local.inMemory.spare ?? "no spare"))")
                 dump()
             }
         }
@@ -152,6 +164,8 @@ final class DevControl {
     private func localState() -> [String: Any] {
         let local = LocalModels.shared
         return [
+            "folder": LocalModels.root.path,
+            "states": Dictionary(uniqueKeysWithValues: LocalCatalog.all.map { ($0.id, String(describing: local.state(of: $0.id, language: spoken()))) }),
             "loaded": local.inMemory.loaded ?? NSNull(),
             "spare": local.inMemory.spare ?? NSNull(),
             "measuring": local.measuring.sorted(),

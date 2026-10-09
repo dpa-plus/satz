@@ -207,10 +207,18 @@ private struct KeyStep: View {
             keyField
         } else {
             // Nothing to paste here: a model is downloaded instead, the
-            // same list as in Settings.
-            LocalModelList(preferences: preferences, store: models)
-                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(theme.card))
-                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(theme.control, lineWidth: 1.5))
+            // same cards as in Settings, scrolled so the step fits a screen
+            // (ImageRenderer draws a ScrollView as nothing, so not there).
+            if isSnapshot {
+                LocalModelCards(preferences: preferences, store: models, narrow: true)
+            } else {
+                ScrollView {
+                    LocalModelCards(preferences: preferences, store: models, narrow: true)
+                        .padding(.trailing, 2)
+                }
+                .scrollIndicators(.automatic)
+                .frame(height: 380)
+            }
         }
 
         if shown == .custom {

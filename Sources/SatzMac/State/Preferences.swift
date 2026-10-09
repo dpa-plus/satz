@@ -89,6 +89,13 @@ final class Preferences {
     /// nil until the user picks a spoken language of their own.
     private var spokenChoice: Language?
 
+    /// The language Canary is told it hears and writes, a code among its
+    /// four ("es"); nil follows the spoken language. Kept apart from it:
+    /// Whisper, the replacements and Apple's know only German and English.
+    var toldLanguage: String? {
+        didSet { defaults?.set(toldLanguage, forKey: Key.toldLanguage) }
+    }
+
     /// The predefined rules of one language make way for the other's. The
     /// user's own rules stay; a predefined one they removed comes back.
     private func swapPredefinedReplacements(from old: Language, to new: Language) {
@@ -223,6 +230,7 @@ final class Preferences {
         static let inputDeviceUID = "inputDeviceUID"
         static let language = "language"
         static let spokenLanguage = "spokenLanguage"
+        static let toldLanguage = "toldLanguage"
         static let showsText = "showsText"
         static let appTheme = "appTheme"
         /// "cardOffset" before 04.10. measured from another spot; dropped.
@@ -260,6 +268,7 @@ final class Preferences {
         self.language = language
         let spokenChoice = defaults?.string(forKey: Key.spokenLanguage).flatMap(Language.init(rawValue:))
         self.spokenChoice = spokenChoice
+        toldLanguage = defaults?.string(forKey: Key.toldLanguage)
         replacements = defaults?.data(forKey: Key.replacements)
             .flatMap { try? JSONDecoder().decode([Replacement].self, from: $0) }
             ?? Replacements.standard(for: spokenChoice ?? language)

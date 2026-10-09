@@ -125,7 +125,7 @@ The model menu is the provider's **live list**, so new models show up without a 
 
 A few models OpenRouter lists are left out because they fail with dictation (no German, speaker tags in the text, refused requests). "Other model" takes any model id by hand. Each provider keeps its own key and model, so you can switch back and forth.
 
-**On your own computer.** Choose *Local* and Settings lists the models you can run. Each row shows the download size, how many words the model gets wrong in a published benchmark, and how long it takes for 10 s of speech. satz measures that on your computer right after the download, with a 10 s public-domain audiobook clip; before that, the Mac shows an estimate from Argmax's measurements on the nearest Apple chip. Clicking a provider in Settings only shows it; *Use* switches to it. Pick a model you like, press *Download*, then *Use*:
+**On your own computer.** Choose *Local* and Settings shows the models as cards, the way [Handy](https://github.com/cjpais/Handy) does: *Your models* (on this computer, the one in use first) and *Available models*. Each card says in one sentence what the model is good for, has a bar for accuracy and one for speed, and names the languages it hears and its size. Click an available card to download it (with a progress bar and *Cancel*), click one of yours to use it. The speed bar comes from satz's own measurement on your computer right after the download, with a 10 s public-domain audiobook clip; before that, the Mac uses an estimate from Argmax's measurements on the nearest Apple chip, or a rough rating. Point at a bar for the numbers behind it. Clicking a provider in Settings only shows it; *Use Local*, or clicking one of your models, switches to it.
 
 | | Mac | Windows and Linux |
 |---|---|---|
@@ -137,12 +137,22 @@ A few models OpenRouter lists are left out because they fail with dictation (no 
 | Whisper Base | 147 MB, rough. | 149 MB, fast, rough. |
 | Whisper Tiny | 77 MB, very rough. | 99 MB, very rough. |
 | Distil-Whisper Large v3 | 607 MB, English only, fast. | 950 MB (v3.5), English only. |
+| Parakeet V3 | 670 MB, via sherpa-onnx. Fast and accurate, 25 European languages, German among them. | 670 MB, the same. |
+| Canary 180M Flash | 207 MB, very fast. English, German, Spanish, French: hears the language set in *Spoken in*. | 207 MB, the same. |
+| Parakeet V2 | 661 MB, English only, the best for English. | 661 MB |
+| Moonshine Base | 287 MB, English only, very fast. | 287 MB |
+| Moonshine Tiny | 124 MB, English only, extremely fast. | 124 MB |
+| SenseVoice | 240 MB, very fast. Chinese, English, Japanese, Korean, Cantonese. | 240 MB |
 | Whisper Large v3 Turbo German | | 983 MB, German only. |
 | Apple's speech recognition | Built into macOS 26; macOS may fetch its language pack once. Instant, but hears only the language set in *Spoken in* and barely uses your vocabulary. | |
 
-On the Mac the error rates are Argmax's, for the exact builds satz downloads (English, and German where they measured it); on Windows and Linux, German on FLEURS for the original models. Both are fetched once a day, with the numbers satz ships as a fallback. Click a measured speed to measure again.
+Parakeet, Canary, Moonshine and SenseVoice run through [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx); Windows on ARM has the Whisper models only, since sherpa-onnx has no build for it.
 
-Whisper tells German from English by itself. The first time after the download, the Mac prepares the model for its chip, which takes a few minutes, once. Your vocabulary is given to Whisper as a hint, but only when that changes no more than a word here and there: with a hint, Whisper sometimes left out a sentence in another language or repeated an earlier one, so satz compares the text word by word with one made without the hint and keeps that one if words went missing or appeared. Silence is never sent to Whisper, which makes something up for it. A sentence in another language in the middle of a long recording can still get lost locally; the cloud models handle that better. *Remove* puts the model in the Trash.
+On the Mac the error rates are Argmax's, for the exact builds satz downloads (English, and German where they measured it); on Windows and Linux, German on FLEURS for the original models. Both are fetched once a day, with the numbers satz ships as a fallback. For the other models the accuracy bar is a rough rating (Handy's). Click the speed bar of a model on your computer to measure it again.
+
+Parakeet, Canary, Moonshine and SenseVoice run through [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (Apache-2.0) on ONNX Runtime, which the Mac app carries inside (about 19 MB more in the download). Their files come one by one from [csukuangfj's exports](https://huggingface.co/csukuangfj) on Hugging Face. Licences: [Parakeet V3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), [Parakeet V2](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) and [Canary 180M Flash](https://huggingface.co/nvidia/canary-180m-flash) by NVIDIA, CC-BY-4.0; [Moonshine](https://huggingface.co/UsefulSensors/moonshine-base) by Useful Sensors, MIT; [SenseVoice](https://github.com/FunAudioLLM/SenseVoice) by FunAudioLLM, [FunASR's model licence](https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE). Your vocabulary is not given to these models (your replacements still apply). Moonshine, SenseVoice and Canary hear about 30 seconds well, so a longer recording goes through them in pieces cut at its quietest moments, never mid-word; it is still one recording and one text.
+
+Whisper tells German from English by itself. The first time after the download, the Mac prepares the model for its chip, which takes a few minutes, once. Your vocabulary is given to Whisper as a hint, but only when that changes no more than a word here and there: with a hint, Whisper sometimes left out a sentence in another language or repeated an earlier one, so satz compares the text word by word with one made without the hint and keeps that one if words went missing or appeared. Silence is never sent to Whisper, which makes something up for it. A sentence in another language in the middle of a long recording can still get lost locally; the cloud models handle that better. *Delete* puts the model in the Trash.
 
 **Speed.** MAI-Transcribe usually answers in one or two seconds, but now and then a request hangs for ten. When no answer has come after 2.5 seconds, satz asks a second time and takes whichever answer comes first, for a fraction of a cent.
 

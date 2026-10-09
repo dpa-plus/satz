@@ -75,8 +75,29 @@ public enum SpeechGate {
             start += frame
         }
         guard levels.count >= needed else { return false }
-        let quiet = levels.sorted()[levels.count / 10]
-        let threshold = min(0.0056, max(0.001, 3 * quiet))
+        let threshold = threshold(levels)
         return levels.filter { $0 > threshold }.count >= needed
+    }
+
+    /// Where the last 30 ms above the speech level end; nil when nothing is
+    /// that loud. Parakeet V3 wrote nothing at all for clear speech cut off
+    /// mid-word and followed by quiet (a tenth of a second was enough), and
+    /// the same audio up to here came back whole.
+    public static func speechEnd(_ samples: [Float], sampleRate: Double = 16_000) -> Int? {
+        let frame = max(1, Int(sampleRate * 0.03))
+        let levels = stride(from: 0, to: samples.count - frame + 1, by: frame).map { start in
+            var sum: Float = 0
+            for k in start ..< start + frame { sum += samples[k] * samples[k] }
+            return (sum / Float(frame)).squareRoot()
+        }
+        guard !levels.isEmpty else { return nil }
+        let threshold = threshold(levels)
+        guard let last = levels.lastIndex(where: { $0 > threshold }) else { return nil }
+        return (last + 1) * frame
+    }
+
+    private static func threshold(_ levels: [Float]) -> Float {
+        let quiet = levels.sorted()[levels.count / 10]
+        return min(0.0056, max(0.001, 3 * quiet))
     }
 }

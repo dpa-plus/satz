@@ -18,37 +18,50 @@ private let m1: Set<String> = [
     LocalCatalog.turboCompatible, LocalCatalog.distilCompatible,
 ]
 
-/// What both get besides their Turbo and Distil builds.
+/// What both get besides their Turbo and Distil builds: sherpa-onnx's
+/// models between them, the small Whisper builds after.
+private let germanToo = [LocalCatalog.largeV3, LocalCatalog.parakeetV3, LocalCatalog.canary]
+private let englishAndMore = [LocalCatalog.parakeetV2, LocalCatalog.moonshineBase, LocalCatalog.moonshineTiny, LocalCatalog.senseVoice]
 private let others = [LocalCatalog.small, LocalCatalog.base, LocalCatalog.tiny]
+private let sherpaIDs = [LocalCatalog.parakeetV3, LocalCatalog.canary, LocalCatalog.parakeetV2,
+                         LocalCatalog.moonshineBase, LocalCatalog.moonshineTiny, LocalCatalog.senseVoice]
 
 @Test func aNewerMacIsOfferedTheTurboBuildsAndNotTheCompatibleOne() {
     let ids = LocalCatalog.offered(supported: newerChip, hasApple: true).map(\.id)
-    #expect(ids == [LocalCatalog.turbo, LocalCatalog.turboFull, LocalCatalog.largeV3, LocalCatalog.distil] + others + [LocalCatalog.apple])
+    #expect(ids == [LocalCatalog.turbo, LocalCatalog.turboFull] + germanToo + [LocalCatalog.distil] + englishAndMore + others + [LocalCatalog.apple])
 }
 
 @Test func anM1GetsTheCompatibleBuildInsteadOfTheTurboOnes() {
     let ids = LocalCatalog.offered(supported: m1, hasApple: false).map(\.id)
-    #expect(ids == [LocalCatalog.turboCompatible, LocalCatalog.largeV3, LocalCatalog.distilCompatible] + others)
+    #expect(ids == [LocalCatalog.turboCompatible] + germanToo + [LocalCatalog.distilCompatible] + englishAndMore + others)
 }
 
 @Test func appleIsOfferedOnlyWhereMacOSHasIt() {
     #expect(LocalCatalog.offered(supported: newerChip, hasApple: false).allSatisfy { !$0.isApple })
-    #expect(LocalCatalog.offered(supported: [], hasApple: true).map(\.id) == [LocalCatalog.apple])
+    // sherpa-onnx runs on every Mac, whatever WhisperKit supports there.
+    #expect(LocalCatalog.offered(supported: [], hasApple: true).map(\.id) == sherpaIDs + [LocalCatalog.apple])
 }
 
 @Test func theDefaultLeadsTheList() {
     #expect(LocalCatalog.all.first?.id == Provider.local.defaultModel)
 }
 
+@Test func theDefaultIsRecommendedAndOnAnM1ItsCompatibleBuild() {
+    #expect(LocalCatalog.recommended(supported: newerChip) == LocalCatalog.turbo)
+    #expect(LocalCatalog.recommended(supported: m1) == LocalCatalog.turboCompatible)
+    // A chip WhisperKit's list does not know yet keeps the default.
+    #expect(LocalCatalog.recommended(supported: []) == LocalCatalog.turbo)
+}
+
 @Test func aBuildOnTheMacStaysInTheListEvenWhereItIsNotOffered() {
     // Downloaded on an M1 before satz checked: it can still be used or removed.
     let rows = LocalCatalog.rows(supported: m1, hasApple: false, current: LocalCatalog.turboCompatible) { $0 == LocalCatalog.turbo }
-    #expect(rows == [LocalCatalog.turbo, LocalCatalog.turboCompatible, LocalCatalog.largeV3, LocalCatalog.distilCompatible] + others)
+    #expect(rows == [LocalCatalog.turbo, LocalCatalog.turboCompatible] + germanToo + [LocalCatalog.distilCompatible] + englishAndMore + others)
 }
 
 @Test func theDefaultIsNotAddedOnAMacThatCannotRunIt() {
     let rows = LocalCatalog.rows(supported: m1, hasApple: false, current: LocalCatalog.turbo) { _ in false }
-    #expect(rows == [LocalCatalog.turboCompatible, LocalCatalog.largeV3, LocalCatalog.distilCompatible] + others)
+    #expect(rows == [LocalCatalog.turboCompatible] + germanToo + [LocalCatalog.distilCompatible] + englishAndMore + others)
 }
 
 @Test func aModelTypedInEarlierGetsARowOfItsOwn() {
@@ -57,13 +70,222 @@ private let others = [LocalCatalog.small, LocalCatalog.base, LocalCatalog.tiny]
     #expect(LocalCatalog.model("openai_whisper-medium") == nil)
 }
 
-@Test func theTagSaysWhatTheNameDoesNot() {
-    #expect(LocalCatalog.all.filter { $0.tag == nil }.map(\.id)
-            == [LocalCatalog.turbo, LocalCatalog.turboFull, LocalCatalog.turboCompatible, LocalCatalog.apple])
+// MARK: - Your models and available ones
+
+@Test func yourModelsAreTheOnesOnTheMacWithTheOneInUseFirst() {
+    let onMac: Set = [LocalCatalog.turbo, LocalCatalog.moonshineTiny, LocalCatalog.parakeetV3]
+    let sections = LocalCatalog.sections(supported: newerChip, hasApple: true, current: LocalCatalog.parakeetV3) { onMac.contains($0) }
+    // Apple's is part of macOS, so it counts as one of yours.
+    #expect(sections.yours == [LocalCatalog.parakeetV3, LocalCatalog.turbo, LocalCatalog.moonshineTiny, LocalCatalog.apple])
+    #expect(sections.available.first == LocalCatalog.turboFull)
+    #expect(Set(sections.available).isDisjoint(with: sections.yours))
+    #expect(sections.yours.count + sections.available.count
+            == LocalCatalog.offered(supported: newerChip, hasApple: true).count)
 }
 
-@Test func onlyDistilHearsEnglishAlone() {
-    #expect(LocalCatalog.all.filter(\.isEnglishOnly).map(\.id) == [LocalCatalog.distil, LocalCatalog.distilCompatible])
+@Test func aModelInUseThatIsNotOnTheMacIsOnlyAvailable() {
+    // The default, never downloaded: no card says it is in use.
+    let sections = LocalCatalog.sections(supported: newerChip, hasApple: false, current: LocalCatalog.turbo) { _ in false }
+    #expect(sections.yours.isEmpty)
+    #expect(sections.available.first == LocalCatalog.turbo)
+}
+
+// MARK: - What each card says
+
+@Test func everyModelHasASentenceInBothLanguagesWithoutAnEmDash() {
+    for language in Language.allCases {
+        Language.current = language
+        for model in LocalCatalog.all {
+            #expect(!model.summary.isEmpty, "\(model.id) in \(language)")
+            #expect(!model.summary.contains("\u{2014}") && !model.name.contains("\u{2014}"))
+            #expect(!model.languages.text(language: language).contains("\u{2014}"))
+        }
+    }
+    Language.current = .german
+    #expect(LocalCatalog.model(LocalCatalog.parakeetV3)?.summary == "Schnell und genau. 25 europäische Sprachen.")
+    Language.current = .english
+    #expect(LocalCatalog.model(LocalCatalog.parakeetV3)?.summary == "Fast and accurate. 25 European languages.")
+    Language.current = .german
+}
+
+@Test func theEnglishOnlyModelsAreTheOnesThatHearNothingElse() {
+    #expect(LocalCatalog.all.filter(\.isEnglishOnly).map(\.id) == [LocalCatalog.distil, LocalCatalog.distilCompatible,
+                                                                   LocalCatalog.parakeetV2, LocalCatalog.moonshineBase, LocalCatalog.moonshineTiny])
+}
+
+@Test func whoHearsGerman() {
+    let german = LocalCatalog.all.filter(\.languages.hearsGerman).map(\.id)
+    #expect(german.contains(LocalCatalog.parakeetV3) && german.contains(LocalCatalog.canary) && german.contains(LocalCatalog.apple))
+    #expect(!german.contains(LocalCatalog.senseVoice) && !german.contains(LocalCatalog.parakeetV2))
+}
+
+@Test func languagesAreNamedUpToFourAndCountedAbove() {
+    let model = { (id: String) in LocalCatalog.model(id)!.languages }
+    #expect(model(LocalCatalog.moonshineTiny).text(language: .german) == "Nur Englisch")
+    #expect(model(LocalCatalog.moonshineTiny).text(language: .english) == "English only")
+    #expect(model(LocalCatalog.apple).text(language: .german) == "Deutsch und Englisch")
+    #expect(model(LocalCatalog.apple).text(language: .english) == "German and English")
+    #expect(model(LocalCatalog.canary).text(language: .german) == "Englisch, Deutsch, Spanisch, Französisch")
+    #expect(model(LocalCatalog.canary).text(language: .english) == "English, German, Spanish, French")
+    #expect(model(LocalCatalog.parakeetV3).text(language: .german) == "25 Sprachen")
+    #expect(model(LocalCatalog.turbo).text(language: .english) == "99 languages")
+    #expect(model(LocalCatalog.senseVoice).text(language: .german) == "5 Sprachen")
+    // The help lists them all where satz knows them all, never Whisper's 99.
+    #expect(model(LocalCatalog.senseVoice).list(language: .german) == "Chinesisch, Englisch, Japanisch, Koreanisch, Kantonesisch")
+    #expect(model(LocalCatalog.turbo).list(language: .german) == nil)
+}
+
+@Test func everyModelIsRatedBetweenZeroAndOne() {
+    for model in LocalCatalog.all {
+        #expect((0 ... 1).contains(model.accuracy) && (0 ... 1).contains(model.speed), "\(model.id)")
+    }
+    // Handy's scores for Handy's models.
+    #expect(LocalCatalog.model(LocalCatalog.parakeetV2)?.accuracy == 0.85)
+    #expect(LocalCatalog.model(LocalCatalog.moonshineTiny)?.speed == 0.95)
+}
+
+// MARK: - sherpa-onnx
+
+@Test func eachSherpaModelWeighsWhatItsFilesWeigh() throws {
+    for id in sherpaIDs {
+        let model = try #require(LocalCatalog.model(id))
+        let sherpa = try #require(model.sherpa, "\(id)")
+        #expect(model.bytes == sherpa.bytes)
+        #expect(sherpa.files.contains { $0.name == "tokens.txt" })
+        #expect(sherpa.files.allSatisfy { $0.bytes > 0 })
+    }
+    #expect(LocalCatalog.model(LocalCatalog.parakeetV3)?.bytes.map { LocalFacts.size($0, language: .german) } == "670 MB")
+    #expect(LocalCatalog.model(LocalCatalog.moonshineTiny)?.bytes.map { LocalFacts.size($0, language: .german) } == "124 MB")
+}
+
+@Test func filesComeFromCsukuangfjsRepositoriesOneByOne() throws {
+    let canary = try #require(LocalCatalog.model(LocalCatalog.canary)?.sherpa)
+    let encoder = try #require(canary.files.first)
+    #expect(canary.url(of: encoder).absoluteString
+            == "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8/resolve/main/encoder.int8.onnx")
+}
+
+@Test func whisperBuildsAreTheOnlyOnesArgmaxIsAskedAbout() {
+    #expect(Set(LocalCatalog.whisperIDs).isDisjoint(with: sherpaIDs + [LocalCatalog.apple]))
+    #expect(LocalCatalog.whisperIDs.count == 9)
+}
+
+private let folder = URL(fileURLWithPath: "/m/sherpa/x", isDirectory: true)
+
+@Test func parakeetIsANemoTransducer() throws {
+    let settings = try #require(LocalCatalog.model(LocalCatalog.parakeetV3)?.sherpa).settings(folder: folder, spoken: .german, threads: 4)
+    #expect(settings.modelType == "nemo_transducer")
+    #expect(settings.transducer == .init(encoder: "/m/sherpa/x/encoder.int8.onnx", decoder: "/m/sherpa/x/decoder.int8.onnx",
+                                         joiner: "/m/sherpa/x/joiner.int8.onnx"))
+    #expect(settings.tokens == "/m/sherpa/x/tokens.txt")
+    #expect(settings.canary == nil && settings.moonshine == nil && settings.senseVoice == nil)
+    #expect(settings.threads == 4 && settings.sampleRate == 16_000 && settings.decoding == "greedy_search" && settings.provider == "cpu")
+}
+
+@Test func canaryIsToldTheSpokenLanguageToHearAndWrite() throws {
+    let canary = try #require(LocalCatalog.model(LocalCatalog.canary)?.sherpa)
+    #expect(canary.isToldTheLanguage && canary.hearsInWindows)
+    #expect(canary.settings(folder: folder, spoken: .german).canary
+            == .init(encoder: "/m/sherpa/x/encoder.int8.onnx", decoder: "/m/sherpa/x/decoder.int8.onnx", language: "de", punctuation: true))
+    #expect(canary.settings(folder: folder, spoken: .english).canary?.language == "en")
+    #expect(canary.settings(folder: folder, spoken: .english).modelType.isEmpty)
+}
+
+@Test func moonshineHasItsFourGraphs() throws {
+    let settings = try #require(LocalCatalog.model(LocalCatalog.moonshineBase)?.sherpa).settings(folder: folder, spoken: .german)
+    #expect(settings.moonshine == .init(preprocessor: "/m/sherpa/x/preprocess.onnx", encoder: "/m/sherpa/x/encode.int8.onnx",
+                                        uncachedDecoder: "/m/sherpa/x/uncached_decode.int8.onnx",
+                                        cachedDecoder: "/m/sherpa/x/cached_decode.int8.onnx"))
+}
+
+@Test func senseVoiceFindsTheLanguageItselfAndWritesNumbers() throws {
+    let settings = try #require(LocalCatalog.model(LocalCatalog.senseVoice)?.sherpa).settings(folder: folder, spoken: .german)
+    #expect(settings.senseVoice == .init(model: "/m/sherpa/x/model.int8.onnx", language: "auto", inverseNormalization: true))
+    #expect(settings.featureDimension == 80)
+}
+
+@Test func canarysSpacesBeforePunctuationGo() {
+    #expect(SherpaModel.tidy("schreibt mir eine Funktion , die alle Rechnungen liest . Danach  soll sie ?")
+            == "schreibt mir eine Funktion, die alle Rechnungen liest. Danach soll sie?")
+    #expect(SherpaModel.tidy("Pennies saved one and two at a time.") == "Pennies saved one and two at a time.")
+}
+
+@Test func eachPieceEndsInASecondOfSilence() {
+    let padded = SherpaModel.padded([0.5, -0.5][...])
+    #expect(padded.count == 2 + 16_000)
+    #expect(padded.prefix(2) == [0.5, -0.5] && padded.dropFirst(2).allSatisfy { $0 == 0 })
+}
+
+@Test func onlyCanaryGetsSilenceAfterIt() {
+    #expect(sherpaIDs.filter { LocalCatalog.model($0)?.sherpa?.padsEnd == true } == [LocalCatalog.canary])
+}
+
+@Test func speechEndsAfterTheLastLoudFrame() {
+    // 2 s of tone, then 1 s of quiet room noise.
+    let tone = (0 ..< 32_000).map { Float(sin(Double($0) * 0.05)) * 0.3 }
+    let room = (0 ..< 16_000).map { Float(sin(Double($0) * 0.7)) * 0.0002 }
+    let end = SpeechGate.speechEnd(tone + room)
+    #expect(end.map { abs($0 - 32_000) <= 480 } == true)
+    #expect(SpeechGate.speechEnd([Float](repeating: 0, count: 16_000)) == nil)
+}
+
+@Test func onlyParakeetTakesAWholeDictationInOneGo() {
+    let whole = sherpaIDs.filter { LocalCatalog.model($0)?.sherpa?.hearsInWindows == false }
+    #expect(whole == [LocalCatalog.parakeetV3, LocalCatalog.parakeetV2])
+}
+
+// MARK: - The bars
+
+@Test func speedIsMappedOnALogScaleThroughFourPoints() {
+    #expect(LocalScores.speed(secondsPer10: 0.05) == 1)
+    #expect(LocalScores.speed(secondsPer10: 0.2) == 1)
+    #expect(abs(LocalScores.speed(secondsPer10: 1) - 0.7) < 0.0001)
+    #expect(abs(LocalScores.speed(secondsPer10: 3) - 0.4) < 0.0001)
+    #expect(abs(LocalScores.speed(secondsPer10: 10) - 0.1) < 0.0001)
+    #expect(LocalScores.speed(secondsPer10: 60) == 0.1)
+    // Slower is never higher.
+    let seconds = stride(from: 0.1, through: 12, by: 0.1).map { LocalScores.speed(secondsPer10: $0) }
+    #expect(zip(seconds, seconds.dropFirst()).allSatisfy { $0 >= $1 })
+}
+
+@Test func theSpeedBarTakesThisMacsMeasurementThenArgmaxThenTheScore() {
+    let bundled = LocalBenchmarks.bundled
+    let here = LocalSpeed(secondsPer10: 1, measured: Date(), version: "0.5.0", machine: "Apple M5 Pro")
+    let elsewhere = LocalSpeed(secondsPer10: 1, measured: Date(), version: "0.5.0", machine: "Apple M1")
+
+    let measured = LocalScores.speed(of: LocalCatalog.parakeetV3, measured: [LocalCatalog.parakeetV3: here], chip: "Apple M5 Pro", benchmarks: bundled)
+    #expect(abs(measured.score - 0.7) < 0.0001)
+    #expect(measured.source == .measured(here))
+
+    // Measured on another Mac: Argmax's estimate for a Whisper build...
+    let small = LocalScores.speed(of: LocalCatalog.small, measured: [LocalCatalog.small: elsewhere], chip: "Apple M5 Pro", benchmarks: bundled)
+    guard case .estimated(_, let chip, _) = small.source else { Issue.record("not estimated: \(small.source)"); return }
+    #expect(chip == "Apple M4 Pro")
+    // ...and the fixed score for one Argmax never measured.
+    let canary = LocalScores.speed(of: LocalCatalog.canary, measured: [LocalCatalog.canary: elsewhere], chip: "Apple M5 Pro", benchmarks: bundled)
+    #expect(canary.source == .rated)
+    #expect(canary.score == 0.85)
+}
+
+// MARK: - Long recordings for the models that hear 30 s
+
+@Test func aShortRecordingStaysOnePiece() {
+    let samples = [Float](repeating: 0.1, count: 16_000 * 29)
+    #expect(QuietWindows.split(samples).count == 1)
+}
+
+@Test func aLongRecordingIsCutWhereItIsQuietest() {
+    // 70 s of tone with a quiet tenth of a second at 25 s and at 52 s.
+    var samples = (0 ..< 16_000 * 70).map { Float(sin(Double($0) * 0.05)) * 0.3 }
+    for quiet in [25, 52] {
+        for index in quiet * 16_000 ..< quiet * 16_000 + 1_600 { samples[index] = 0 }
+    }
+    let pieces = QuietWindows.split(samples)
+    #expect(pieces.count == 3)
+    #expect(pieces.map(\.count).reduce(0, +) == samples.count)
+    #expect(pieces.allSatisfy { $0.count <= 30 * 16_000 })
+    #expect(abs(pieces[0].count - (25 * 16_000 + 800)) <= 800)
+    #expect(abs(pieces[0].count + pieces[1].count - (52 * 16_000 + 800)) <= 800)
 }
 
 // MARK: - Argmax's benchmarks, from trimmed copies of the live files (08.10.2026)
@@ -271,4 +493,155 @@ func eachChipFindsTheNearestOneArgmaxMeasured(chip: String, nearest: String) {
         LocalFacts.errors(english: 1, german: 2, language: .german) ?? "", LocalFacts.errors(english: 1, german: 2, language: .english) ?? "",
     ]
     #expect(texts.allSatisfy { !$0.contains("\u{2014}") })
+}
+
+// MARK: - Long recordings through sherpa-onnx, piece by piece
+
+/// 70 s of tone with quiet spots at 25 s and 52 s: three pieces for a model
+/// that hears 30 s at a time.
+private let seventySeconds: [Float] = {
+    var samples = (0 ..< 16_000 * 70).map { Float(sin(Double($0) * 0.05)) * 0.3 }
+    for quiet in [25, 52] {
+        for index in quiet * 16_000 ..< quiet * 16_000 + 1_600 { samples[index] = 0 }
+    }
+    return samples
+}()
+
+private let moonshine = LocalCatalog.model(LocalCatalog.moonshineBase)!.sherpa!
+
+/// Counts the recognizer calls, from inside a test's task.
+private final class Calls: @unchecked Sendable {
+    var starts: [Int] = []
+}
+
+@Test func everyPieceIsHeardAndTheTextsJoined() throws {
+    let calls = Calls()
+    let text = try moonshine.transcribe(seventySeconds) { piece in
+        calls.starts.append(piece.startIndex)
+        return "piece \(calls.starts.count) ,"
+    }
+    #expect(calls.starts.count == 3)
+    #expect(text == "piece 1, piece 2, piece 3,")
+}
+
+@Test func aPieceThatStaysEmptyLosesNothingSilently() {
+    // The second piece comes back empty, also when tried again up to its
+    // last sound: the first and third must not stand for the whole recording.
+    let calls = Calls()
+    #expect(throws: SherpaModel.Failure.pieceNotHeard) {
+        try moonshine.transcribe(seventySeconds) { piece in
+            calls.starts.append(piece.startIndex)
+            return piece.startIndex > 0 && piece.startIndex < 50 * 16_000 ? "" : "words"
+        }
+    }
+    // Stopped at the empty piece, after one more try of it.
+    #expect(calls.starts.count == 3)
+}
+
+@Test func anEmptyPieceIsTriedOnceMoreUpToItsLastSound() throws {
+    // Speech cut off, then a second of quiet: Parakeet wrote nothing for it.
+    let speech = (0 ..< 32_000).map { Float(sin(Double($0) * 0.05)) * 0.3 } + [Float](repeating: 0.0001, count: 16_000)
+    let parakeet = LocalCatalog.model(LocalCatalog.parakeetV3)!.sherpa!
+    let calls = Calls()
+    let text = try parakeet.transcribe(speech) { piece in
+        calls.starts.append(piece.count)
+        return piece.count == speech.count ? "" : "Pennies saved"
+    }
+    #expect(text == "Pennies saved")
+    #expect(calls.starts.count == 2 && calls.starts[1] < speech.count)
+}
+
+@Test func aQuietPieceIsNeverSentAndSilenceIsNothing() throws {
+    // 40 s: speech, then from 25 s on only quiet, which goes to no model.
+    var samples = (0 ..< 16_000 * 40).map { Float(sin(Double($0) * 0.05)) * 0.3 }
+    for index in 25 * 16_000 ..< samples.count { samples[index] = 0 }
+    let calls = Calls()
+    let text = try moonshine.transcribe(samples) { piece in
+        calls.starts.append(piece.startIndex)
+        return "words"
+    }
+    #expect(text == "words" && calls.starts == [0])
+    #expect(try moonshine.transcribe([Float](repeating: 0, count: 16_000 * 5)) { _ in "made up" } == "")
+}
+
+@Test func aCancelledDictationStopsBeforeItsNextPiece() async {
+    let calls = Calls()
+    let task = Task {
+        try moonshine.transcribe(seventySeconds) { piece in
+            calls.starts.append(piece.startIndex)
+            // Thrown away while its first piece is being heard.
+            withUnsafeCurrentTask { $0?.cancel() }
+            return "words"
+        }
+    }
+    let result = await task.result
+    #expect(throws: CancellationError.self) { try result.get() }
+    #expect(calls.starts.count == 1)
+}
+
+// MARK: - The language Canary is told
+
+@Test func canaryIsToldItsChosenLanguageElseTheSpokenOne() throws {
+    let canary = try #require(LocalCatalog.model(LocalCatalog.canary))
+    #expect(canary.toldLanguages == ["en", "de", "es", "fr"])
+    #expect(canary.told(choice: "es", spoken: .german) == "es")
+    #expect(canary.told(choice: nil, spoken: .english) == "en")
+    // A code Canary does not know falls back to the spoken language.
+    #expect(canary.told(choice: "it", spoken: .german) == "de")
+    // Only Canary is told; the others find the language or hear one.
+    #expect(LocalCatalog.all.filter { $0.toldLanguages != nil }.map(\.id) == [LocalCatalog.canary])
+    #expect(LocalCatalog.model(LocalCatalog.parakeetV3)?.told(choice: "es", spoken: .german) == nil)
+    let settings = try #require(canary.sherpa).settings(folder: folder, spoken: .german, told: "fr")
+    #expect(settings.canary?.language == "fr")
+}
+
+// MARK: - Test mode and the models folder
+
+@Test func testModeNeedsAStateFileAndTheModelsFolderNeedsTestMode() {
+    #expect(LaunchMode.parse(["satz"]) == .normal)
+    #expect(LaunchMode.parse(["satz", "--dev-control", "/s/state.json"]) == .test(stateFile: "/s/state.json", modelsFolder: nil))
+    #expect(LaunchMode.parse(["satz", "--test-audio", "a.wav", "--dev-control", "/s/state.json", "--models-dir", "/m"])
+            == .test(stateFile: "/s/state.json", modelsFolder: "/m"))
+    // The case Codex found: no state file, so neither test mode nor another folder.
+    guard case .invalid = LaunchMode.parse(["satz", "--models-dir", "/tmp/x", "--dev-control"]) else {
+        Issue.record("accepted --dev-control without a state file"); return
+    }
+    for broken in [["satz", "--dev-control", "--models-dir", "/m"], ["satz", "--models-dir", "/m"],
+                   ["satz", "--dev-control", "/s/state.json", "--models-dir"], ["satz", "--dev-control", ""]] {
+        guard case .invalid = LaunchMode.parse(broken) else { Issue.record("accepted \(broken)"); continue }
+    }
+}
+
+@Test func onlyTheUsersSatzOrATestCopyWithItsOwnFolderChangesModels() {
+    #expect(LaunchMode.normal.canChangeModels)
+    #expect(LaunchMode.test(stateFile: "/s", modelsFolder: "/m").canChangeModels)
+    #expect(!LaunchMode.test(stateFile: "/s", modelsFolder: nil).canChangeModels)
+    #expect(!LaunchMode.invalid("x").canChangeModels)
+    #expect(LaunchMode.invalid("x").modelsFolder == nil && LaunchMode.invalid("x").stateFile == nil)
+}
+
+// MARK: - Downloads
+
+/// A model whose two small files are already in a fresh folder.
+private func cachedModel() throws -> (SherpaModel, URL) {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent("satz-test-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    try Data(repeating: 1, count: 10).write(to: folder.appendingPathComponent("model.int8.onnx"))
+    try Data(repeating: 2, count: 4).write(to: folder.appendingPathComponent("tokens.txt"))
+    // A repository that does not exist: nothing here may reach the network.
+    return (SherpaModel(kind: .senseVoice, repo: "satz-test-none", files: [.init("model.int8.onnx", 10), .init("tokens.txt", 4)]), folder)
+}
+
+@Test func filesAlreadyThereAtTheirSizeAreKept() async throws {
+    let (model, folder) = try cachedModel()
+    defer { try? FileManager.default.removeItem(at: folder) }
+    try await FileDownload(progress: { _ in }).run(model, into: folder)
+}
+
+@Test func aCancelledDownloadNeverCountsAsDoneEvenWhenEverythingWasThere() async throws {
+    let (model, folder) = try cachedModel()
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let download = FileDownload(progress: { _ in })
+    download.cancel()
+    await #expect(throws: CancellationError.self) { try await download.run(model, into: folder) }
 }

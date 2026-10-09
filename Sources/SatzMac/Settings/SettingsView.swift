@@ -195,7 +195,8 @@ private struct ProviderBlock: View {
                              text: Binding(get: { preferences.model(for: .custom) }, set: { preferences.setModel($0, for: .custom) }),
                              prompt: Provider.custom.defaultModel)
                 case .local:
-                    LocalModelList(preferences: preferences, store: models)
+                    LocalModelCards(preferences: preferences, store: models)
+                        .padding(12)
                 default:
                     ModelRow(preferences: preferences, provider: shown, store: models)
                 }

@@ -30,6 +30,8 @@ enum SnapshotRenderer {
             ("settings-local", .german, { AnyView(localSettingsSheet.environment(\.theme, .dark)) }),
             ("settings-local-en", .english, { AnyView(localSettingsSheet.environment(\.theme, .light)) }),
             ("settings-local-browse", .german, { AnyView(localBrowseSheet.environment(\.theme, .dark)) }),
+            ("settings-local-canary", .german, { AnyView(localCanarySheet.environment(\.theme, .light)) }),
+            ("settings-local-canary-en", .english, { AnyView(localCanarySheet.environment(\.theme, .dark)) }),
             ("setup-local", .german, { AnyView(localSetupSheet.environment(\.theme, .light)) }),
             ("setup-local-en", .english, { AnyView(localSetupSheet.environment(\.theme, .dark)) }),
             ("setup-custom", .german, { AnyView(setupSheet(.key, provider: .custom).environment(\.theme, .light)) }),
@@ -209,9 +211,12 @@ enum SnapshotRenderer {
 
     private static var settingsSheet: some View { settingsSheet(.openRouter) }
 
-    private static func settingsSheet(_ provider: Provider) -> some View {
+    private static func settingsSheet(_ provider: Provider, localModel: String = LocalCatalog.parakeetV3,
+                                      toldLanguage: String? = nil) -> some View {
         let preferences = preferences
         preferences.provider = provider
+        preferences.localModel = localModel
+        preferences.toldLanguage = toldLanguage
         return SettingsView(
             preferences: preferences,
             setup: Setup(hasKey: true, microphone: .allowed, canPaste: true),
@@ -246,40 +251,57 @@ enum SnapshotRenderer {
         LocalCatalog.distil, LocalCatalog.distilCompatible, LocalCatalog.small, LocalCatalog.base, LocalCatalog.tiny,
     ]
 
-    /// Settings: one in use and measured, one with Argmax's estimate, one
-    /// downloading (Small, with its tag), and Apple's.
+    /// Settings with Lokal in use: Parakeet V3 in use and measured, Turbo
+    /// on the Mac and measured, Moonshine Base being timed after its
+    /// download; among the available ones Canary downloading, the others
+    /// with Argmax's estimate or their fixed score.
     private static var localSettingsSheet: some View {
         let local = LocalModels(defaults: nil)
+        let measured = Date(timeIntervalSince1970: 1_791_000_000)
+        let chip = Chip.current ?? "Apple M5 Pro"
         local.stage(
-            states: [LocalCatalog.small: .downloading(0.42)],
-            speeds: [LocalCatalog.turbo: LocalSpeed(secondsPer10: 0.71, measured: Date(timeIntervalSince1970: 1_791_000_000),
-                                                    version: LocalModels.version, machine: Chip.current ?? "Apple M5 Pro")],
+            states: [LocalCatalog.canary: .downloading(0.42)],
+            speeds: [
+                LocalCatalog.turbo: LocalSpeed(secondsPer10: 0.71, measured: measured, version: LocalModels.version, machine: chip),
+                LocalCatalog.parakeetV3: LocalSpeed(secondsPer10: 0.24, measured: measured, version: LocalModels.version, machine: chip),
+            ],
             supported: supported,
-            onMac: [LocalCatalog.turbo]
+            onMac: [LocalCatalog.turbo, LocalCatalog.parakeetV3, LocalCatalog.moonshineBase],
+            measuring: [LocalCatalog.moonshineBase]
         )
         LocalModels.shared = local
         return settingsSheet(.local)
     }
 
-    /// Lokal looked at while OpenRouter takes the dictations.
+    /// Canary in use, told Spanish: its four languages under the cards.
+    private static var localCanarySheet: some View {
+        let local = LocalModels(defaults: nil)
+        local.stage(states: [:], speeds: [:], supported: supported, onMac: [LocalCatalog.canary, LocalCatalog.turbo])
+        LocalModels.shared = local
+        return settingsSheet(.local, localModel: LocalCatalog.canary, toldLanguage: "es")
+    }
+
+    /// Lokal looked at while OpenRouter takes the dictations: no card is
+    /// active, the one that would be is first.
     private static var localBrowseSheet: some View {
         _ = localSettingsSheet
         return settingsSheet(.openRouter).environment(\.showsProvider, .local)
     }
 
-    /// Setup, where the card is narrow: one on the Mac but never timed, the
-    /// longest name failed (the tightest row), one being prepared, and
-    /// Apple's in use with its language.
+    /// Setup, where the card is narrow: Canary in use (so its language row
+    /// shows), Turbo on the Mac but never timed, the longest name failed,
+    /// Small being prepared, Parakeet V3 downloading.
     private static var localSetupSheet: some View {
         let local = LocalModels(defaults: nil)
         local.stage(
-            states: [LocalCatalog.turboFull: .failed("The network connection was lost."), LocalCatalog.small: .preparing],
+            states: [LocalCatalog.turboFull: .failed("The network connection was lost."), LocalCatalog.small: .preparing,
+                     LocalCatalog.parakeetV3: .downloading(0.08)],
             speeds: [:],
             supported: supported,
-            onMac: [LocalCatalog.turbo]
+            onMac: [LocalCatalog.turbo, LocalCatalog.canary]
         )
         LocalModels.shared = local
-        return setupSheet(.key, provider: .local, localModel: ModelCatalog.apple)
+        return setupSheet(.key, provider: .local, localModel: LocalCatalog.canary)
     }
 
 }

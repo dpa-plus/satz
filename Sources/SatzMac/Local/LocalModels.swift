@@ -6,9 +6,10 @@ import Speech
 import WhisperKit
 
 /// Speech recognition on this Mac, for the provider "Lokal": Whisper through
-/// WhisperKit, downloaded once, and Apple's own, built into macOS 26. Nothing
-/// leaves the Mac and nothing costs anything; the price is a download, and
-/// the memory a loaded model takes.
+/// WhisperKit and Handy's models (Parakeet, Canary, Moonshine, SenseVoice)
+/// through sherpa-onnx, each downloaded once, and Apple's own, built into
+/// macOS 26. Nothing leaves the Mac and nothing costs anything; the price is
+/// a download, and the memory a loaded model takes.
 @MainActor
 @Observable
 final class LocalModels {
@@ -33,11 +34,15 @@ final class LocalModels {
     enum Failure: Error, LocalizedError {
         case notDownloaded
         case language
+        /// Part of a recording with speech in it came back empty: kept for
+        /// Try again rather than pasted without those words.
+        case notUnderstood
 
         var errorDescription: String? {
             switch self {
             case .notDownloaded: de("Das Modell ist noch nicht geladen.", en: "The model has not been downloaded yet.")
             case .language: de("Apples Spracherkennung kennt diese Sprache nicht.", en: "Apple's speech recognition does not know this language.")
+            case .notUnderstood: de("Ein Teil der Aufnahme kam leer zurück.", en: "Part of the recording came back empty.")
             }
         }
 
@@ -46,6 +51,7 @@ final class LocalModels {
             switch self {
             case .notDownloaded: de("Modell fehlt", en: "Model missing")
             case .language: de("Sprache fehlt", en: "Language missing")
+            case .notUnderstood: de("Nichts verstanden", en: "Not understood")
             }
         }
     }
@@ -60,7 +66,9 @@ final class LocalModels {
     private(set) var supported: Set<String> = Set(WhisperKit.recommendedModels().supported)
     @ObservationIgnored private var askedForSupport = false
 
-    /// The Whisper model in memory. Loading it takes seconds, so it stays.
+    /// Downloads under way, by model: Cancel stops one.
+    @ObservationIgnored private var downloads: [String: Task<Void, Never>] = [:]
+    /// The model in memory. Loading it takes seconds, so it stays.
     @ObservationIgnored private var loaded: (variant: String, kit: Task<Kit, any Error>)?
     /// A model loaded beside the one in use, only to prepare and time it
     /// after its download: the one in use stays loaded meanwhile. Taken over
@@ -95,15 +103,39 @@ final class LocalModels {
         }
     }
 
-    /// Where WhisperKit keeps models and tokenizers.
-    nonisolated static let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("satz/models/whisperkit", isDirectory: true)
+    /// satz's own folder for models. In test mode, `--models-dir <folder>`
+    /// puts everything elsewhere: a test download once landed in the user's
+    /// own folder.
+    nonisolated static let root: URL = LaunchMode.current.modelsFolder.map { URL(fileURLWithPath: $0, isDirectory: true) }
+        ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("satz/models", isDirectory: true)
 
-    /// WhisperKit is a class without Sendable; satz only ever uses one from
-    /// one transcription at a time (`queue`).
+    /// A test copy without its own folder shares the user's models: it may
+    /// use them, but never downloads into that folder or removes from it.
+    nonisolated static let canChangeFiles = LaunchMode.current.canChangeModels
+
+    /// Where WhisperKit keeps models and tokenizers.
+    nonisolated static let base = root.appendingPathComponent("whisperkit", isDirectory: true)
+    /// sherpa-onnx's models, one folder each.
+    nonisolated static let sherpaBase = root.appendingPathComponent("sherpa", isDirectory: true)
+
+    /// WhisperKit and sherpa-onnx are classes without Sendable; satz only
+    /// ever uses one from one transcription at a time (`queue`).
     final class Kit: @unchecked Sendable {
-        let whisper: WhisperKit
-        init(_ whisper: WhisperKit) { self.whisper = whisper }
+        enum Engine {
+            case whisper(WhisperKit)
+            case sherpa(SherpaRecognizer)
+        }
+
+        let engine: Engine
+        init(_ whisper: WhisperKit) { engine = .whisper(whisper) }
+        init(_ sherpa: SherpaRecognizer) { engine = .sherpa(sherpa) }
+
+        /// WhisperKit's memory is given back by hand; sherpa-onnx's when the
+        /// last reference to its recognizer goes.
+        func unload() async {
+            if case .whisper(let whisper) = engine { await whisper.unloadModels() }
+        }
     }
 
     // MARK: - State
@@ -153,6 +185,9 @@ final class LocalModels {
     @ObservationIgnored var onDownloaded: (String) -> Void = { _ in }
     /// The word list as dictations send it, for timing a model the same way.
     @ObservationIgnored var vocabulary: () -> [String] = { [] }
+    /// The language chosen for Canary among its four, nil to follow the
+    /// spoken language (`LocalCatalog.Model.told`).
+    @ObservationIgnored var toldChoice: () -> String? = { nil }
     /// True while someone dictates: a speed test waits for it to end.
     @ObservationIgnored var isDictating: () -> Bool = { false }
 
@@ -180,17 +215,30 @@ final class LocalModels {
             downloadApple(language)
             return
         }
-        guard !isBusy(model) else { return }
+        // Not while a cancelled one is still winding down: it removes its
+        // folder on the way out.
+        guard !isBusy(model), downloads[model] == nil else { return }
+        guard Self.canChangeFiles else {
+            return Log.note("local: not downloading \(model), a test copy needs --models-dir for that")
+        }
         states[model] = .downloading(0)
-        Log.note("local: downloading \(model)")
-        Task {
+        Log.note("local: downloading \(model) into \(Self.root.path)")
+        downloads[model] = Task {
             let folder: URL
             do {
-                folder = try await WhisperKit.download(variant: model, downloadBase: Self.base) { progress in
-                    let fraction = progress.fractionCompleted
-                    Task { @MainActor in self.progress(model, fraction) }
-                }
+                folder = try await fetch(model)
+                // A download that finished as it was cancelled is not chosen,
+                // prepared or timed.
+                try Task.checkCancellation()
+                downloads[model] = nil
             } catch {
+                downloads[model] = nil
+                // Cancelled: as before the click, and a half-loaded model's
+                // pieces are not kept.
+                if Task.isCancelled || error is CancellationError {
+                    if LocalCatalog.model(model)?.sherpa != nil { try? FileManager.default.removeItem(at: Self.sherpaFolder(model)) }
+                    return Log.note("local: download of \(model) cancelled")
+                }
                 failed(model, error)
                 return
             }
@@ -214,7 +262,7 @@ final class LocalModels {
                 }
                 do {
                     _ = try await kit.value
-                    try folder.path.write(to: Self.marker(model), atomically: true, encoding: .utf8)
+                    try Self.markComplete(model, folder: folder)
                 } catch {
                     self.failed(model, error)
                     self.releaseSpare(model)
@@ -228,6 +276,30 @@ final class LocalModels {
         }
     }
 
+    /// The files, from Argmax's repository through WhisperKit, or from
+    /// Hugging Face one by one for sherpa-onnx.
+    private func fetch(_ model: String) async throws -> URL {
+        let report = { @Sendable (fraction: Double) in _ = Task { @MainActor in self.progress(model, fraction) } }
+        guard let sherpa = LocalCatalog.model(model)?.sherpa else {
+            return try await WhisperKit.download(variant: model, downloadBase: Self.base) { report($0.fractionCompleted) }
+        }
+        let folder = Self.sherpaFolder(model)
+        let download = FileDownload(progress: { report($0) })
+        try await withTaskCancellationHandler {
+            try await download.run(sherpa, into: folder)
+        } onCancel: {
+            download.cancel()
+        }
+        return folder
+    }
+
+    /// Stops a download; the model is offered for download again.
+    func cancel(_ model: String) {
+        guard let download = downloads[model] else { return }
+        download.cancel()
+        if case .downloading = states[model] { states[model] = nil }
+    }
+
     private func failed(_ model: String, _ error: any Error) {
         Log.note("local: \(model) failed: \(error.localizedDescription)")
         states[model] = .failed(error.localizedDescription)
@@ -235,7 +307,7 @@ final class LocalModels {
 
     /// Into the Trash, like everything satz removes.
     func remove(_ model: String) {
-        guard model != ModelCatalog.apple, let folder = Self.folder(of: model) else { return }
+        guard model != ModelCatalog.apple, Self.canChangeFiles, let folder = Self.folder(of: model) else { return }
         if loaded?.variant == model { unload() }
         releaseSpare(model)
         try? FileManager.default.trashItem(at: folder, resultingItemURL: nil)
@@ -297,7 +369,7 @@ final class LocalModels {
         Task.detached {
             _ = await pending?.value
             _ = await test?.value
-            if let kit = try? await kit.value { await kit.whisper.unloadModels() }
+            if let kit = try? await kit.value { await kit.unload() }
             Log.note(note)
         }
     }
@@ -386,10 +458,21 @@ final class LocalModels {
         }
         guard isReady(model, language: language) || loaded?.variant == model else { throw Failure.notDownloaded }
         let kit = kit(model)
-        let englishOnly = LocalCatalog.model(model)?.isEnglishOnly ?? false
+        let told = LocalCatalog.model(model)?.told(choice: toldChoice(), spoken: language)
         return try await queued {
-            try await Self.whisperTranscribe(samples, kit: try await kit.value, vocabulary: vocabulary, spoken: language, englishOnly: englishOnly)
+            // Thrown away or replaced while it waited: the next dictation
+            // must not wait for this one.
+            try Self.stillWanted(model)
+            let loaded = try await kit.value
+            try Self.stillWanted(model)
+            return try await Self.run(samples, kit: loaded, model: model, vocabulary: vocabulary, spoken: language, told: told)
         }
+    }
+
+    nonisolated private static func stillWanted(_ model: String) throws {
+        guard Task.isCancelled else { return }
+        Log.note("local: \(model) skipped a recording that was thrown away or replaced")
+        throw CancellationError()
     }
 
     /// Runs `work` after everything queued before it.
@@ -443,8 +526,9 @@ final class LocalModels {
         do {
             guard let clip = Self.speedClip else { throw Failure.notDownloaded }
             let kit = given ?? (loaded?.variant == model || isWanted(model) ? self.kit(model) : loadSpare(model))
-            let whisper = try await kit.value
+            let ready = try await kit.value
             let vocabulary = vocabulary()
+            let told = LocalCatalog.model(model)?.told(choice: toldChoice(), spoken: language)
             var elapsed: TimeInterval?
             var runs = 0
             // A run with another model loading beside it is run again: the
@@ -456,8 +540,7 @@ final class LocalModels {
                 let loadsBefore = loadsStarted
                 let took = try await queued {
                     let started = Date()
-                    _ = try await Self.whisperTranscribe(clip, kit: whisper, vocabulary: vocabulary, spoken: language,
-                                                         englishOnly: LocalCatalog.model(model)?.isEnglishOnly ?? false)
+                    _ = try await Self.run(clip, kit: ready, model: model, vocabulary: vocabulary, spoken: language, told: told)
                     return Date().timeIntervalSince(started)
                 }
                 runs += 1
@@ -518,6 +601,10 @@ final class LocalModels {
 
     /// The folder a finished download landed in; nil if there is none.
     nonisolated static func folder(of variant: String) -> URL? {
+        if LocalCatalog.model(variant)?.sherpa != nil {
+            let folder = sherpaFolder(variant)
+            return FileManager.default.fileExists(atPath: folder.appendingPathComponent(completeMark).path) ? folder : nil
+        }
         guard let path = try? String(contentsOf: marker(variant), encoding: .utf8),
               FileManager.default.fileExists(atPath: path) else { return nil }
         return URL(fileURLWithPath: path, isDirectory: true)
@@ -529,14 +616,63 @@ final class LocalModels {
         base.appendingPathComponent("\(variant).ready")
     }
 
+    /// A sherpa-onnx model's folder; its own mark goes inside, so the Trash
+    /// takes both.
+    nonisolated static func sherpaFolder(_ model: String) -> URL {
+        sherpaBase.appendingPathComponent(model, isDirectory: true)
+    }
+
+    nonisolated private static let completeMark = ".complete"
+
+    nonisolated private static func markComplete(_ model: String, folder: URL) throws {
+        if LocalCatalog.model(model)?.sherpa != nil {
+            try Data().write(to: folder.appendingPathComponent(completeMark))
+        } else {
+            try folder.path.write(to: marker(model), atomically: true, encoding: .utf8)
+        }
+    }
+
     nonisolated private static func load(_ variant: String, folder given: URL?) async throws -> Kit {
         guard let folder = given ?? folder(of: variant) else { throw Failure.notDownloaded }
+        if let sherpa = LocalCatalog.model(variant)?.sherpa {
+            // Canary's language is set before each transcription (`run`).
+            let settings = sherpa.settings(folder: folder, spoken: .german)
+            let kit = Kit(try SherpaRecognizer(settings))
+            Log.note("local: \(variant) loaded through sherpa-onnx \(SherpaRecognizer.version)")
+            return kit
+        }
         let config = WhisperKitConfig(model: variant, downloadBase: base, modelFolder: folder.path,
                                       verbose: false, logLevel: .error, prewarm: true, load: true, download: false)
         return Kit(try await WhisperKit(config))
     }
 
-    nonisolated private static func whisperTranscribe(_ samples: [Float], kit: Kit, vocabulary: [String], spoken: Language,
+    /// A recording through whichever engine runs the model.
+    /// - Parameter told: the language Canary is told, nil for the others.
+    nonisolated private static func run(_ samples: [Float], kit: Kit, model: String, vocabulary: [String], spoken: Language,
+                                        told: String?) async throws -> String {
+        switch kit.engine {
+        case .whisper(let whisper):
+            return try await whisperTranscribe(samples, whisper: whisper, vocabulary: vocabulary, spoken: spoken,
+                                               englishOnly: LocalCatalog.model(model)?.isEnglishOnly ?? false)
+        case .sherpa(let recognizer):
+            guard let sherpa = LocalCatalog.model(model)?.sherpa else { throw Failure.notDownloaded }
+            // The word list is not given to these models (replacements still
+            // apply): none of them takes a prompt the way Whisper does.
+            if let told { recognizer.listen(for: told) }
+            do {
+                return try sherpa.transcribe(samples) { recognizer.transcribe($0) }
+            } catch SherpaModel.Failure.pieceNotHeard {
+                Log.note(String(format: "local: part of %.1f s of speech came back empty from \(model), kept for another try",
+                                Double(samples.count) / 16_000))
+                throw Failure.notUnderstood
+            } catch is CancellationError {
+                Log.note("local: \(model) stopped halfway, its recording was thrown away or replaced")
+                throw CancellationError()
+            }
+        }
+    }
+
+    nonisolated private static func whisperTranscribe(_ samples: [Float], whisper: WhisperKit, vocabulary: [String], spoken: Language,
                                                       englishOnly: Bool = false) async throws -> String {
         // Whisper makes something up for silence ("Vielen Dank.").
         guard SpeechGate.hasSpeech(samples) else { return "" }
@@ -565,12 +701,12 @@ final class LocalModels {
             // WhisperKit's retries at higher temperatures only cost time,
             // up to five more decodes (Small took 2.8 s instead of 1.0).
             if prompt != nil { options.temperatureFallbackCount = 0 }
-            let results = try await kit.whisper.transcribe(audioArray: samples, decodeOptions: options)
+            let results = try await whisper.transcribe(audioArray: samples, decodeOptions: options)
             return results.map(\.text).joined(separator: " ")
                 .split(whereSeparator: \.isWhitespace).joined(separator: " ")
         }
         let plain = try await decode(nil, nil)
-        guard !vocabulary.isEmpty, !plain.isEmpty, let tokenizer = kit.whisper.tokenizer else { return plain }
+        guard !vocabulary.isEmpty, !plain.isEmpty, let tokenizer = whisper.tokenizer else { return plain }
         // The word list goes in as Whisper's own prompt: text it takes as
         // having come before, so it spells those words the same way. It
         // copies the prompt's style too: without the full stop, sentences

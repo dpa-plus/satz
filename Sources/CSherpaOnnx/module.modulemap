@@ -1,0 +1,6 @@
+// sherpa-onnx's C API, from the release `make sherpa` fetches into vendor/.
+module CSherpaOnnx [system] {
+    header "../../vendor/sherpa-onnx/include/c-api.h"
+    link "sherpa-onnx-c-api"
+    export *
+}

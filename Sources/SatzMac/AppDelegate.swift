@@ -10,7 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// In test mode next to the state file: a test that clears or trims the
     /// history must not touch the user's.
     private lazy var history = History(
-        file: argument(after: "--dev-control").map { URL(fileURLWithPath: $0).deletingLastPathComponent().appendingPathComponent("history.json") }
+        file: LaunchMode.current.stateFile.map { URL(fileURLWithPath: $0).deletingLastPathComponent().appendingPathComponent("history.json") }
             ?? History.standardFile,
         limit: preferences.historyLimit
     )
@@ -84,11 +84,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
+        // A test flag without its value: never run as the user's own satz
+        // (that would quit theirs) with half a test setup.
+        if case .invalid(let why) = LaunchMode.current {
+            Log.note("not started: \(why)")
+            NSApp.terminate(nil)
+            return
+        }
         // One satz at a time. Two copies (an old one still running after an
         // update, or one opened from Downloads next to the one in
         // Applications) both heard the shortcut, and every text was pasted
         // twice. The newest one takes over. A test copy leaves the real one be.
-        if argument(after: "--dev-control") == nil {
+        if LaunchMode.current.stateFile == nil {
             quitOtherCopies()
             startAtLoginByDefault()
         }
@@ -102,14 +109,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // unless a test asks for it.
         mediaPause.isOn = { [weak self] in
             guard let self else { return false }
-            return preferences.pausesMedia && (argument(after: "--dev-control") == nil || CommandLine.arguments.contains("--test-media"))
+            return preferences.pausesMedia && (LaunchMode.current.stateFile == nil || CommandLine.arguments.contains("--test-media"))
         }
         if let files = argument(after: "--test-audio") {
             AudioSources.testFiles = files.split(separator: ":").map { URL(fileURLWithPath: String($0)) }
         }
-        if let stateFile = argument(after: "--dev-control") {
+        if let stateFile = LaunchMode.current.stateFile {
             devControl = DevControl(session: session, card: card, stateFile: URL(fileURLWithPath: stateFile))
             devControl?.toggleEye = { [weak self] in self?.preferences.showsText.toggle() }
+            devControl?.spoken = { [weak self] in self?.preferences.spokenLanguage ?? .german }
+            devControl?.use = { [weak self] model in
+                self?.preferences.localModel = model
+                self?.preferences.provider = .local
+                LocalModels.shared.warmUp(model, language: self?.preferences.spokenLanguage ?? .german)
+            }
+            Log.note("test mode: models in \(LocalModels.root.path)\(LocalModels.canChangeFiles ? "" : ", shared with the real satz: no downloads")")
             // A test copy running next to the real satz must not answer the
             // user's own shortcut or Escape: it did, and ate their dictations.
             session.takesEscape = false
@@ -205,6 +219,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             preferences.localModel = model
         }
         LocalModels.shared.vocabulary = { [weak self] in self?.preferences.transcriberSettings.vocabulary ?? [] }
+        LocalModels.shared.toldChoice = { [weak self] in self?.preferences.toldLanguage }
         LocalModels.shared.isDictating = { [weak self] in
             switch self?.session.phase {
             case .starting?, .listening?, .paused?, .finishing?: true
@@ -219,8 +234,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // Nothing works until setup is done, and a menu bar icon alone gives a
-        // new user no hint of that.
-        if !setup.isComplete {
+        // new user no hint of that. A test copy opens no window by itself
+        // (`setup` does): a fresh models folder left its setup unfinished,
+        // and the window would land on the user's screen.
+        if !setup.isComplete && devControl == nil {
             setupWindow.show()
         }
     }

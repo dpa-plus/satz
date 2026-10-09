@@ -4,6 +4,9 @@
 #   source scripts/e2e/e2e.sh
 #   launch "a.wav:b.wav" [-triggerMode hold ...]; cmd press; sleep 6; cmd press; st; stop
 # A test copy never pastes, and leaves the real satz's shortcut and Escape alone.
+# Local models: launch "a.wav" -provider local --models-dir <scratch folder>.
+# Downloads only go there; without it the copy uses the user's models and
+# refuses to download or delete any.
 # It runs as "satz test" with its own settings; without the copy it falls back
 # to dist/satz.app, which shares the real satz's settings.
 E2E_DIR=${E2E_DIR:-"${TMPDIR:-/tmp}/satz-e2e"}

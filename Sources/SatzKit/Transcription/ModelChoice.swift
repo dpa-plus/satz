@@ -120,14 +120,14 @@ public enum ModelCatalog {
     /// is `LocalCatalog.offered`'s call, made where the chip is known.
     static var localModels: [String] {
         if #available(macOS 26, *) { return LocalCatalog.all.map(\.id) }
-        return LocalCatalog.whisperIDs
+        return LocalCatalog.all.filter { !$0.isApple }.map(\.id)
     }
 
     /// Free to run; no error rate here, because AA measured none of these
     /// builds (Argmax's numbers live in `LocalBenchmarks`).
     static var localKnown: [String: Known] {
         Dictionary(uniqueKeysWithValues: LocalCatalog.all.map {
-            ($0.id, Known(name: $0.name, maker: $0.isApple ? "Apple" : "OpenAI", measured: 0))
+            ($0.id, Known(name: $0.name, maker: $0.maker, measured: 0))
         })
     }
 
