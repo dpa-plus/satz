@@ -8,8 +8,12 @@ import AppKit
 /// taken out again.
 @MainActor
 enum AppIcon {
+    /// Drawn once per family: applied again each time a window opens.
+    private static var drawn: [AppTheme: NSImage] = [:]
+
     static func apply(_ family: AppTheme) {
-        guard let image = IconRenderer.image(for: family) else { return }
+        guard let image = drawn[family] ?? IconRenderer.image(for: family) else { return }
+        drawn[family] = image
         NSApp.applicationIconImage = image
         if FileManager.default.fileExists(atPath: Bundle.main.bundlePath + "/Icon\r") {
             NSWorkspace.shared.setIcon(nil, forFile: Bundle.main.bundlePath, options: [])

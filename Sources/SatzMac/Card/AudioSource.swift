@@ -47,12 +47,9 @@ final class FileSource: AudioSource, @unchecked Sendable {
     private var ticker: Task<Void, Never>?
 
     init(url: URL) {
-        let data = (try? Data(contentsOf: url)) ?? Data()
-        // A plain 44-byte header, as WAVEncoder and afconvert write it.
-        let body = data.count > 44 ? data.subdata(in: 44 ..< data.count) : Data()
-        samples = body.withUnsafeBytes { raw in
-            raw.bindMemory(to: Int16.self).map { Float(Int16(littleEndian: $0)) / 32_767 }
-        }
+        // Read by its chunks: afconvert puts a padding chunk before the
+        // audio, and a clip read as a plain 44-byte header played nothing.
+        samples = (try? Data(contentsOf: url)).flatMap(WAVDecoder.decode)?.samples ?? []
     }
 
     func start() async throws {

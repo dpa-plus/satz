@@ -137,7 +137,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         menuBar = MenuBarItem { [unowned self] in
-            AnyView(PopoverView(
+            // Read as the menu opens, before it takes the keyboard: from then
+            // on the app behind it has no focused field to report, and Insert
+            // stayed grey everywhere. The field cannot change while the menu
+            // is open (a click elsewhere closes it), so once is enough.
+            let target = Session.frontmostOtherApp()
+            let place = FocusedField.capture(in: target)
+            let canInsert = FocusedField.isEditable(in: target)
+            return AnyView(PopoverView(
                 history: history, discarded: discarded, setup: setup, shortcut: shortcut, preferences: preferences,
                 actions: PopoverActions(
                     // Taken only when it can come back: taking it while
@@ -151,18 +158,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     openSetup: { [weak self] in self?.menuBar.close(); self?.setupWindow.show() },
                     openSettings: { [weak self] in self?.menuBar.close(); self?.show(.settings) },
                     openHistory: { [weak self] in self?.menuBar.close(); self?.show(.history) },
+                    canInsert: canInsert,
                     insert: { [weak self] text in
                         guard let self else { return }
                         menuBar.close()
-                        // The menu never took the focus: the app in front is
-                        // still the one with the field.
-                        let target = Session.frontmostOtherApp()
                         // A test copy never types into the user's apps.
                         guard devControl == nil else {
                             Log.note("insert from the menu into \(target?.localizedName ?? "?"): test mode, not pasted")
                             return
                         }
-                        let outcome = Paster.deliver(text, into: target, keepsOnClipboard: preferences.keepsOnClipboard)
+                        let outcome = Paster.deliver(text, into: target, window: place.window, field: place.field,
+                                                     keepsOnClipboard: preferences.keepsOnClipboard)
                         Log.note("insert from the menu into \(target?.localizedName ?? "?"): \(outcome == .pasted ? "sent ⌘V" : "clipboard only")")
                     },
                     quit: { NSApp.terminate(nil) }
