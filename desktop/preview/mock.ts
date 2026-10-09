@@ -1,9 +1,11 @@
 // Stands in for satz's main process, so the window's pages run in a plain
 // browser: settings, history and the model menu with sample data. Changes
 // stay in this page. Built by `node build.mjs --preview`; see preview/index.html.
-// `?provider=local` opens with the local models: one in use and measured, one
-// downloading (it goes on to "getting ready", "measuring" and done), one on
-// the computer but never measured, one waiting for the download to finish.
+// `?provider=local` opens with Local in use: one model in use and measured,
+// one downloading (it goes on to "getting ready", "measuring" and done), two
+// on the computer (one measured, one never), the rest to download. Without
+// it OpenRouter is in use (it has a key, the others none): pick another
+// provider in the menu to see it without switching to it.
 // `&language=de` shows the German words, `&failed=1` a download that failed.
 import { germanErrors, localModelIds, type Speed } from '../src/core/localModels'
 import { models as shipped } from '../src/core/models'
@@ -25,7 +27,8 @@ let history = [
   { id: 'c', text: 'Bitte schick mir die Unterlagen bis Freitag.', date: new Date(Date.now() - 3 * hour).toISOString(), pasted: false },
   { id: 'd', text: "The test is red, please don't merge yet.", date: new Date(Date.now() - 26 * hour).toISOString(), pasted: true },
 ]
-let hasKey = true
+const keys: Record<Provider, boolean> = { openrouter: true, openai: false, groq: false, custom: false, local: false }
+const isProvider = (value: unknown): value is Provider => typeof value === 'string' && value in shipped
 
 // The local models, as main.ts reports them.
 type LocalState = { kind: string; fraction?: number; message?: string }
@@ -37,14 +40,17 @@ const local: Record<string, { state: LocalState; measuring: boolean; speed: Spee
   'onnx-community/whisper-large-v3-ONNX': { state: { kind: 'downloading', fraction: 0.42 }, measuring: false, speed: null },
   'onnx-community/whisper-small': { state: { kind: 'ready' }, measuring: false, speed: null },
   'onnx-community/whisper-base': { state: query.has('failed') ? { kind: 'failed', message: 'fetch failed' } : { kind: 'missing' }, measuring: false, speed: null },
+  'onnx-community/whisper-large-v3-turbo-german-ONNX': { state: { kind: 'ready' }, measuring: false, speed: measured(0.8) },
 }
+/** Seconds per 10 s, about as an Intel laptop would measure them. */
+const fakeSpeeds: [string, number][] = [['large-v3-ONNX', 4.8], ['medium', 1.9], ['base', 0.3], ['tiny', 0.2], ['distil', 0.6]]
 const localModel = () => prefs.models.local || 'onnx-community/whisper-large-v3-turbo'
 const entry = (id: string) => (local[id] ??= { state: { kind: 'missing' }, measuring: false, speed: null })
 /** What the real speed test leads to, a few seconds later. */
 function fakeMeasure(id: string) {
   entry(id).measuring = true
   emit('local:changed')
-  setTimeout(() => { Object.assign(entry(id), { measuring: false, speed: measured(id.includes('large-v3-ONNX') ? 4.8 : id.includes('base') ? 0.3 : 0.5) }); emit('local:changed') }, 2500)
+  setTimeout(() => { Object.assign(entry(id), { measuring: false, speed: measured(fakeSpeeds.find(([part]) => id.includes(part))?.[1] ?? 0.5) }); emit('local:changed') }, 2500)
 }
 /** Counts up like the real download, gets ready, then measures. */
 function fakeDownload(id: string, from = 0) {
@@ -74,15 +80,18 @@ window.confirm = (message?: string) => { calls.push(['confirm', message]); retur
   async invoke(channel: string, ...args: unknown[]) {
     calls.push([channel, ...args])
     switch (channel) {
-      case 'settings:get':
-        return { prefs, hasKey, keyboard: 'right Ctrl twice', wayland: false, platform: 'win32', history, startAtLogin: true,
-          spokenLanguage: prefs.spokenLanguage ?? prefs.language, models: shipped[prefs.provider],
+      case 'settings:get': {
+        // The provider the page shows; dictations go to prefs.provider.
+        const shown = isProvider(args[0]) ? args[0] : prefs.provider
+        return { prefs, shown, hasKey: keys[shown], keyboard: 'right Ctrl twice', wayland: false, platform: 'win32', history, startAtLogin: true,
+          spokenLanguage: prefs.spokenLanguage ?? prefs.language, models: shipped[shown],
           local: { inUse: localModel(), models: localModelIds(localModel()).map(id => ({ id, ...entry(id) })), germanErrors: germanErrors(), machine, version } }
+      }
       case 'local:download': entry(args[0] as string).state = { kind: 'downloading', fraction: 0 }; fakeDownload(args[0] as string); return
       case 'local:measure': fakeMeasure(args[0] as string); return
       case 'local:remove': entry(args[0] as string).state = { kind: 'missing' }; return
       case 'settings:update': Object.assign(prefs, args[0]); return prefs
-      case 'settings:store-key': hasKey = true; return true
+      case 'settings:store-key': { const provider = args[1] === undefined ? prefs.provider : args[1]; if (!isProvider(provider) || provider === 'local') return false; keys[provider] = true; return true }
       case 'settings:clear-history': history = []; emit('history:changed'); return
       case 'settings:start-at-login': return args[0]
       case 'history:get': return { entries: history, limit: prefs.historyLimit, language: prefs.language }

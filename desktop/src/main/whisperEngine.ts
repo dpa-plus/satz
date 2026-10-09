@@ -1,5 +1,5 @@
 import fs from 'node:fs'
-import { germanOrEnglish, localModel } from '../core/localModels'
+import { germanOrEnglish, localModel, onlyLanguage } from '../core/localModels'
 import { hasSpeech, keepEveryWord } from '../core/speech'
 import { windows } from '../core/windows'
 import { gaveWay, markerPath, type LocalState } from './localFiles'
@@ -240,8 +240,8 @@ export class WhisperEngine {
     return job
   }
 
-  protected async run(samples: Float32Array, { processor, tokenizer, model }: Loaded, vocabulary: string[], spoken: 'de' | 'en'): Promise<string> {
-    const { Tensor } = await this.transformers()
+  protected async run(samples: Float32Array, { id, processor, tokenizer, model }: Loaded, vocabulary: string[], spoken: 'de' | 'en'): Promise<string> {
+    const only = onlyLanguage(id)
     const config = model.generation_config
     const token = (name: string) => tokenizer.convert_tokens_to_ids(name) as number
     const start = config.decoder_start_token_id as number
@@ -269,8 +269,11 @@ export class WhisperEngine {
       // piece and read for German and English only (germanOrEnglish), so
       // both work without a setting. Under two seconds the guess is a coin
       // toss ("Ja." came back as "Yeah."): there the language set in Settings.
-      let language = token(`<|${spoken}|>`)
-      if (samples.length >= 2 * rate) {
+      // A model for one language is never asked: it gets its own, in both
+      // decodes below.
+      let language = token(`<|${only ?? spoken}|>`)
+      if (!only && samples.length >= 2 * rate) {
+        const { Tensor } = await this.transformers()
         const step = await model.forward({ input_features, decoder_input_ids: new Tensor('int64', [BigInt(start)], [1, 1]) })
         language = germanOrEnglish(step.logits.data as Float32Array, languages) ?? language
       }

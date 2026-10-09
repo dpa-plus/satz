@@ -52,7 +52,7 @@ export const known: Record<string, Known> = {
   'whisper-large-v3-turbo': { name: 'Whisper Large v3 Turbo', maker: 'OpenAI', errorRate: 4.6 },
   'whisper-large-v3': { name: 'Whisper Large v3', maker: 'OpenAI' },
   // On this computer: free, and AA measured none of these builds (localModels.ts has what is known).
-  ...Object.fromEntries(localModels.map(model => [model.id, { name: model.name, maker: 'OpenAI', measured: 0 }])),
+  ...Object.fromEntries(localModels.map(model => [model.id, { name: model.name, maker: model.maker, measured: 0 }])),
 }
 
 const shipped: Record<Provider, string[]> = {

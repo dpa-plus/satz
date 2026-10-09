@@ -5,7 +5,7 @@ import path from 'node:path'
 import test from 'node:test'
 import {
   formatGermanErrors, formatSize, formatSpeed, germanErrors, germanOrEnglish, localFacts, localModel, localModelIds, localModels,
-  measuredHere, parseGermanErrors, secondsPer10, shippedGermanErrors, type Speed,
+  measuredHere, onlyLanguage, parseGermanErrors, secondsPer10, shippedGermanErrors, type Speed,
 } from '../src/core/localModels'
 import { models } from '../src/core/models'
 import { providers } from '../src/core/transcriber'
@@ -20,29 +20,60 @@ openai/whisper-large-v3-turbo,338.32,3.67,8.58
 TheStageAI/thewhisper-large-v3-turbo,960.42,2.91,3.17
 `
 
-test('the catalog: four models, Turbo first as the default, real sizes', () => {
+test('the catalog: eight models, Turbo first as the default, real sizes', () => {
   assert.deepEqual(localModels.map(model => model.id), [
-    'onnx-community/whisper-large-v3-turbo', 'onnx-community/whisper-large-v3-ONNX', 'onnx-community/whisper-small', 'onnx-community/whisper-base'])
+    'onnx-community/whisper-large-v3-turbo', 'onnx-community/whisper-large-v3-ONNX', 'onnx-community/whisper-medium-ONNX',
+    'onnx-community/whisper-small', 'onnx-community/whisper-base', 'onnx-community/whisper-large-v3-turbo-german-ONNX',
+    'onnx-community/distil-large-v3.5-ONNX', 'onnx-community/whisper-tiny'])
   assert.equal(localModels[0].id, providers.local.defaultModel)
-  assert.deepEqual(localModels.map(model => formatSize(model.bytes, 'en')), ['981 MB', '1.4 GB', '328 MB', '149 MB'])
-  // The cloud menus and the local list name the same models.
+  // The sum of the three files satz loads, from each repo's file list (09.10.2026).
+  assert.deepEqual(localModels.map(model => formatSize(model.bytes, 'en')), ['981 MB', '1.4 GB', '786 MB', '328 MB', '149 MB', '983 MB', '950 MB', '99 MB'])
+  // The cloud menus and the local list name the same models, with their makers.
   assert.deepEqual(models.local.map(model => model.id).sort(), localModels.map(model => model.id).sort())
+  assert.equal(models.local.find(model => model.id === 'onnx-community/whisper-large-v3-turbo-german-ONNX')?.maker, 'primeLine')
 })
 
-test('models satz cannot run, or that are English only, are never offered', () => {
+test('the order: the models for both languages by German errors, then the single-language ones, Tiny last', () => {
+  const rates = germanErrors()
+  const both = localModels.filter(model => model.language === 'both' && model.id !== 'onnx-community/whisper-tiny')
+  // Turbo is first as the default; after it, fewer errors first.
+  const afterDefault = both.slice(1).map(model => rates[model.original])
+  assert.deepEqual(afterDefault, [...afterDefault].sort((a, b) => a - b))
+  const firstSingle = localModels.findIndex(model => model.language !== 'both')
+  assert.ok(localModels.slice(firstSingle, -1).every(model => model.language !== 'both'))
+  assert.equal(localModels.at(-1)!.id, 'onnx-community/whisper-tiny')
+  assert.equal(localModels.at(-1)!.tag?.en, 'very rough')
+})
+
+test('models satz cannot run, and the *.en ones, are never offered', () => {
   for (const { id } of localModels) {
-    assert.doesNotMatch(id, /tiny|medium|distil|\.en$|lite-whisper|whisper-small-ONNX|whisper-large-v3-turbo-ONNX|^Xenova\//)
+    assert.doesNotMatch(id, /\.en$|lite-whisper|whisper-small-ONNX|whisper-large-v3-turbo-ONNX|^Xenova\//)
+  }
+})
+
+test('a single-language model always decodes in its language; the others are asked which they hear', () => {
+  assert.equal(onlyLanguage('onnx-community/whisper-large-v3-turbo-german-ONNX'), 'de')
+  assert.equal(onlyLanguage('onnx-community/distil-large-v3.5-ONNX'), 'en')
+  for (const id of ['onnx-community/whisper-large-v3-turbo', 'onnx-community/whisper-tiny', 'onnx-community/whisper-medium-ONNX']) assert.equal(onlyLanguage(id), undefined, id)
+  // Typed in by hand: nothing known, Whisper tells.
+  assert.equal(onlyLanguage('someone/whisper-de'), undefined)
+  // Each one's tag says it.
+  for (const model of localModels.filter(model => model.language !== 'both')) {
+    assert.deepEqual(model.tag, model.language === 'de' ? { de: 'nur Deutsch', en: 'German only' } : { de: 'nur Englisch', en: 'English only' })
   }
 })
 
 test('a model typed in earlier gets its own row, after the list', () => {
   assert.deepEqual(localModelIds('onnx-community/whisper-small'), localModels.map(model => model.id))
   assert.deepEqual(localModelIds('someone/whisper-de').slice(-1), ['someone/whisper-de'])
-  assert.equal(localModelIds('').length, 4)
+  assert.equal(localModelIds('').length, localModels.length)
 })
 
-test('the German leaderboard is read by column name, and only for the models satz offers', () => {
+test('the German leaderboard is read by column name, and only for the models satz offers that write German', () => {
   assert.deepEqual(parseGermanErrors(leaderboard), { 'openai/whisper-large-v3': 3.2, 'openai/whisper-large-v3-turbo': 3.67 })
+  // A German number for the English-only model would mean nothing.
+  assert.deepEqual(parseGermanErrors(`${leaderboard}distil-whisper/distil-large-v3.5,1,40.2,50\nprimeLine/whisper-large-v3-turbo-german,1,2.8,3\n`),
+    { 'openai/whisper-large-v3': 3.2, 'openai/whisper-large-v3-turbo': 3.67, 'primeLine/whisper-large-v3-turbo-german': 2.8 })
   // Columns moved, a quoted field, Windows line ends.
   const moved = 'MCV WER,"FLEURS WER",model,RTFx\r\n4.79,3.1,"openai/whisper-large-v3",327.55\r\n'
   assert.deepEqual(parseGermanErrors(moved), { 'openai/whisper-large-v3': 3.1 })
@@ -60,6 +91,9 @@ test("today's numbers win; the paper's stay for the models the leaderboard dropp
   assert.equal(rates['openai/whisper-large-v3-turbo'], 3.5)
   assert.equal(rates['openai/whisper-small'], 10.2)
   assert.equal(rates['openai/whisper-base'], 17.9)
+  // The Whisper paper, Table 13 (FLEURS, German).
+  assert.equal(rates['openai/whisper-medium'], 6.5)
+  assert.equal(rates['openai/whisper-tiny'], 27.8)
   assert.deepEqual(germanErrors(), shippedGermanErrors)
 })
 
@@ -93,6 +127,10 @@ test("a model's second line: size, speed once measured, German errors, each with
   const brought = localFacts(turbo, 'en', { speed, here: false })
   assert.match(brought[1].help!, /^Measured on 10\/8\/2026 with satz 0\.4\.1 on Apple M5 Pro, 18 cores$/)
   assert.equal(localFacts(turbo, 'en', { errors: { 'openai/whisper-large-v3-turbo': 2.5 } })[1].text, '2.5 % errors in German')
+  // The German fine-tune and the English-only model: no German number, their tags say what they are.
+  assert.deepEqual(localFacts('onnx-community/whisper-large-v3-turbo-german-ONNX', 'de').map(fact => fact.text), ['983 MB'])
+  assert.deepEqual(localFacts('onnx-community/distil-large-v3.5-ONNX', 'en', { errors: { 'distil-whisper/distil-large-v3.5': 40 } }).map(fact => fact.text), ['950 MB'])
+  assert.deepEqual(localFacts('onnx-community/whisper-tiny', 'de').map(fact => fact.text), ['99 MB', '27,8 % Fehler Deutsch'])
   // One typed in by hand: nothing known until it is measured.
   assert.deepEqual(localFacts('someone/whisper-de', 'en'), [])
   assert.deepEqual(localFacts('someone/whisper-de', 'en', { speed, here: true }).map(fact => fact.text), ['0.7 s per 10 s of speech'])
@@ -166,5 +204,5 @@ test("German errors: fetched once a day and kept; the shipped numbers whenever t
 
 test('the catalog knows each id it lists', () => {
   for (const model of localModels) assert.equal(localModel(model.id), model)
-  assert.equal(localModel('onnx-community/whisper-tiny'), undefined)
+  assert.equal(localModel('onnx-community/whisper-tiny.en'), undefined)
 })

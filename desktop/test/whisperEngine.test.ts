@@ -128,3 +128,62 @@ test('downloads whose tests are put off keep at most one model beside the one in
   await engine.unload()
   assert.deepEqual(engine.disposals.sort(), [A, B, C].sort())
 }))
+
+/**
+ * Whisper's own steps as records: which tokens each decode starts with, and
+ * whether the language was asked for (forward). The language check would
+ * say English, so a German-only model that asked would show it.
+ */
+class LanguageEngine extends WhisperEngine {
+  decodes: number[][] = []
+  asked = 0
+  static tokens: Record<string, number> = { '<|endoftext|>': 2, '<|notimestamps|>': 3, '<|transcribe|>': 4, '<|de|>': 5, '<|en|>': 6, '<|startofprev|>': 7 }
+  decode(id: string, samples: Float32Array, vocabulary: string[], spoken: 'de' | 'en') {
+    const model = {
+      generation_config: { decoder_start_token_id: 1 },
+      generate: async ({ decoder_input_ids }: { decoder_input_ids: number[][] }) => {
+        this.decodes.push(decoder_input_ids[0])
+        return { tolist: () => [[...decoder_input_ids[0], 100, 101, 2]] }
+      },
+      forward: async () => { this.asked++; const logits = new Float32Array(10).fill(-1); logits[6] = 9; return { logits: { data: logits } } },
+    }
+    const tokenizer = {
+      convert_tokens_to_ids: (name: string) => LanguageEngine.tokens[name],
+      decode: () => 'Hallo Welt',
+      encode: () => [200, 201],
+    }
+    return this.run(samples, { id, processor: async () => ({ input_features: {} }), tokenizer, model }, vocabulary, spoken)
+  }
+}
+
+/** Three seconds of speech: long enough that a model for both languages would be asked which it hears. */
+const longSpeech = new Float32Array(3 * 16_000).fill(0.1)
+
+test('a German-only model decodes German, with and without the word list, and is never asked which language it hears', async () => {
+  const engine = new LanguageEngine(os.tmpdir(), () => {}, () => {})
+  assert.equal(await engine.decode('onnx-community/whisper-large-v3-turbo-german-ONNX', longSpeech, ['Kubernetes'], 'en'), 'Hallo Welt')
+  assert.deepEqual(engine.decodes, [[1, 5, 4, 3], [7, 200, 201, 1, 5, 4, 3]])
+  assert.equal(engine.asked, 0)
+})
+
+test('the English-only model decodes English, whatever language is set for short clips', async () => {
+  const engine = new LanguageEngine(os.tmpdir(), () => {}, () => {})
+  await engine.decode('onnx-community/distil-large-v3.5-ONNX', longSpeech, ['Kubernetes'], 'de')
+  await engine.decode('onnx-community/distil-large-v3.5-ONNX', speech, [], 'de')
+  assert.deepEqual(engine.decodes, [[1, 6, 4, 3], [7, 200, 201, 1, 6, 4, 3], [1, 6, 4, 3]])
+  assert.equal(engine.asked, 0)
+})
+
+test('a model for both languages takes the set language for a short clip, in both decodes', async () => {
+  const engine = new LanguageEngine(os.tmpdir(), () => {}, () => {})
+  await engine.decode('onnx-community/whisper-large-v3-turbo', speech, ['Kubernetes'], 'de')
+  assert.deepEqual(engine.decodes, [[1, 5, 4, 3], [7, 200, 201, 1, 5, 4, 3]])
+  assert.equal(engine.asked, 0)
+})
+
+test('a model for both languages is asked which it hears, and decodes in that one', async () => {
+  const engine = new LanguageEngine(os.tmpdir(), () => {}, () => {})
+  await engine.decode('onnx-community/whisper-medium-ONNX', longSpeech, [], 'de')
+  assert.equal(engine.asked, 1)
+  assert.deepEqual(engine.decodes, [[1, 6, 4, 3]])
+})

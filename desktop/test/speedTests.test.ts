@@ -152,6 +152,17 @@ test('the model in use is not on the computer: the download becomes it and works
   assert.deepEqual(queue, ['warmUp B', 'measure B'])
 })
 
+test('a download while Local is only looked at: it may become Local\'s model, never the provider, and stays out of memory', t => {
+  let inUse = 'A'
+  const used: string[] = []
+  const { tests, queue, done } = setup({ inUse: () => inUse, isReady: id => id !== 'A', use: id => { used.push(id); inUse = id }, localChosen: () => false })
+  t.after(done)
+  tests.arrived('B')
+  // `use` sets Local's model and nothing else (main.ts); no warm-up, as no dictation goes to it.
+  assert.deepEqual(used, ['B'])
+  assert.deepEqual(queue, ['measure B'])
+})
+
 test('one test at a time: the second waits for the first, and a dictation begun meanwhile goes ahead of it', async t => {
   const finish: (() => void)[] = []
   const { session, tests, queue, done } = setup({

@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { de, setLanguage } from '../core/language'
 import { Session, type AudioSource } from '../core/session'
-import { needsKey, providers, transcribe, TranscriptionFailure } from '../core/transcriber'
+import { needsKey, providers, transcribe, TranscriptionFailure, type Provider } from '../core/transcriber'
 import { localModelIds } from '../core/localModels'
 import { DoubleTap } from '../core/trigger'
 import { decodeWAV, encodeWAV, resample } from '../core/wav'
@@ -33,6 +33,8 @@ const testAudio = flag('--test-audio')?.split(path.delimiter === ';' ? ';' : ':'
 const devPort = flag('--dev-control')
 const testMode = devPort !== undefined
 const realPasteInTest = args.includes('--test-paste')
+/** A provider's name, as the settings page sends it. */
+const isProvider = (value: unknown): value is Provider => typeof value === 'string' && Object.hasOwn(providers, value)
 
 if (process.platform === 'linux' && !process.env.SATZ_NATIVE_WAYLAND) {
   // Under Wayland a window cannot keep itself on top or place itself; through
@@ -325,19 +327,26 @@ async function start() {
   // The model menu: the provider's live list, the shipped one until it arrives.
   const modelLists = new ModelLists(app.getPath('userData'), provider => store.readKey(provider), log, () => tellWindow('models:changed'), net.fetch as never)
   const germanErrors = new GermanErrors(app.getPath('userData'), log, () => tellWindow('local:changed'), net.fetch as never)
-  ipcMain.handle('settings:get', () => {
-    modelLists.refresh(store.prefs.provider)
-    if (store.prefs.provider === 'local') germanErrors.refresh()
+  /**
+   * `shown`: the provider the settings page shows, which may not be the one
+   * in use (core/browse.ts). Its key and model list are what the page gets;
+   * nothing here switches dictations to it.
+   */
+  ipcMain.handle('settings:get', (_e, asked: unknown) => {
+    const shown = isProvider(asked) ? asked : store.prefs.provider
+    modelLists.refresh(shown)
+    if (shown === 'local') germanErrors.refresh()
     return {
       prefs: store.prefs,
-      hasKey: store.hasKey(),
+      shown,
+      hasKey: store.hasKey(shown),
       keyboard: keyboard?.description,
       wayland: isWayland(),
       platform: process.platform,
       history: store.history,
       startAtLogin: startAtLogin.get(),
       spokenLanguage: store.spokenLanguage,
-      models: modelLists.get(store.prefs.provider),
+      models: modelLists.get(shown),
       local: {
         inUse: localModel(),
         models: localModelIds(localModel()).map(id => ({ id, state: local.state(id), measuring: local.isMeasuring(id) || speedTests.isWaiting(id), speed: local.speed(id) })),
@@ -370,7 +379,13 @@ async function start() {
     keyboard?.stop()
     mediaPause.quitting().finally(() => app.quit())
   })
-  ipcMain.handle('settings:store-key', (_e, key: string) => { store.storeKey(key); return store.hasKey() })
+  // For the provider shown, which need not be the one in use.
+  ipcMain.handle('settings:store-key', (_e, key: string, asked: unknown) => {
+    const provider = asked === undefined ? store.prefs.provider : asked
+    if (!isProvider(provider) || !needsKey(provider)) return false
+    store.storeKey(key, provider)
+    return store.hasKey(provider)
+  })
   ipcMain.handle('settings:clear-history', () => { store.clearHistory(); historyChanged() })
   ipcMain.handle('settings:start-at-login', (_e, on: boolean) => { startAtLogin.set(on); store.update({ startsAtLogin: on }); return startAtLogin.get() })
   ipcMain.handle('settings:open-log', () => shell.openPath(path.join(app.getPath('userData'), 'satz.log')))

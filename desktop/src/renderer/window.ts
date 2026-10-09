@@ -21,13 +21,24 @@ function show(next: Page) {
   document.title = page === 'history' ? t('satz Verlauf', 'satz History') : t('satz Einstellungen', 'satz Settings')
 }
 
-Array.from(document.querySelectorAll<HTMLButtonElement>('#tabs button')).forEach(tab => { tab.onclick = () => show(tab.dataset.page as Page) })
+/**
+ * Opened, from the other page or from outside (the tray, the history's
+ * link), as against drawn again for a new language: the settings page then
+ * starts at the provider in use.
+ */
+function openPage(next: Page, fromOutside = false) {
+  const opened = fromOutside || next !== page
+  show(next)
+  if (opened) document.dispatchEvent(new CustomEvent('satz-page-opened', { detail: next }))
+}
+
+Array.from(document.querySelectorAll<HTMLButtonElement>('#tabs button')).forEach(tab => { tab.onclick = () => openPage(tab.dataset.page as Page) })
 document.addEventListener('keydown', event => {
   if (!(event.ctrlKey || event.metaKey)) return
-  if (event.key === '1') show('history')
-  if (event.key === '2') show('settings')
+  if (event.key === '1') openPage('history')
+  if (event.key === '2') openPage('settings')
 })
-satz.on('window:page', (next: Page) => show(next))
+satz.on('window:page', (next: Page) => openPage(next, true))
 // The settings page says when the language changed.
 // The document's language too, for screen readers.
 document.addEventListener('satz-language', event => { language = (event as CustomEvent).detail; document.documentElement.lang = language; show(page) })

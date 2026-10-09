@@ -7,13 +7,13 @@ import type { Language } from './language'
  * place these models are named; the settings, the download's progress bar and
  * the model menus all read it.
  *
- * All four are onnx-community repos whose three files satz loads
- * (localFiles.ts) exist and whose decoders transformers.js 4.3.1 can feed.
- * Left out on purpose (checked 08.10.2026): tiny and medium (tiny is too
- * rough for German, Turbo beats medium), distil-* and *.en (English only),
- * lite-whisper (no language table), whisper-small-ONNX and
- * whisper-large-v3-turbo-ONNX (their 4-bit decoders want a `cache_position`
- * input transformers.js never sends) and Xenova/whisper-large* (no 4-bit decoder).
+ * All are onnx-community repos whose three files satz loads (localFiles.ts)
+ * exist and whose 4-bit decoders take no `cache_position`, which
+ * transformers.js 4.3.1 never sends; each was run end to end on 09.10.2026.
+ * Left out on purpose: the *.en models (one model for English alone is
+ * enough: Distil Large v3.5), lite-whisper (no language table),
+ * whisper-small-ONNX and whisper-large-v3-turbo-ONNX (their 4-bit decoders
+ * want `cache_position`) and Xenova/whisper-large* (no 4-bit decoder).
  */
 export interface LocalModel {
   id: string
@@ -24,13 +24,28 @@ export interface LocalModel {
   bytes: number
   /** The original model, as the benchmarks name it. */
   original: string
+  /** Who made the original, for the model menus. */
+  maker: string
+  /**
+   * What it is made for. A model for one language is always told that one
+   * (onlyLanguage), never asked which it hears: Distil Large v3.5 writes
+   * English only, and primeLine tuned theirs on German alone.
+   */
+  language: 'both' | Language
 }
 
+const either = { language: 'both', maker: 'OpenAI' } as const
+
+/** The default first, then by how well they hear German; the single-language ones after, the roughest last. */
 export const localModels: LocalModel[] = [
-  { id: 'onnx-community/whisper-large-v3-turbo', name: 'Whisper Large v3 Turbo', bytes: 981_450_034, original: 'openai/whisper-large-v3-turbo' },
-  { id: 'onnx-community/whisper-large-v3-ONNX', name: 'Whisper Large v3', tag: { de: 'am genauesten, langsam', en: 'most accurate, slow' }, bytes: 1_445_984_744, original: 'openai/whisper-large-v3' },
-  { id: 'onnx-community/whisper-small', name: 'Whisper Small', bytes: 327_955_953, original: 'openai/whisper-small' },
-  { id: 'onnx-community/whisper-base', name: 'Whisper Base', tag: { de: 'am schnellsten, ungenau', en: 'fastest, rough' }, bytes: 149_284_199, original: 'openai/whisper-base' },
+  { id: 'onnx-community/whisper-large-v3-turbo', name: 'Whisper Large v3 Turbo', bytes: 981_450_034, original: 'openai/whisper-large-v3-turbo', ...either },
+  { id: 'onnx-community/whisper-large-v3-ONNX', name: 'Whisper Large v3', tag: { de: 'am genauesten, langsam', en: 'most accurate, slow' }, bytes: 1_445_984_744, original: 'openai/whisper-large-v3', ...either },
+  { id: 'onnx-community/whisper-medium-ONNX', name: 'Whisper Medium', bytes: 786_438_953, original: 'openai/whisper-medium', ...either },
+  { id: 'onnx-community/whisper-small', name: 'Whisper Small', bytes: 327_955_953, original: 'openai/whisper-small', ...either },
+  { id: 'onnx-community/whisper-base', name: 'Whisper Base', tag: { de: 'schnell, ungenau', en: 'fast, rough' }, bytes: 149_284_199, original: 'openai/whisper-base', ...either },
+  { id: 'onnx-community/whisper-large-v3-turbo-german-ONNX', name: 'Whisper Large v3 Turbo German', tag: { de: 'nur Deutsch', en: 'German only' }, bytes: 982_774_635, original: 'primeLine/whisper-large-v3-turbo-german', maker: 'primeLine', language: 'de' },
+  { id: 'onnx-community/distil-large-v3.5-ONNX', name: 'Distil-Whisper Large v3.5', tag: { de: 'nur Englisch', en: 'English only' }, bytes: 949_690_520, original: 'distil-whisper/distil-large-v3.5', maker: 'Hugging Face', language: 'en' },
+  { id: 'onnx-community/whisper-tiny', name: 'Whisper Tiny', tag: { de: 'sehr ungenau', en: 'very rough' }, bytes: 99_319_158, original: 'openai/whisper-tiny', ...either },
 ]
 
 /** The catalog's entry for an id, undefined for one typed in by hand earlier. */
@@ -39,20 +54,34 @@ export const localModel = (id: string) => localModels.find(model => model.id ===
 /** The rows Settings shows: the catalog, and the model in use when it is not in it. */
 export const localModelIds = (inUse: string) => [...localModels.map(model => model.id), ...(inUse && !localModel(inUse) ? [inUse] : [])]
 
+/** The language a single-language model always decodes in; undefined where Whisper tells German from English itself (and for a model typed in by hand). */
+export function onlyLanguage(id: string): Language | undefined {
+  const language = localModel(id)?.language
+  return language === 'both' ? undefined : language
+}
+
+/** A German error rate means something only for a model that writes German. */
+const hearsGerman = (model: LocalModel) => model.language !== 'en'
+
 // MARK: - German errors
 
 /**
  * Word error rate in German on FLEURS, of the original models (satz runs an
  * 8-bit encoder and a 4-bit decoder; nobody publishes numbers for those).
  * Large v3 and Turbo from the Open ASR Leaderboard's German file (checked
- * against it on 08.10.2026: 3.2 and 3.67), small and base from the Whisper
- * paper (arXiv 2212.04356, Table 13), the only place they are published.
+ * against it on 08.10.2026: 3.2 and 3.67), medium, small, base and tiny from
+ * the Whisper paper (arXiv 2212.04356, Table 13), the only place they are
+ * published. None for the German fine-tune (the leaderboard has no row for
+ * it) and the English-only model (it writes no German): their tags say what
+ * they are.
  */
 export const shippedGermanErrors: Record<string, number> = {
   'openai/whisper-large-v3-turbo': 3.67,
   'openai/whisper-large-v3': 3.2,
+  'openai/whisper-medium': 6.5,
   'openai/whisper-small': 10.2,
   'openai/whisper-base': 17.9,
+  'openai/whisper-tiny': 27.8,
 }
 
 /** The leaderboard's German results; a new row there reaches satz within a day. */
@@ -60,15 +89,15 @@ export const germanErrorsURL = 'https://huggingface.co/datasets/hf-audio/multili
 
 /**
  * `model,RTFx,FLEURS WER,MCV WER`, read by the column names: the leaderboard
- * has added and dropped columns several times. Only the models satz offers;
- * a row that is not a number between 0 and 100 is left out.
+ * has added and dropped columns several times. Only the models satz offers
+ * that write German; a row that is not a number between 0 and 100 is left out.
  */
 export function parseGermanErrors(csv: string): Record<string, number> {
   const [header, ...rows] = csv.split(/\r?\n/).filter(line => line.trim()).map(csvFields)
   const model = header?.indexOf('model') ?? -1
   const wer = header?.indexOf('FLEURS WER') ?? -1
   if (model < 0 || wer < 0) return {}
-  const wanted = new Set(localModels.map(entry => entry.original))
+  const wanted = new Set(localModels.filter(hearsGerman).map(entry => entry.original))
   const found: Record<string, number> = {}
   for (const row of rows) {
     const rate = Number(row[wer])
@@ -155,7 +184,7 @@ export function localFacts(id: string, language: Language, options: { speed?: Sp
       ? t('Auf diesem Computer gemessen', 'Measured on this computer')
       : t(`Gemessen am ${date} mit satz ${speed.version} auf ${speed.machine}`, `Measured on ${date} with satz ${speed.version} on ${speed.machine}`) })
   }
-  const rate = model ? germanErrors(options.errors)[model.original] : undefined
+  const rate = model && hearsGerman(model) ? germanErrors(options.errors)[model.original] : undefined
   if (rate !== undefined) facts.push({ text: formatGermanErrors(rate, language), help: t('FLEURS, Originalmodell, nicht die geladene Fassung', 'FLEURS, full model, not the downloaded build') })
   return facts
 }

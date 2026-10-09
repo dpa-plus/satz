@@ -1,6 +1,7 @@
 import { satz } from './bridge'
 import { localFacts, localModel, measuredHere, type Speed } from '../core/localModels'
 import { choiceFor, type ModelChoice } from '../core/models'
+import { localRowAction, providerLabel, providerOrder, switchRow, useLocalModel } from '../core/browse'
 
 /**
  * Settings: the provider and its key, the vocabulary, the Ersetzungen with
@@ -16,8 +17,10 @@ interface Info {
     language: 'de' | 'en'; spokenLanguage: 'de' | 'en' | null; replacements: Replacement[]; usesReplacements: boolean; removesFillers: boolean
     keepsOnClipboard: boolean; historyLimit: number; pausesMedia: boolean
   }
+  /** The provider the page shows, which `hasKey` and `models` are about; dictations go to `prefs.provider`. */
+  shown: Provider
   hasKey: boolean; keyboard: string; wayland: boolean; platform: string; startAtLogin: boolean; spokenLanguage: 'de' | 'en'
-  /** The provider's live list, or the shipped one until it arrives. */
+  /** The shown provider's live list, or the shipped one until it arrives. */
   models: ModelChoice[]
   /** The models for "Lokal", one row each, and the one in use. */
   local: {
@@ -32,6 +35,12 @@ interface Info {
 
 const app = document.getElementById('settings-page')!
 let info: Info
+/**
+ * The provider the page shows, the page's own: looking at one is not using
+ * it (core/browse.ts). Null until the first answer, and again whenever the
+ * page is opened, so it starts at the provider in use.
+ */
+let shownProvider: Provider | null = null
 let editingKey = false
 let keyProblem = ''
 /** Focus the key field: on the first look without a key, and after "Change". */
@@ -75,6 +84,8 @@ function select<T extends string>(value: T, options: [T, string][], onChange: (v
 
 function render() {
   const p = info.prefs
+  // Everything in the provider box is about the provider shown, and is kept for it.
+  const provider = info.shown
 
   // Shortcut
   const shortcut = el('div', { className: 'box' },
@@ -93,11 +104,11 @@ function render() {
   // Provider and key
   const keyRow = el('div', { className: 'row' })
   if (editingKey || !info.hasKey) {
-    const input = el('input', { type: 'password', id: 'key', className: 'grow', placeholder: p.provider === 'openrouter' ? 'sk-or-…' : p.provider === 'groq' ? 'gsk_…' : 'sk-…' })
+    const input = el('input', { type: 'password', id: 'key', className: 'grow', placeholder: provider === 'openrouter' ? 'sk-or-…' : provider === 'groq' ? 'gsk_…' : 'sk-…' })
     const save = el('button', { className: 'accent', textContent: t('Sichern', 'Save') })
     const commit = async () => {
       if (!input.value.trim()) return
-      const ok = await satz.invoke('settings:store-key', input.value)
+      const ok = await satz.invoke('settings:store-key', input.value, provider)
       keyProblem = ok ? '' : t('Konnte nicht gesichert werden.', 'Could not be saved.')
       editingKey = false
       await load()
@@ -117,22 +128,22 @@ function render() {
   // A menu of what the provider offers now, best first, with how many words
   // each gets wrong and what an hour costs, and "Other" for one typed in by
   // hand: a plain text field let one stray keystroke break every dictation.
-  const currentModel = p.models[p.provider] || defaults[p.provider]
-  const modelField = el('input', { type: 'text', id: 'model', className: 'grow', value: p.models[p.provider] ?? '', placeholder: defaults[p.provider] })
+  const currentModel = p.models[provider] || defaults[provider]
+  const modelField = el('input', { type: 'text', id: 'model', className: 'grow', value: p.models[provider] ?? '', placeholder: defaults[provider] })
   // Saved on Return, or quietly when the field is left: drawing the page
   // again right then closed the model menu the user had just opened.
   const saveModel = (redraw: boolean) => {
     const id = modelField.value.trim()
     typingModel = false
-    if (redraw) update({ models: { ...p.models, [p.provider]: id } })
-    else satz.invoke('settings:update', { models: { ...p.models, [p.provider]: id } }).then(next => { info.prefs = next })
+    if (redraw) update({ models: { ...p.models, [provider]: id } })
+    else satz.invoke('settings:update', { models: { ...p.models, [provider]: id } }).then(next => { info.prefs = next })
   }
   modelField.onchange = () => saveModel(false)
   modelField.onkeydown = event => {
     if (event.key === 'Enter') saveModel(true)
     // Escape keeps the model there was. The old id goes back first: the field
     // closing counts as leaving it, which saved the half-typed one.
-    if (event.key === 'Escape') { modelField.value = p.models[p.provider] ?? ''; typingModel = false; render() }
+    if (event.key === 'Escape') { modelField.value = p.models[provider] ?? ''; typingModel = false; render() }
   }
   const modelMenu = el('select', { id: 'model-menu', className: 'grow' })
   modelMenu.setAttribute('aria-label', t('Modell', 'Model'))
@@ -156,23 +167,36 @@ function render() {
   modelMenu.onchange = () => {
     if (!modelMenu.value) { typingModel = true; selectModelId = true; focusNext = 'model'; render(); return }
     typingModel = false
-    update({ models: { ...p.models, [p.provider]: modelMenu.value } })
+    update({ models: { ...p.models, [provider]: modelMenu.value } })
   }
-  const showsModelField = p.provider === 'custom' || typingModel || !known
+  const showsModelField = provider === 'custom' || typingModel || !known
   // Local models are a list to choose from, each with its size, speed and
   // errors: nothing to paste (they are downloaded) and no id to type (an id
   // satz cannot run downloaded fine and then failed every dictation).
-  const isLocal = p.provider === 'local'
+  const isLocal = provider === 'local'
+  // Choosing in the menu only shows that provider. On Windows the arrow keys
+  // step through a closed menu, one change each: that alone used to switch
+  // dictations from provider to provider.
+  const providerMenu = select(provider, providerOrder.map((option): [Provider, string] => [option, providerLabel(option, p.provider, p.language)]),
+    v => { editingKey = false; typingModel = false; keyProblem = ''; wantsKeyFocus = false; shownProvider = v; load() }, t('Anbieter', 'Provider'), 'provider')
+  // Where dictations go while another provider is shown, and the one way to change that.
+  const switching = switchRow(provider, p.provider, p.language)
+  const switchRows: HTMLElement[] = []
+  if (switching) {
+    const use = el('button', { id: 'use-provider', className: 'accent', textContent: switching.button })
+    use.onclick = () => { editingKey = false; update({ provider }) }
+    switchRows.push(el('div', { className: 'row switch-provider' }, el('span', { className: 'grow', textContent: switching.text }), use))
+  }
   const providerBox = el('div', { className: 'box' },
-    el('div', { className: 'row' }, el('span', { className: 'grow', textContent: t('Anbieter', 'Provider') }),
-      select(p.provider, [['openrouter', 'OpenRouter'], ['openai', 'OpenAI'], ['groq', 'Groq'], ['custom', t('Eigener', 'Custom')], ['local', t('Lokal', 'Local')]], v => { editingKey = false; typingModel = false; update({ provider: v }) }, t('Anbieter', 'Provider'), 'provider')),
+    el('div', { className: 'row' }, el('span', { className: 'grow', textContent: t('Anbieter', 'Provider') }), providerMenu),
+    ...switchRows,
     ...(isLocal ? localRows() : [
       keyRow,
-      ...(p.provider === 'custom' ? [] : [el('div', { className: 'row' }, el('span', { textContent: t('Modell', 'Model') }), modelMenu), facts]),
-      ...(showsModelField ? [el('div', { className: 'row' }, el('span', { textContent: p.provider === 'custom' ? t('Modell', 'Model') : t('Modell-ID', 'Model ID') }), modelField)] : []),
+      ...(provider === 'custom' ? [] : [el('div', { className: 'row' }, el('span', { textContent: t('Modell', 'Model') }), modelMenu), facts]),
+      ...(showsModelField ? [el('div', { className: 'row' }, el('span', { textContent: provider === 'custom' ? t('Modell', 'Model') : t('Modell-ID', 'Model ID') }), modelField)] : []),
     ]))
   const localCaption = isLocal ? [el('div', { className: 'hint', textContent: t('Läuft auf diesem Computer, ohne Internet und kostenlos.', 'Runs on this computer, offline and free.') })] : []
-  if (p.provider === 'custom') {
+  if (provider === 'custom') {
     const url = el('input', { type: 'text', id: 'custom-url', className: 'grow', value: p.customBaseURL, placeholder: 'https://…/v1' })
     url.onchange = () => update({ customBaseURL: url.value.trim() })
     providerBox.append(el('div', { className: 'row' }, el('span', { textContent: t('Adresse', 'Address') }), url))
@@ -294,11 +318,13 @@ function render() {
  * One row per local model: the name, a quiet tag where it is a trade-off,
  * its one action on the right; below, its size, its speed on this computer
  * once measured, and its errors in German. Download, then use: a download
- * never switches the model by itself (main.ts says when it does).
+ * never switches the model by itself (speedTests.ts says when it does), and
+ * never the provider.
  */
 function localRows(): HTMLElement[] {
   const { inUse, models, germanErrors, machine, version } = info.local
   const language = info.prefs.language
+  const localInUse = info.prefs.provider === 'local'
   // One download at a time.
   const busy = models.some(model => model.state.kind === 'downloading' || model.state.kind === 'preparing')
   return models.map(({ id, state, measuring, speed }) => {
@@ -338,8 +364,8 @@ function localRows(): HTMLElement[] {
         const remove = button('remove', t('Entfernen', 'Remove'), () => satz.invoke('local:remove', id).then(load), 'compact')
         remove.title = t('Legt das Modell in den Papierkorb', 'Moves the model to the trash')
         if (measuring) actions.append(status(t('Tempo wird gemessen', 'Measuring speed')))
-        else if (id === inUse) actions.append(el('span', { className: 'status in-use', textContent: `✓ ${t('In Benutzung', 'In use')}` }))
-        else actions.append(button('use', t('Benutzen', 'Use'), () => update({ models: { ...info.prefs.models, local: id } }), 'accent'))
+        else if (localRowAction(id, inUse, localInUse) === 'in-use') actions.append(el('span', { className: 'status in-use', textContent: `✓ ${t('In Benutzung', 'In use')}` }))
+        else actions.append(button('use', t('Benutzen', 'Use'), () => update(useLocalModel(id, info.prefs.models, localInUse)), 'accent'))
         actions.append(remove)
         break
       }
@@ -376,7 +402,8 @@ function localRows(): HTMLElement[] {
 }
 
 async function load() {
-  info = await satz.invoke('settings:get')
+  info = await satz.invoke('settings:get', shownProvider)
+  shownProvider = info.shown
   document.documentElement.lang = info.prefs.language
   document.dispatchEvent(new CustomEvent('satz-language', { detail: info.prefs.language }))
   render()
@@ -392,4 +419,13 @@ function loadWhenFree() {
 }
 satz.on('models:changed', loadWhenFree)
 satz.on('local:changed', loadWhenFree)
+// Opened again (from the tray, the history or its tab): the provider in use, not the one looked at last.
+document.addEventListener('satz-page-opened', event => {
+  if ((event as CustomEvent).detail !== 'settings' || shownProvider === null || shownProvider === info?.prefs.provider) return
+  shownProvider = null
+  editingKey = false
+  typingModel = false
+  keyProblem = ''
+  load()
+})
 load()

@@ -13,7 +13,7 @@ export interface SpeedTestDeps {
   inUse(): string
   /** On this computer. */
   isReady(id: string): boolean
-  /** Makes `id` the model in use. */
+  /** Makes `id` Local's model; never the provider: a download is not a choice of provider. */
   use(id: string): void
   /** Local is the provider, so the model in use belongs in memory. */
   localChosen(): boolean
@@ -95,9 +95,11 @@ export class SpeedTests {
   /**
    * A download that arrived complete. It never changes the model by itself,
    * except when the one in use is not on the computer (the first one, or it
-   * was removed): then Local works right away. The model in use is loaded as
-   * such before its test: tested as "not in use", it was let go afterwards
-   * and the first dictation loaded it again.
+   * was removed): then Local works right away. It never changes the
+   * provider: downloading while only looking at Local leaves dictations
+   * where they went. The model in use is loaded as such before its test
+   * when Local is the provider: tested as "not in use", it was let go
+   * afterwards and the first dictation loaded it again.
    */
   arrived(id: string) {
     const inUse = this.deps.inUse()
