@@ -1,5 +1,5 @@
 import { satz } from './bridge'
-import { localFacts, localModel, measuredHere, type Speed } from '../core/localModels'
+import { formatSize, languageLine, languageName, localModel, measuredHere, modelBars, toldLanguage, type Speed } from '../core/localModels'
 import { choiceFor, type ModelChoice } from '../core/models'
 import { localRowAction, providerLabel, providerOrder, switchRow, useLocalModel } from '../core/browse'
 
@@ -14,7 +14,7 @@ interface Replacement { id: string; spoken: string; written: string; isOn: boole
 interface Info {
   prefs: {
     provider: Provider; models: Record<string, string>; customBaseURL: string; words: string[]; triggerMode: 'tap' | 'hold'
-    language: 'de' | 'en'; spokenLanguage: 'de' | 'en' | null; replacements: Replacement[]; usesReplacements: boolean; removesFillers: boolean
+    language: 'de' | 'en'; spokenLanguage: 'de' | 'en' | null; toldLanguage?: string | null; replacements: Replacement[]; usesReplacements: boolean; removesFillers: boolean
     keepsOnClipboard: boolean; historyLimit: number; pausesMedia: boolean
   }
   /** The provider the page shows, which `hasKey` and `models` are about; dictations go to `prefs.provider`. */
@@ -22,7 +22,7 @@ interface Info {
   hasKey: boolean; keyboard: string; wayland: boolean; platform: string; startAtLogin: boolean; spokenLanguage: 'de' | 'en'
   /** The shown provider's live list, or the shipped one until it arrives. */
   models: ModelChoice[]
-  /** The models for "Lokal", one row each, and the one in use. */
+  /** The models for "Lokal", one card each, and the one in use. */
   local: {
     inUse: string
     models: { id: string; state: LocalState; measuring: boolean; speed: Speed | null }[]
@@ -190,7 +190,7 @@ function render() {
   const providerBox = el('div', { className: 'box' },
     el('div', { className: 'row' }, el('span', { className: 'grow', textContent: t('Anbieter', 'Provider') }), providerMenu),
     ...switchRows,
-    ...(isLocal ? localRows() : [
+    ...(isLocal ? [] : [
       keyRow,
       ...(provider === 'custom' ? [] : [el('div', { className: 'row' }, el('span', { textContent: t('Modell', 'Model') }), modelMenu), facts]),
       ...(showsModelField ? [el('div', { className: 'row' }, el('span', { textContent: provider === 'custom' ? t('Modell', 'Model') : t('Modell-ID', 'Model ID') }), modelField)] : []),
@@ -301,7 +301,7 @@ function render() {
   const focused = (document.activeElement as HTMLElement | null)?.id || null
   app.replaceChildren(
     section(t('Kurzbefehl', 'Shortcut'), shortcut, shortcutHint),
-    section(t('Anbieter', 'Provider'), providerBox, ...localCaption, ...(keyProblem ? [el('div', { className: 'error', textContent: keyProblem })] : [])),
+    section(t('Anbieter', 'Provider'), providerBox, ...localCaption, ...(isLocal ? localCards() : []), ...(keyProblem ? [el('div', { className: 'error', textContent: keyProblem })] : [])),
     section(t('Wortschatz', 'Vocabulary'), el('div', { className: 'box' }, words)),
     section(t('Ersetzungen', 'Replacements'), replacementBox),
     section(t('Allgemein', 'General'), general),
@@ -314,91 +314,153 @@ function render() {
   selectModelId = false
 }
 
+/** Small line icons for the cards, after Lucide's (ISC). */
+const icons = {
+  globe: '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
+  download: '<path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/>',
+  disk: '<path d="M22 12H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><path d="M6 16h.01"/><path d="M10 16h.01"/>',
+  trash: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+}
+const icon = (name: keyof typeof icons) => el('span', { className: 'icon', ariaHidden: 'true',
+  innerHTML: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icons[name]}</svg>` })
+
+type LocalEntry = Info['local']['models'][number]
+
 /**
- * One row per local model: the name, a quiet tag where it is a trade-off,
- * its one action on the right; below, its size, its speed on this computer
- * once measured, and its errors in German. Download, then use: a download
- * never switches the model by itself (speedTests.ts says when it does), and
- * never the provider.
+ * Handy's model page: "Your models" (on this computer, the one in use
+ * first) and "Available models" (everything else), one card each. A click
+ * on an available card downloads it, a click on one of yours uses it:
+ * explicit choices both. A download never switches the model by itself
+ * (speedTests.ts says when it does) and never the provider; using a model
+ * while Local is only being looked at switches to Local (core/browse.ts).
  */
-function localRows(): HTMLElement[] {
+function localCards(): HTMLElement[] {
+  const { inUse, models } = info.local
+  const ready = models.filter(model => model.state.kind === 'ready')
+  const mine = [...ready.filter(model => model.id === inUse), ...ready.filter(model => model.id !== inUse)]
+  const available = models.filter(model => model.state.kind !== 'ready')
+  const title = (text: string) => el('h3', { className: 'models-title', textContent: text })
+  const list = (entries: LocalEntry[], yours: boolean) => el('div', { className: 'model-cards' }, ...entries.map(entry => modelCard(entry, yours)))
+  const out: HTMLElement[] = [title(t('Deine Modelle', 'Your models'))]
+  out.push(mine.length ? list(mine, true) : el('div', { className: 'hint models-empty', textContent: t('Noch keins. Ein Klick auf ein Modell unten lädt es.', 'None yet. Click a model below to download it.') }))
+  // Canary is told the language instead of hearing it: its choice sits with
+  // it, among the four it writes, and apart from the app's own German or
+  // English, which Whisper and the replacements go by.
+  const told = toldLanguage(inUse, info.prefs.toldLanguage, info.spokenLanguage)
+  const model = localModel(inUse)
+  if (model && told) {
+    const options = model.languages.map((code): [string, string] => [code, languageName(code, info.prefs.language)])
+    out.push(el('div', { className: 'box spoken-box' }, el('div', { className: 'row' }, el('span', { className: 'grow', textContent: t('Gesprochen auf', 'Spoken in') }),
+      select(told, options, v => update({ toldLanguage: v }), t('Gesprochen auf', 'Spoken in'), 'local-spoken-language'))),
+    el('div', { className: 'hint', textContent: t(`${model.name} hört nur auf diese Sprache.`, `${model.name} listens for this language only.`) }))
+  }
+  if (available.length) out.push(title(t('Verfügbare Modelle', 'Available models')), list(available, false))
+  return out
+}
+
+/**
+ * One model: name, badges and one plain sentence; accuracy and speed as
+ * bars, the numbers behind them as their help; languages, size and Delete
+ * at the bottom; progress with Cancel, getting ready and the speed test
+ * inside it while they run.
+ */
+function modelCard({ id, state, measuring, speed }: LocalEntry, yours: boolean): HTMLElement {
   const { inUse, models, germanErrors, machine, version } = info.local
   const language = info.prefs.language
   const localInUse = info.prefs.provider === 'local'
+  const catalog = localModel(id)
+  const key = id.replace(/[^\w-]/g, '-')
   // One download at a time.
   const busy = models.some(model => model.state.kind === 'downloading' || model.state.kind === 'preparing')
-  return models.map(({ id, state, measuring, speed }) => {
-    const catalog = localModel(id)
-    const key = id.replace(/[^\w-]/g, '-')
-    const button = (name: string, label: string, onClick: () => unknown, className = '') => {
-      const b = el('button', { id: `${name}-${key}`, className, textContent: label })
-      b.onclick = () => { onClick() }
-      return b
+  const active = yours && localRowAction(id, inUse, localInUse) === 'in-use'
+  // The model in use is not clickable: choosing it again would do nothing.
+  const clickable = yours ? !active : state.kind === 'missing' || state.kind === 'failed'
+  const disabled = clickable && !yours && busy
+  const card = el('div', { id: `card-${key}`, className: ['model-card', active ? 'in-use' : '', clickable ? 'clickable' : '', disabled ? 'disabled' : ''].filter(Boolean).join(' ') })
+  if (clickable) {
+    card.setAttribute('role', 'button')
+    card.tabIndex = disabled ? -1 : 0
+    card.setAttribute('aria-disabled', String(disabled))
+    card.title = disabled ? t('Wenn das andere Modell geladen ist', 'Once the other model has downloaded')
+      : yours ? t('Klicken benutzt dieses Modell', 'Click to use this model') : t('Klicken lädt dieses Modell', 'Click to download this model')
+    const act = () => {
+      if (disabled) return
+      if (yours) update(useLocalModel(id, info.prefs.models, localInUse))
+      else satz.invoke('local:download', id).then(load)
     }
-    const status = (text: string) => el('span', { className: 'status' }, el('span', { className: 'spinner', ariaHidden: 'true' }), text)
-    const actions = el('div', { className: 'actions' })
-    switch (state.kind) {
-      case 'missing': {
-        const download = button('download', t('Laden', 'Download'), () => satz.invoke('local:download', id).then(load), 'accent')
-        download.disabled = busy
-        if (busy) download.title = t('Wenn das andere Modell geladen ist', 'Once the other model has downloaded')
-        actions.append(download)
-        break
-      }
-      case 'downloading': {
-        const bar = el('progress', { value: state.fraction, max: 1 })
-        bar.setAttribute('aria-label', t('Fortschritt', 'Progress'))
-        actions.append(bar, el('span', { className: 'percent', textContent: `${Math.floor(state.fraction * 100)} %` }))
-        break
-      }
-      case 'preparing':
-        actions.append(status(t('Wird vorbereitet', 'Getting ready')))
-        break
-      case 'failed': {
-        const retry = button('download', t('Nochmal', 'Try again'), () => satz.invoke('local:download', id).then(load))
-        retry.disabled = busy
-        actions.append(el('span', { className: 'status', textContent: t('Laden fehlgeschlagen', 'Download failed'), title: state.message }), retry)
-        break
-      }
-      case 'ready': {
-        const remove = button('remove', t('Entfernen', 'Remove'), () => satz.invoke('local:remove', id).then(load), 'compact')
-        remove.title = t('Legt das Modell in den Papierkorb', 'Moves the model to the trash')
-        if (measuring) actions.append(status(t('Tempo wird gemessen', 'Measuring speed')))
-        else if (localRowAction(id, inUse, localInUse) === 'in-use') actions.append(el('span', { className: 'status in-use', textContent: `✓ ${t('In Benutzung', 'In use')}` }))
-        else actions.append(button('use', t('Benutzen', 'Use'), () => update(useLocalModel(id, info.prefs.models, localInUse)), 'accent'))
-        actions.append(remove)
-        break
-      }
-    }
+    card.onclick = act
+    card.onkeydown = event => { if ((event.key === 'Enter' || event.key === ' ') && event.target === card) { event.preventDefault(); act() } }
+  }
+  // A button inside the card does its own thing, not the card's.
+  const button = (name: string, label: (Node | string)[], onClick: () => unknown, className = '') => {
+    const b = el('button', { id: `${name}-${key}`, className }, ...label)
+    b.onclick = event => { event.stopPropagation(); onClick() }
+    return b
+  }
 
-    // The facts, each with where it comes from as its help. A model on the
-    // computer that was never measured here gets "Measure speed" right
-    // after where the speed goes.
-    const here = speed ? measuredHere(speed, machine, version) : false
-    const facts: HTMLElement[] = localFacts(id, language, { speed, here, errors: germanErrors }).map(fact => {
-      const span = el('span', { textContent: fact.text })
-      if (fact.help) span.title = fact.help
-      return span
-    })
-    const measure = () => satz.invoke('local:measure', id).then(load)
-    if (state.kind === 'ready' && !measuring && !here) {
-      facts.splice((catalog ? 1 : 0) + (speed ? 1 : 0), 0, button('measure', t('Tempo messen', 'Measure speed'), measure, 'quiet'))
-    } else if (state.kind === 'ready' && !measuring && speed) {
-      // The number itself measures again, as on the Mac: it changes with the
-      // word list, and a run can go wrong, and neither must stick.
-      const index = catalog ? 1 : 0
-      const again = button('measure-again', facts[index].textContent ?? '', measure, 'quiet measure-again')
-      again.title = `${facts[index].title}. ${t('Klicken misst neu.', 'Click to measure again.')}`
-      facts[index] = again
-    }
-    const line = el('div', { className: 'facts' })
-    facts.forEach((fact, index) => line.append(...(index ? [' · '] : []), fact))
-    if (!speed && state.kind !== 'ready') line.title = t('Das Tempo misst satz nach dem Laden', 'satz measures the speed after downloading')
+  const name = el('div', { className: 'card-title' }, el('span', { className: 'card-name', textContent: catalog?.name ?? id }))
+  if (active) name.append(el('span', { className: 'badge' }, icon('check'), t('Aktiv', 'Active')))
+  // As Handy does: the recommendation is for choosing what to download.
+  if (!yours && id === defaults.local) name.append(el('span', { className: 'badge' }, t('Empfohlen', 'Recommended')))
+  const about = el('div', { className: 'card-about' }, name, ...(catalog ? [el('p', { className: 'card-text', textContent: catalog.description[language] })] : []))
 
-    const name = el('div', { className: 'name' }, el('span', { textContent: catalog?.name ?? id }))
-    if (catalog?.tag) name.append(el('span', { className: 'tag', textContent: catalog.tag[language] }))
-    return el('div', { className: 'row model' }, el('div', { className: 'grow about' }, name, ...(line.childNodes.length ? [line] : [])), actions)
-  })
+  const here = speed ? measuredHere(speed, machine, version) : false
+  const bars = modelBars(id, language, { speed, here, errors: germanErrors, downloaded: state.kind === 'ready' })
+  const measure = () => satz.invoke('local:measure', id).then(load)
+  const canMeasure = state.kind === 'ready' && !measuring
+  const barRow = (label: string, bar: { value: number; help: string }, again = false) => {
+    const fill = el('span')
+    fill.style.width = `${Math.round(bar.value * 100)}%`
+    const parts = [el('span', { className: 'bar-label', textContent: label }), el('span', { className: 'bar', role: 'img', ariaLabel: `${label}: ${Math.round(bar.value * 10)}/10` }, fill)]
+    // The speed changes with the word list, and a run can go wrong: neither must stick.
+    if (!again) return el('div', { className: 'bar-row', title: bar.help }, ...parts)
+    return button('measure-again', parts, measure, 'bar-row again')
+  }
+  const barBox = el('div', { className: 'bars' })
+  if (bars.accuracy) barBox.append(barRow(t('Genauigkeit', 'Accuracy'), bars.accuracy))
+  if (bars.speed) {
+    const row = barRow(t('Tempo', 'Speed'), bars.speed, canMeasure)
+    row.title = canMeasure ? `${bars.speed.help}. ${t('Klicken misst neu.', 'Click to measure again.')}` : bars.speed.help
+    barBox.append(row)
+  }
+  const top = el('div', { className: 'card-top' }, about, ...(barBox.childNodes.length ? [barBox] : []))
+
+  const bottom = el('div', { className: 'card-bottom' })
+  if (catalog) {
+    const languages = languageLine(catalog, language)
+    bottom.append(el('span', { className: 'card-fact', title: languages.help }, icon('globe'), languages.text))
+  }
+  // Never measured here: the one thing that fills its speed bar with a real number.
+  if (canMeasure && !here) bottom.append(button('measure', [t('Tempo messen', 'Measure speed')], measure, 'quiet'))
+  if (catalog) bottom.append(el('span', { className: 'card-fact size', title: state.kind === 'ready' ? t('Auf diesem Computer', 'On this computer') : t('Download', 'Download') },
+    icon(state.kind === 'ready' ? 'disk' : 'download'), formatSize(catalog.bytes, language)))
+  if (state.kind === 'ready') {
+    const remove = button('remove', [icon('trash'), t('Löschen', 'Delete')], () => satz.invoke('local:remove', id).then(load), 'delete')
+    remove.title = t('Legt das Modell in den Papierkorb', 'Moves the model to the trash')
+    bottom.append(remove)
+  }
+  card.append(top, el('hr'), bottom)
+
+  const status = (text: string) => el('div', { className: 'card-status' }, el('span', { className: 'spinner', ariaHidden: 'true' }), text)
+  if (state.kind === 'downloading') {
+    const percent = Math.floor(state.fraction * 100)
+    const fill = el('div', { className: 'fill' })
+    fill.style.width = `${percent}%`
+    const track = el('div', { className: 'track', role: 'progressbar' }, fill)
+    track.setAttribute('aria-valuenow', String(percent))
+    track.setAttribute('aria-valuemin', '0')
+    track.setAttribute('aria-valuemax', '100')
+    track.setAttribute('aria-label', t('Fortschritt', 'Progress'))
+    card.append(el('div', { className: 'card-progress' }, track, el('div', { className: 'progress-line' },
+      el('span', { textContent: t(`Lädt ${percent} %`, `Downloading ${percent} %`) }),
+      button('cancel', [t('Abbrechen', 'Cancel')], () => satz.invoke('local:cancel', id).then(load), 'cancel'))))
+  } else if (state.kind === 'preparing') card.append(status(t('Wird vorbereitet', 'Getting ready')))
+  else if (measuring) card.append(status(t('Tempo wird gemessen', 'Measuring speed')))
+  else if (state.kind === 'failed') {
+    card.append(el('div', { className: 'card-status failed', title: state.message, textContent: t('Laden fehlgeschlagen. Klicken versucht es nochmal.', 'Download failed. Click to try again.') }))
+  }
+  return card
 }
 
 async function load() {

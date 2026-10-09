@@ -11,6 +11,8 @@ await Promise.all([
   // Whisper's helper process: transformers.js goes into it; ONNX Runtime stays a package, for its native code.
   build({ ...common, entryPoints: ['src/main/local-worker.ts'], outfile: 'dist/local-worker.js', platform: 'node', format: 'cjs',
     external: ['electron', 'onnxruntime-node', 'onnxruntime-common'], alias: { sharp: './src/main/no-sharp.ts' } }),
+  // sherpa-onnx's helper process: its native module is loaded from beside app.asar (sherpaEngine.ts).
+  build({ ...common, entryPoints: ['src/main/sherpa-worker.ts'], outfile: 'dist/sherpa-worker.js', platform: 'node', format: 'cjs', external: ['electron'] }),
   build({ ...common, entryPoints: ['src/main/preload.ts'], outfile: 'dist/preload.js', platform: 'node', format: 'cjs', external: ['electron'] }),
   build({ ...common, entryPoints: ['src/renderer/card.ts'], outfile: 'dist/card.js', platform: 'browser', format: 'iife' }),
   build({ ...common, entryPoints: ['src/renderer/settings.ts'], outfile: 'dist/settings.js', platform: 'browser', format: 'iife' }),

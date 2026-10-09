@@ -1,20 +1,21 @@
-import fs from 'node:fs'
-import { germanOrEnglish, localModel, onlyLanguage } from '../core/localModels'
+import { AsyncLocalStorage } from 'node:async_hooks'
+import type { Language } from '../core/language'
+import { germanOrEnglish, onlyLanguage } from '../core/localModels'
 import { hasSpeech, keepEveryWord } from '../core/speech'
 import { windows } from '../core/windows'
-import { gaveWay, markerPath, type LocalState } from './localFiles'
+import { LocalEngine } from './localEngine'
+import type { LocalState } from './localFiles'
 
 /**
- * Whisper itself: transformers.js on ONNX Runtime, in satz's helper process
- * (local-worker.ts). ONNX Runtime runs on the thread that calls it, so on
- * Electron's main thread every load and every recording froze the shortcut,
- * the card and Settings for seconds.
+ * Whisper itself: transformers.js on ONNX Runtime, in satz's Whisper helper
+ * process (local-worker.ts). ONNX Runtime runs on the thread that calls it,
+ * so on Electron's main thread every load and every recording froze the
+ * shortcut, the card and Settings for seconds. What a model's life looks
+ * like (in memory, tested, queued) is LocalEngine's.
  */
 type Transformers = typeof import('@huggingface/transformers')
 /* eslint-disable @typescript-eslint/no-explicit-any -- transformers.js types its models loosely */
 export interface Loaded { id: string; processor: any; tokenizer: any; model: any }
-/** A model in memory, or on its way there. */
-interface Held { id: string; model: Promise<Loaded> }
 
 /** The encoder at 8 bits ran twice as fast as at 4 on a CPU; the decoder at 4 bits loses nothing that was heard. */
 const dtype = { encoder_model: 'q8', decoder_model_merged: 'q4' } as const
@@ -25,222 +26,81 @@ const rate = 16_000
 /** Silence before each piece: speech from the very first instant lost its first words. */
 const lead = rate / 2
 
-export class WhisperEngine {
-  /** The model dictations use. */
-  private loaded: Held | null = null
-  /**
-   * Models held for their speed test, beside the one in use: downloading or
-   * trying another model took the one in use out of memory, and the next
-   * dictation waited for it to load again.
-   */
-  private trials = new Map<string, Held>()
-  /** One transcription at a time: they share one model. */
-  private queue: Promise<unknown> = Promise.resolve()
+export class WhisperEngine extends LocalEngine<Loaded> {
   private library: Promise<Transformers> | null = null
-  private disposed = new WeakSet<Held>()
-  /** A dictation queued since the speed test began: the test stops before its next run. */
-  private dictationWaiting = false
+  /**
+   * The signal of the download a fetch belongs to, carried along with all of
+   * that download's work. One field for it was cleared as soon as the first
+   * part failed, while transformers.js went on fetching the other parts:
+   * without a signal, past Cancel.
+   */
+  private download$ = new AsyncLocalStorage<AbortSignal>()
 
-  constructor(private dir: string, private log: (message: string) => void, private setState: (id: string, state: LocalState) => void) {}
+  /** @param fetcher Electron's net.fetch in the helper, put in globalThis.fetch there; asked for at each file. */
+  constructor(dir: string, log: (message: string) => void, setState: (id: string, state: LocalState) => void,
+    private fetcher: typeof fetch = (input, init) => globalThis.fetch(input, init)) {
+    super(dir, log, setState)
+  }
 
   private transformers(): Promise<Transformers> {
     this.library ??= import('@huggingface/transformers').then(library => {
       library.env.cacheDir = this.dir
+      // Every file transformers.js fetches for a download carries its signal, so Cancel stops it.
+      library.env.fetch = ((url: string, init?: RequestInit) => {
+        const signal = this.download$.getStore()
+        signal?.throwIfAborted()
+        return this.fetcher(url, { ...init, signal })
+      }) as typeof fetch
       return library
     })
     return this.library
   }
 
-  // MARK: - Download
-
-  /** Fetches the files and loads the model for its speed test, which satz asks for next (`measure`). */
-  download(id: string) {
-    this.setState(id, { kind: 'downloading', fraction: 0 })
-    this.log(`local: downloading ${id}`)
+  /** transformers.js fetches the files while it loads the model; its events are per file, the fraction is of all of them. */
+  protected async fetchAndLoad(id: string, progress: (fraction: number) => void, signal: AbortSignal): Promise<Loaded> {
     const files = new Map<string, { loaded: number; total: number }>()
-    let shown = 0
-    const progress = (event: { status: string; file?: string; loaded?: number; total?: number }) => {
+    const onEvent = (event: { status: string; file?: string; loaded?: number; total?: number }) => {
       if (event.status !== 'progress' || !event.file || !event.total) return
       files.set(event.file, { loaded: event.loaded ?? 0, total: event.total })
       let loaded = 0
       let total = 0
       for (const file of files.values()) { loaded += file.loaded; total += file.total }
-      const fraction = Math.min(1, loaded / Math.max(total, localModel(id)?.bytes ?? 0))
-      // Once a percent: every event redrew the settings page.
-      if (Math.floor(fraction * 100) === Math.floor(shown * 100)) return
-      shown = fraction
-      this.setState(id, fraction >= 0.999 ? { kind: 'preparing' } : { kind: 'downloading', fraction })
+      progress(loaded / Math.max(total, this.expectedBytes(id)))
     }
-    const started = Date.now()
-    this.retireTrials()
-    const trial: Held = { id, model: this.load(id, progress, false) }
-    this.trials.set(id, trial)
-    // The marker inside the chain: a full disk failing it left the download
-    // stuck at "preparing" for good.
-    trial.model.then(() => {
-      fs.mkdirSync(this.dir, { recursive: true })
-      fs.writeFileSync(markerPath(this.dir, id), new Date().toISOString())
-    }).then(() => {
-      this.log(`local: ${id} ready after ${Math.round((Date.now() - started) / 1000)} s`)
-      this.setState(id, { kind: 'ready' })
-    }, error => {
-      if (this.trials.get(id) === trial) this.trials.delete(id)
-      this.log(`local: ${id} failed: ${error?.message ?? error}`)
-      this.setState(id, { kind: 'failed', message: String(error?.message ?? error) })
-    })
+    return this.download$.run(signal, () => this.load(id, onEvent, false))
   }
 
-  // MARK: - Speed
-
-  /**
-   * How long `id` takes for `samples`: the clip goes through the same path
-   * as a dictation (word list included, so a second decode counts), twice,
-   * and the second, warm run is timed. In the dictations' queue, so it never
-   * shares the processor with one. A model that is not the one in use is
-   * loaded for this alone and let go afterwards.
-   * @returns milliseconds of the second run
-   */
-  measure(id: string, samples: Float32Array, vocabulary: string[], spoken: 'de' | 'en'): Promise<number> {
-    const job = this.queue.then(async () => {
-      this.dictationWaiting = false
-      let own: Held | null = null
-      if (this.loaded?.id !== id) {
-        own = this.trials.get(id) ?? { id, model: this.load(id) }
-        this.retireTrials(id)
-        // Where choosing it in the meantime takes it over instead of loading a copy.
-        this.trials.set(id, own)
-      }
-      try {
-        const model = await (own ? own.model : this.model(id))
-        // A dictation finished during the test waits for at most the run
-        // under way, not for the rest of the test (seconds with Large v3).
-        if (this.dictationWaiting) throw new Error(gaveWay)
-        await this.run(samples, model, vocabulary, spoken)
-        if (this.dictationWaiting) throw new Error(gaveWay)
-        const started = performance.now()
-        await this.run(samples, model, vocabulary, spoken)
-        return performance.now() - started
-      } finally {
-        if (own && this.trials.get(id) === own) {
-          this.trials.delete(id)
-          await this.dispose(own)
-        }
-      }
-    })
-    this.queue = job.catch(() => {})
-    return job
-  }
-
-  // MARK: - In memory
-
-  /** Starts loading, so the model is there by the time the speaking is done. */
-  warmUp(id: string) {
-    this.model(id).catch(() => {})
+  protected async free({ model }: Loaded) {
+    await model.dispose()
   }
 
   /**
-   * Gives the memory back, once the transcriptions already queued are done:
-   * disposed under one, it failed with "Session already disposed". Queued
-   * itself, so a transcription waiting in line that loads the model again
-   * does not leave that one in memory.
+   * Protected, like `run`: the tests put a model in its place that counts its
+   * loads and disposals. Settles once all three parts have: the first one
+   * failing (a cancelled download) used to end it while the others still
+   * fetched and wrote. A model that did load is let go then.
    */
-  async unload(): Promise<void> {
-    const job = this.queue.then(async () => {
-      const loaded = this.loaded
-      this.loaded = null
-      if (loaded) await this.dispose(loaded)
-      // Those held for a test go too: Local is not wanted any more.
-      const trials = [...this.trials.values()]
-      this.trials.clear()
-      for (const held of trials) await this.dispose(held)
-    })
-    this.queue = job.catch(() => {})
-    await job
-  }
-
-  /** Lets go of one model, in use or held for a test, so its files can go. */
-  async release(id: string): Promise<void> {
-    const job = this.queue.then(async () => {
-      for (const held of [this.loaded, this.trials.get(id)]) if (held?.id === id) await this.dispose(held)
-      if (this.loaded?.id === id) this.loaded = null
-      this.trials.delete(id)
-    })
-    this.queue = job.catch(() => {})
-    await job
-  }
-
-  /**
-   * At most one model beside the one in use: downloads that finished while
-   * their tests waited for a dictation each kept theirs in memory. A test
-   * that comes later loads its model again.
-   */
-  private retireTrials(except?: string) {
-    for (const [id, held] of this.trials) {
-      if (id === except) continue
-      this.trials.delete(id)
-      this.retire(held)
-    }
-  }
-
-  /** A model replaced by another: disposed once the running transcription is done with it. */
-  private retire(held: Held | null) {
-    if (held) void this.queue.then(() => this.dispose(held))
-  }
-
-  /** Once per model: twice failed with "Session already disposed", which nothing caught. */
-  private async dispose(held: Held) {
-    if (this.disposed.has(held)) return
-    this.disposed.add(held)
-    await held.model.then(({ model }) => model.dispose()).catch(() => {})
-  }
-
-  private model(id: string): Promise<Loaded> {
-    if (this.loaded?.id === id) return this.loaded.model
-    this.retire(this.loaded)
-    // The model just tested is taken over rather than loaded a second time.
-    const trial = this.trials.get(id)
-    this.trials.delete(id)
-    const started = Date.now()
-    const held: Held = trial ?? { id, model: this.load(id) }
-    this.loaded = held
-    held.model.then(
-      () => { if (!trial) this.log(`local: ${id} loaded in ${((Date.now() - started) / 1000).toFixed(1)} s`) },
-      error => {
-        // Tried again by the next dictation.
-        this.log(`local: loading ${id} failed: ${error?.message ?? error}`)
-        if (this.loaded === held) this.loaded = null
-      })
-    return held.model
-  }
-
-  /** Protected, like `run`: the tests put a model in its place that counts its loads and disposals. */
   protected async load(id: string, progress_callback?: (event: any) => void, local_files_only = true): Promise<Loaded> {
     const library = await this.transformers()
     const options = { progress_callback, local_files_only }
-    const [processor, tokenizer, model] = await Promise.all([
+    const parts: PromiseSettledResult<any>[] = await Promise.allSettled([
       library.AutoProcessor.from_pretrained(id, options),
       library.AutoTokenizer.from_pretrained(id, options),
       library.WhisperForConditionalGeneration.from_pretrained(id, { ...options, dtype, device: 'cpu' }),
     ])
+    const [processor, tokenizer, model] = parts.map(part => (part.status === 'fulfilled' ? part.value : undefined))
+    const failed = parts.find(part => part.status === 'rejected')
+    if (failed) {
+      await model?.dispose().catch(() => {})
+      throw failed.reason
+    }
     reuseEncoderOutput(model)
     return { id, processor, tokenizer, model }
   }
 
   // MARK: - Transcribing
 
-  /**
-   * @param samples 16 kHz mono, as recorded.
-   * @param spoken the language set in Settings, used where a clip is too short to tell.
-   */
-  transcribe(samples: Float32Array, id: string, vocabulary: string[], spoken: 'de' | 'en' = 'de'): Promise<string> {
-    // Whisper makes something up for silence ("you", "Thank you.").
-    this.dictationWaiting = true
-    const job = this.queue.then(async () => (hasSpeech(samples) ? this.run(samples, await this.model(id), vocabulary, spoken) : ''))
-    this.queue = job.catch(() => {})
-    return job
-  }
-
-  protected async run(samples: Float32Array, { id, processor, tokenizer, model }: Loaded, vocabulary: string[], spoken: 'de' | 'en'): Promise<string> {
+  protected async run(samples: Float32Array, { id, processor, tokenizer, model }: Loaded, vocabulary: string[], spoken: Language): Promise<string> {
     const only = onlyLanguage(id)
     const config = model.generation_config
     const token = (name: string) => tokenizer.convert_tokens_to_ids(name) as number

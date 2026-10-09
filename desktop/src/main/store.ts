@@ -20,6 +20,8 @@ export interface Preferences {
   language: Language
   /** null: the same as `language` until chosen. */
   spokenLanguage: Language | null
+  /** What Canary listens for, which cannot tell by itself: one of the languages it writes; null: `spokenLanguage` (core/localModels.ts, toldLanguage). */
+  toldLanguage?: string | null
   replacements: Replacement[]
   usesReplacements: boolean
   removesFillers: boolean

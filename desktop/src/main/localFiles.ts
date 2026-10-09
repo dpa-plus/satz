@@ -1,13 +1,13 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import type { Speed } from '../core/localModels'
+import { localModel, type Speed } from '../core/localModels'
 
 /** Where a local model stands, as the settings and the card show it. */
 export type LocalState =
   | { kind: 'missing' }
   | { kind: 'downloading'; fraction: number }
-  /** Downloaded, while ONNX Runtime builds the model for this computer. */
+  /** Downloaded, while the model is loaded once to see that it works. */
   | { kind: 'preparing' }
   | { kind: 'ready' }
   | { kind: 'failed'; message: string }
@@ -31,8 +31,11 @@ export const speedPath = (dir: string, id: string) => path.join(dir, `${fileName
 export const isModelId = (id: unknown): id is string =>
   typeof id === 'string' && /^[\w.-]+\/[\w.-]+$/.test(id) && !id.split('/').some(part => /^\.+$/.test(part))
 
-/** The files the model loads (encoder at 8 bits, decoder at 4), as transformers.js names them. */
-const modelFiles = ['onnx/encoder_model_quantized.onnx', 'onnx/decoder_model_merged_q4.onnx', 'tokenizer.json']
+/** The files a Whisper model loads (encoder at 8 bits, decoder at 4), as transformers.js names them. */
+const whisperFiles = ['onnx/encoder_model_quantized.onnx', 'onnx/decoder_model_merged_q4.onnx', 'tokenizer.json']
+
+/** What has to be in a model's folder: Whisper's three files, or every file of a sherpa-onnx model. */
+const modelFiles = (id: string) => localModel(id)?.sherpa?.files.map(file => file.name) ?? whisperFiles
 
 /**
  * Downloaded and still there. The marker alone said "on this computer" after
@@ -40,7 +43,7 @@ const modelFiles = ['onnx/encoder_model_quantized.onnx', 'onnx/decoder_model_mer
  */
 export function isDownloaded(dir: string, id: string): boolean {
   if (!fs.existsSync(markerPath(dir, id))) return false
-  if (modelFiles.every(file => fs.existsSync(path.join(dir, id, file)))) return true
+  if (modelFiles(id).every(file => fs.existsSync(path.join(dir, id, file)))) return true
   fs.rmSync(markerPath(dir, id), { force: true })
   return false
 }

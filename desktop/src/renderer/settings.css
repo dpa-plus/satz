@@ -13,30 +13,14 @@ section { display: flex; flex-direction: column; }
 input[type=text], input[type=password], select { background: rgba(0,0,0,.18); color: var(--ink); border: 1px solid var(--control); border-radius: 8px; padding: 6px 9px; font: inherit; min-width: 0; }
 input.grow { flex: 1; }
 button { background: none; color: var(--ink); border: 1px solid var(--control); border-radius: 8px; padding: 5px 12px; font: inherit; cursor: pointer; }
-/* A local model: name and tag over its facts, its actions on the right. */
-.row.model { padding-top: 9px; padding-bottom: 9px; }
-.row.model .about { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.row.model .name { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 8px; }
-.row.model .tag, .row.model .facts { color: var(--secondary); font-size: 12.5px; }
-.row.model .actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-.row.model .status { display: inline-flex; align-items: center; gap: 7px; color: var(--secondary); font-size: 12.5px; }
-.row.model .status.in-use { color: var(--ink); }
-.row.model progress { width: 110px; accent-color: var(--accent); }
-.row.model .percent { font-variant-numeric: tabular-nums; color: var(--secondary); min-width: 3.5em; text-align: right; font-size: 12.5px; }
-/* Wrapped between facts, never inside one. */
-.facts { font-variant-numeric: tabular-nums; }
-.facts > * { white-space: nowrap; }
 button.compact { padding: 2px 9px; font-size: 12.5px; border-radius: 7px; }
 button.quiet { border: none; padding: 0; color: var(--secondary); text-decoration: underline; text-underline-offset: 2px; font-size: inherit; }
 button.quiet:hover { color: var(--ink); }
-/* A measured speed: reads like the facts around it until the pointer finds it. */
-button.quiet.measure-again { text-decoration: none; }
-button.quiet.measure-again:hover, button.quiet.measure-again:focus-visible { text-decoration: underline; }
 button:disabled { opacity: .45; cursor: default; }
 .spinner { width: 12px; height: 12px; border: 2px solid var(--line); border-top-color: var(--secondary); border-radius: 50%; animation: spin .9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
-/* A caption under a box, as the one under the local models. */
+/* A caption under a box, as the one under the provider. */
 .box + .hint:not(:empty) { padding-top: 8px; }
 button.accent { background: var(--accent); color: var(--ground); border-color: var(--accent); font-weight: 600; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 14px; }
@@ -51,3 +35,49 @@ label.switch input { margin-left: auto; width: 18px; height: 18px; accent-color:
 /* The open list is drawn by the system, light on Linux: give it the page's colours. */
 option, optgroup { background: var(--ground); color: var(--ink); }
 optgroup { color: var(--secondary); }
+/* Local models as cards, after Handy's: the one in use framed in the accent, a faint tint inside. */
+.models-title { font-size: 12.5px; font-weight: 600; color: var(--secondary); margin: 16px 0 8px 2px; }
+.models-empty { padding: 0 2px; }
+.model-cards { display: flex; flex-direction: column; gap: 10px; }
+.model-card { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px solid var(--control); border-radius: 14px; background: var(--card); }
+.model-card.in-use { border: 2px solid var(--accent); padding: 11px 13px; background: rgba(255,178,122,.08); }
+.model-card.clickable { cursor: pointer; transition: border-color .15s, background-color .15s; }
+.model-card.clickable:hover { border-color: var(--accent); background: rgba(255,178,122,.05); }
+.model-card.clickable:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.model-card.clickable:hover .card-name { color: var(--accent); }
+.model-card.disabled { opacity: .5; cursor: default; }
+.model-card.disabled:hover { border-color: var(--control); background: var(--card); }
+.model-card.disabled:hover .card-name { color: inherit; }
+/* Text left, bars right; the bars go under the text where the card is narrow. */
+.card-top { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px; }
+.card-about { flex: 1 1 220px; min-width: 0; }
+.card-title { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
+.card-name { font-size: 15px; font-weight: 600; transition: color .15s; }
+.card-text { margin: 2px 0 0; color: var(--secondary); font-size: 13px; }
+.badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; background: rgba(255,178,122,.16); color: var(--accent); font-size: 11.5px; font-weight: 600; }
+.badge .icon, .badge .icon svg { width: 12px; height: 12px; }
+.bars { display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; }
+.bar-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+button.bar-row { border: none; padding: 0; background: none; color: inherit; font: inherit; border-radius: 4px; }
+button.bar-row:hover .bar-label, button.bar-row:focus-visible .bar-label { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
+.bar-label { min-width: 72px; text-align: right; color: var(--secondary); font-size: 12px; }
+.bar { width: 64px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.bar > span { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
+.model-card hr { width: 100%; margin: 0; border: none; border-top: 1px solid var(--line); }
+.card-bottom { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 14px; min-height: 22px; color: var(--secondary); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.card-fact { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.card-fact.size { margin-left: auto; }
+.icon { display: inline-grid; place-items: center; width: 14px; height: 14px; flex-shrink: 0; }
+.icon svg { width: 14px; height: 14px; }
+button.delete { display: inline-flex; align-items: center; gap: 5px; border: none; padding: 2px 6px; margin-right: -6px; border-radius: 7px; color: var(--accent); font-size: 12.5px; }
+button.delete:hover, button.delete:focus-visible { background: rgba(255,178,122,.12); }
+.card-progress { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; }
+.card-progress .track { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.card-progress .fill { height: 100%; border-radius: 3px; background: var(--accent); transition: width .3s; }
+.progress-line { display: flex; align-items: center; justify-content: space-between; color: var(--secondary); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+button.cancel { border: none; padding: 2px 6px; margin-right: -6px; border-radius: 7px; color: var(--accent); font-size: 12.5px; }
+button.cancel:hover, button.cancel:focus-visible { background: rgba(255,178,122,.12); }
+.card-status { display: flex; align-items: center; gap: 7px; color: var(--secondary); font-size: 12.5px; }
+.card-status.failed { color: var(--accent); }
+.spoken-box { margin-top: 10px; }
+@media (prefers-reduced-motion: reduce) { .model-card, .card-name, .card-progress .fill { transition: none; } }

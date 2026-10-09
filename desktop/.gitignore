@@ -3,3 +3,4 @@ dist/
 release/
 preview/mock.js
 build/vcruntime/
+build/sherpa/

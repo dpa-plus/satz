@@ -8,11 +8,14 @@
 // cannot keep itself on top or choose where it sits, and the card has to do
 // both. Both switches are read before any of satz's code runs, so they have
 // to come from outside. SATZ_NATIVE_WAYLAND=1 skips the X11 one.
+const crypto = require('node:crypto')
+const { execFileSync } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
 
 exports.default = async function afterPack(context) {
   keepOnlyThisOnnxRuntime(context)
+  await addSherpa(context)
   if (context.electronPlatformName !== 'linux') return
   const name = context.packager.executableName
   const binary = path.join(context.appOutDir, name)
@@ -38,4 +41,38 @@ function keepOnlyThisOnnxRuntime(context) {
       if (system !== context.electronPlatformName || chip !== arch) fs.rmSync(path.join(bin, system, chip), { recursive: true, force: true })
     }
   }
+}
+
+// sherpa-onnx (Handy's models) brings its native code as one npm package per
+// system, and npm installs only the one for the Mac that builds. Each package
+// gets its own system's, at the version and checksum package-lock.json names
+// (kept in build/sherpa/), beside app.asar, where sherpaEngine.ts loads it: a
+// native library inside the archive could not load the ONNX Runtime next to
+// it. There is none for Windows on ARM; satz offers no sherpa models there.
+async function addSherpa(context) {
+  const { Arch } = require('electron-builder')
+  const platform = context.electronPlatformName
+  if (platform !== 'linux' && platform !== 'win32') return
+  const name = `sherpa-onnx-${platform === 'win32' ? 'win' : platform}-${Arch[context.arch]}`
+  const lock = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package-lock.json'), 'utf8'))
+  const entry = lock.packages[`node_modules/${name}`]
+  if (!entry) {
+    console.log(`  • sherpa-onnx: no ${name}, its models are not offered there`)
+    return
+  }
+  const [algorithm, expected] = entry.integrity.split('-')
+  const digest = file => crypto.createHash(algorithm).update(fs.readFileSync(file)).digest('base64')
+  const archive = path.join(__dirname, 'sherpa', `${name}-${entry.version}.tgz`)
+  if (!fs.existsSync(archive) || digest(archive) !== expected) {
+    const response = await fetch(entry.resolved)
+    if (!response.ok) throw new Error(`${name}: status ${response.status}`)
+    fs.mkdirSync(path.dirname(archive), { recursive: true })
+    fs.writeFileSync(archive, Buffer.from(await response.arrayBuffer()))
+    if (digest(archive) !== expected) throw new Error(`${name} does not match package-lock.json`)
+  }
+  const target = path.join(context.appOutDir, 'resources', 'app.asar.unpacked', 'node_modules', name)
+  fs.rmSync(target, { recursive: true, force: true })
+  fs.mkdirSync(target, { recursive: true })
+  execFileSync('tar', ['-xzf', archive, '-C', target, '--strip-components=1'])
+  console.log(`  • sherpa-onnx: ${name} ${entry.version}`)
 }

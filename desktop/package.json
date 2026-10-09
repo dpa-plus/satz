@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@huggingface/transformers": "4.3.1",
+    "sherpa-onnx-node": "1.13.8",
     "uiohook-napi": "^1.5.5"
   },
   "devDependencies": {
@@ -40,7 +41,8 @@
       "node_modules/uiohook-napi/**",
       "node_modules/node-gyp-build/**",
       "node_modules/onnxruntime-node/**",
-      "node_modules/onnxruntime-common/**"
+      "node_modules/onnxruntime-common/**",
+      "!node_modules/sherpa-onnx-*/**"
     ],
     "asarUnpack": [
       "node_modules/uiohook-napi/**",
