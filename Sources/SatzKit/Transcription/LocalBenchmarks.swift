@@ -36,13 +36,37 @@ public struct LocalBenchmarks: Codable, Hashable, Sendable {
             LocalCatalog.turbo: 6.86,
             LocalCatalog.turboFull: 6.72,
             LocalCatalog.turboCompatible: 7.15,
+            LocalCatalog.largeV3: 6.85,
+            LocalCatalog.distil: 8.33,
+            LocalCatalog.distilCompatible: 8.96,
             LocalCatalog.small: 8.11,
+            LocalCatalog.base: 10.67,
+            LocalCatalog.tiny: 14.21,
         ],
         german: [
             LocalCatalog.turboCompatible: 14.69,
+            LocalCatalog.largeV3: 14.75,
             LocalCatalog.small: 49.17,
+            LocalCatalog.base: 61.29,
+            LocalCatalog.tiny: 79.95,
         ],
         speed: [
+            // Added 09.10.2026 from the same files, same rules.
+            LocalCatalog.largeV3: [
+                "Apple M2": 2.25, "Apple M2 Pro": 2.38, "Apple M2 Ultra": 2.26, "Apple M3 Pro": 2.46, "Apple M3 Max": 2.3, "Apple M4": 2.7, "Apple M4 Pro": 3.18,
+            ],
+            LocalCatalog.distil: [
+                "Apple M2": 10.62, "Apple M2 Pro": 10.75, "Apple M2 Ultra": 10.59, "Apple M3 Pro": 11.27, "Apple M3 Max": 11.62, "Apple M4": 12.87, "Apple M4 Pro": 14.32,
+            ],
+            LocalCatalog.distilCompatible: [
+                "Apple M1": 5.29, "Apple M2": 6.53, "Apple M2 Pro": 6.67, "Apple M2 Ultra": 6.67, "Apple M3 Pro": 7.14, "Apple M3 Max": 6.99, "Apple M4": 7.61, "Apple M4 Pro": 8.38,
+            ],
+            LocalCatalog.base: [
+                "Apple M1": 32.17, "Apple M2": 40.0, "Apple M2 Pro": 37.25, "Apple M2 Ultra": 30.48, "Apple M3 Pro": 36.37, "Apple M3 Max": 33.91, "Apple M4": 48.28, "Apple M4 Pro": 50.3,
+            ],
+            LocalCatalog.tiny: [
+                "Apple M1": 45.02, "Apple M2": 53.91, "Apple M2 Pro": 49.67, "Apple M2 Ultra": 39.99, "Apple M3 Pro": 49.26, "Apple M3 Max": 46.65, "Apple M4": 71.19, "Apple M4 Pro": 68.28,
+            ],
             LocalCatalog.turbo: [
                 "Apple M2": 8.54, "Apple M2 Pro": 8.83, "Apple M2 Ultra": 8.52, "Apple M3 Pro": 6.55,
                 "Apple M3 Max": 9.46, "Apple M4": 10.53, "Apple M4 Pro": 11.49,

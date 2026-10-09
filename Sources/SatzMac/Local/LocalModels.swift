@@ -386,7 +386,10 @@ final class LocalModels {
         }
         guard isReady(model, language: language) || loaded?.variant == model else { throw Failure.notDownloaded }
         let kit = kit(model)
-        return try await queued { try await Self.whisperTranscribe(samples, kit: try await kit.value, vocabulary: vocabulary, spoken: language) }
+        let englishOnly = LocalCatalog.model(model)?.isEnglishOnly ?? false
+        return try await queued {
+            try await Self.whisperTranscribe(samples, kit: try await kit.value, vocabulary: vocabulary, spoken: language, englishOnly: englishOnly)
+        }
     }
 
     /// Runs `work` after everything queued before it.
@@ -453,7 +456,8 @@ final class LocalModels {
                 let loadsBefore = loadsStarted
                 let took = try await queued {
                     let started = Date()
-                    _ = try await Self.whisperTranscribe(clip, kit: whisper, vocabulary: vocabulary, spoken: language)
+                    _ = try await Self.whisperTranscribe(clip, kit: whisper, vocabulary: vocabulary, spoken: language,
+                                                         englishOnly: LocalCatalog.model(model)?.isEnglishOnly ?? false)
                     return Date().timeIntervalSince(started)
                 }
                 runs += 1
@@ -532,7 +536,8 @@ final class LocalModels {
         return Kit(try await WhisperKit(config))
     }
 
-    nonisolated private static func whisperTranscribe(_ samples: [Float], kit: Kit, vocabulary: [String], spoken: Language) async throws -> String {
+    nonisolated private static func whisperTranscribe(_ samples: [Float], kit: Kit, vocabulary: [String], spoken: Language,
+                                                      englishOnly: Bool = false) async throws -> String {
         // Whisper makes something up for silence ("Vielen Dank.").
         guard SpeechGate.hasSpeech(samples) else { return "" }
         let decode = { (prompt: [Int]?, limit: Int?) async throws -> String in
@@ -545,8 +550,12 @@ final class LocalModels {
                                           detectLanguage: true, skipSpecialTokens: true, withoutTimestamps: false,
                                           windowClipTime: 0)
             // Under two seconds the language guess is a coin toss ("Ja." came
-            // back as "Yeah." on Windows/Linux): the one set in Settings.
-            if samples.count < 32_000 {
+            // back as "Yeah." on Windows/Linux): the one set in Settings. A
+            // model that hears English only is never asked.
+            if englishOnly {
+                options.language = Language.english.rawValue
+                options.detectLanguage = false
+            } else if samples.count < 32_000 {
                 options.language = spoken.rawValue
                 options.detectLanguage = false
             }

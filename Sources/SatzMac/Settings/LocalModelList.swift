@@ -105,7 +105,9 @@ private struct LocalModelItem: View {
     private var local: LocalModels { LocalModels.shared }
     private var state: LocalModels.State { local.state(of: id, language: spoken) }
     private var spoken: Language { preferences.spokenLanguage }
-    private var inUse: Bool { preferences.localModel == id }
+    /// Only while Lokal is the provider: shown while another one is in use,
+    /// every row offers Benutzen, which switches to Lokal as well.
+    private var inUse: Bool { preferences.provider == .local && preferences.localModel == id }
     private var isApple: Bool { id == ModelCatalog.apple }
 
     // MARK: - Right side
@@ -141,7 +143,10 @@ private struct LocalModelItem: View {
                             Text(de("In Benutzung", en: "In use")).font(Typography.text(13, .semibold)).foregroundStyle(theme.ink)
                         }
                     } else {
-                        Button(de("Benutzen", en: "Use")) { preferences.localModel = id }
+                        Button(de("Benutzen", en: "Use")) {
+                            preferences.localModel = id
+                            preferences.provider = .local
+                        }
                             .buttonStyle(.accentCompact)
                     }
                     if !isApple {

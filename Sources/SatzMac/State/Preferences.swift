@@ -20,6 +20,15 @@ final class Preferences {
         set { models[provider.rawValue] = newValue }
     }
 
+    /// Any provider's model, for Settings showing one that is not in use.
+    func model(for provider: Provider) -> String {
+        models[provider.rawValue] ?? provider.defaultModel
+    }
+
+    func setModel(_ id: String, for provider: Provider) {
+        models[provider.rawValue] = id
+    }
+
     /// The model for Lokal, whichever provider is chosen now: a download
     /// that finishes while another provider is chosen still sets it.
     var localModel: String {

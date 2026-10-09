@@ -159,33 +159,49 @@ private struct LevelMeter: View {
 
 // MARK: - Anbieter
 
+/// Clicking a provider only shows it: its key, its models, its downloads.
+/// Dictation goes on to the one in use until "… benutzen" is pressed. Eli
+/// clicked Lokal to see what it offers, closed the window, and was dictating
+/// locally from then on.
 private struct ProviderBlock: View {
     @Bindable var preferences: Preferences
     let setup: Setup
     let models: ModelStore
     @Environment(\.theme) private var theme
+    /// The provider shown when it is not the one in use.
+    @State private var looking: Provider?
+    @Environment(\.showsProvider) private var startsOn
+
+    private var shown: Provider { looking ?? startsOn ?? preferences.provider }
 
     var body: some View {
         Block(title: de("Anbieter", en: "Provider")) {
             VStack(spacing: 0) {
-                Segmented(options: Provider.allCases.map { (value: $0, label: $0.name) }, selection: $preferences.provider)
+                Segmented(options: Provider.allCases.map { (value: $0, label: $0.name) },
+                          selection: Binding(get: { shown }, set: { looking = $0 == preferences.provider ? nil : $0 }),
+                          marked: preferences.provider)
                     .padding(10)
+                if shown != preferences.provider {
+                    SwitchRow(preferences: preferences, setup: setup, shown: shown) { looking = nil }
+                }
                 Rule()
-                if preferences.provider.needsKey {
-                    KeyRow(setup: setup, provider: preferences.provider)
+                if shown.needsKey {
+                    KeyRow(setup: setup, provider: shown)
                     Rule()
                 }
-                switch preferences.provider {
+                switch shown {
                 case .custom:
-                    FieldRow(label: de("Modell", en: "Model"), text: $preferences.model, prompt: preferences.provider.defaultModel)
+                    FieldRow(label: de("Modell", en: "Model"),
+                             text: Binding(get: { preferences.model(for: .custom) }, set: { preferences.setModel($0, for: .custom) }),
+                             prompt: Provider.custom.defaultModel)
                 case .local:
                     LocalModelList(preferences: preferences, store: models)
                 default:
-                    ModelRow(preferences: preferences, store: models)
+                    ModelRow(preferences: preferences, provider: shown, store: models)
                 }
                 // Only MAI-Transcribe has a clean mode; elsewhere the switch would do nothing.
                 // Only MAI-Transcribe 2 takes it: 1.5 refused the whole request with it.
-                if preferences.model.contains("mai-transcribe-2") {
+                if preferences.model(for: shown).contains("mai-transcribe-2") {
                     Rule()
                     Toggle(isOn: $preferences.removesFillers) { Text(de("Füllwörter weglassen", en: "Remove filler words")) }
                         .toggleStyle(AccentToggleStyle())
@@ -194,13 +210,15 @@ private struct ProviderBlock: View {
                         .padding(.horizontal, 16)
                         .frame(height: 48)
                 }
-                if preferences.provider == .custom {
+                if shown == .custom {
                     Rule()
                     FieldRow(label: de("Adresse", en: "Address"), text: $preferences.customBaseURL, prompt: "https://…/v1")
                 }
             }
             .surface(radius: 16)
         }
+        // Switched elsewhere (Benutzen on a local model): nothing left to look at.
+        .onChange(of: preferences.provider) { _, provider in if looking == provider { looking = nil } }
         .onChange(of: preferences.provider) { _, provider in
             setup.refresh()
             // A loaded model is a gigabyte of memory nobody uses any more.
@@ -215,12 +233,61 @@ private struct ProviderBlock: View {
     }
 }
 
+/// Under the providers while one is shown that is not in use: where
+/// dictation goes now, and the one button that changes it. Offered only
+/// once the shown provider can take a dictation.
+private struct SwitchRow: View {
+    @Bindable var preferences: Preferences
+    let setup: Setup
+    let shown: Provider
+    let switched: () -> Void
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(de("Diktate gehen an \(preferences.provider.name).", en: "Dictation goes to \(preferences.provider.name)."))
+                .font(Typography.text(13))
+                .foregroundStyle(theme.inkSecondary)
+            Spacer(minLength: 8)
+            if let missing {
+                Text(missing)
+                    .font(Typography.text(13))
+                    .foregroundStyle(theme.inkSecondary)
+            } else {
+                Button(de("\(shown.name) benutzen", en: "Use \(shown.name)")) {
+                    preferences.provider = shown
+                    switched()
+                }
+                .buttonStyle(.accentCompact)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 10)
+    }
+
+    /// What the shown provider still needs before it can be used.
+    private var missing: String? {
+        switch shown {
+        case .local:
+            LocalModels.shared.isInstalled(preferences.localModel, language: preferences.spokenLanguage)
+                ? nil : de("Erst ein Modell laden", en: "Download a model first")
+        case .custom:
+            URL(string: preferences.customBaseURL.trimmingCharacters(in: .whitespaces))?.host == nil
+                ? de("Erst die Adresse eintragen", en: "Enter the address first") : nil
+        default:
+            setup.hasKey(for: shown) ? nil : de("Erst den Schlüssel eintragen", en: "Enter the key first")
+        }
+    }
+}
+
 /// The model: a menu of what the provider offers now, best first, each with
 /// how many words it gets wrong and what an hour of talking costs, and "Other"
 /// for one typed in by hand. A plain text field let one stray keystroke break
 /// every dictation after it.
 private struct ModelRow: View {
     @Bindable var preferences: Preferences
+    /// The provider shown, which need not be the one in use.
+    let provider: Provider
     let store: ModelStore
     @Environment(\.theme) private var theme
     @Environment(\.isSnapshot) private var isSnapshot
@@ -234,9 +301,8 @@ private struct ModelRow: View {
     private static let other = "\u{0}other"
 
     var body: some View {
-        let provider = preferences.provider
         let list = store.models(for: provider)
-        let current = provider.choice(for: preferences.model, in: list)
+        let current = provider.choice(for: preferences.model(for: provider), in: list)
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
                 Text(de("Modell", en: "Model"))
@@ -258,7 +324,7 @@ private struct ModelRow: View {
                         .labelsHidden()
                         Divider()
                         Button(de("Anderes Modell …", en: "Other model …")) {
-                            draft = preferences.model
+                            draft = preferences.model(for: provider)
                             typing = true
                         }
                     } label: { label(current) }
@@ -286,7 +352,7 @@ private struct ModelRow: View {
                         .foregroundStyle(theme.ink)
                     Spacer()
                     if isSnapshot {
-                        Text(preferences.model.isEmpty ? provider.defaultModel : preferences.model)
+                        Text(preferences.model(for: provider).isEmpty ? provider.defaultModel : preferences.model(for: provider))
                     } else {
                         // Taking the keyboard selects the id, so typing replaces it.
                         TextField("", text: $draft, prompt: Text(provider.defaultModel).foregroundStyle(theme.inkOnCard))
@@ -296,7 +362,7 @@ private struct ModelRow: View {
                             .onSubmit { commit() }
                             // Escape keeps the model there was.
                             .onExitCommand {
-                                draft = preferences.model
+                                draft = preferences.model(for: provider)
                                 typing = false
                                 idFocused = false
                             }
@@ -311,7 +377,7 @@ private struct ModelRow: View {
         // The field lets go first, with the new provider's model: its focus-out
         // wrote the old provider's model into the new one.
         .onChange(of: provider) {
-            draft = preferences.model
+            draft = preferences.model(for: provider)
             typing = false
             idFocused = false
         }
@@ -322,7 +388,7 @@ private struct ModelRow: View {
         }
         // Leaving the field saves what was typed and closes it.
         .onChange(of: idFocused) { _, focused in if !focused { commit() } }
-        .onAppear { draft = preferences.model }
+        .onAppear { draft = preferences.model(for: provider) }
         .onDisappear { typing = false }
         .task(id: provider) { if !isSnapshot { store.refresh(provider) } }
     }
@@ -335,7 +401,7 @@ private struct ModelRow: View {
                 // The field lets go first, so nothing it still holds is saved over the pick.
                 typing = false
                 idFocused = false
-                preferences.model = id
+                preferences.setModel(id, for: provider)
                 draft = id
             }
         )
@@ -343,8 +409,8 @@ private struct ModelRow: View {
 
     private func commit() {
         let id = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !id.isEmpty { preferences.model = id }
-        draft = preferences.model
+        if !id.isEmpty { preferences.setModel(id, for: provider) }
+        draft = preferences.model(for: provider)
         typing = false
     }
 
@@ -424,7 +490,7 @@ private struct KeyRow: View {
         HStack(spacing: 10) {
             Image(systemName: "lock")
                 .font(.system(size: 13, weight: .medium))
-            if editing || !setup.hasKey {
+            if editing || !setup.hasKey(for: provider) {
                 // Always empty when opened: the stored key is never read back
                 // into a field, where it would sit in memory for no reason.
                 if isSnapshot {
@@ -442,7 +508,7 @@ private struct KeyRow: View {
                     .buttonStyle(.outlineCompact)
                     .disabled(input.trimmingCharacters(in: .whitespaces).isEmpty)
                 // "Ändern" can be taken back: the stored key stays.
-                if editing && setup.hasKey {
+                if editing && setup.hasKey(for: provider) {
                     Button(action: close) {
                         Image(systemName: "xmark").font(.system(size: 10, weight: .bold))
                             .frame(width: 22, height: 22)
@@ -464,7 +530,7 @@ private struct KeyRow: View {
         let key = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return }
         do {
-            try setup.store(key: key)
+            try setup.store(key: key, for: provider)
             problem = nil
             close()
         } catch {

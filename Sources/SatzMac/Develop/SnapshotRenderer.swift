@@ -29,6 +29,7 @@ enum SnapshotRenderer {
             ("setup-key", .german, { AnyView(setupSheet(.key).environment(\.theme, .light)) }),
             ("settings-local", .german, { AnyView(localSettingsSheet.environment(\.theme, .dark)) }),
             ("settings-local-en", .english, { AnyView(localSettingsSheet.environment(\.theme, .light)) }),
+            ("settings-local-browse", .german, { AnyView(localBrowseSheet.environment(\.theme, .dark)) }),
             ("setup-local", .german, { AnyView(localSetupSheet.environment(\.theme, .light)) }),
             ("setup-local-en", .english, { AnyView(localSetupSheet.environment(\.theme, .dark)) }),
             ("setup-custom", .german, { AnyView(setupSheet(.key, provider: .custom).environment(\.theme, .light)) }),
@@ -240,7 +241,10 @@ enum SnapshotRenderer {
 
     /// Builds a fixed chip supports, as on an M2 to M4: the list of an M5,
     /// which Argmax does not know yet, is the same.
-    private static let supported: Set<String> = [LocalCatalog.turbo, LocalCatalog.turboFull, LocalCatalog.turboCompatible, LocalCatalog.small]
+    private static let supported: Set<String> = [
+        LocalCatalog.turbo, LocalCatalog.turboFull, LocalCatalog.turboCompatible, LocalCatalog.largeV3,
+        LocalCatalog.distil, LocalCatalog.distilCompatible, LocalCatalog.small, LocalCatalog.base, LocalCatalog.tiny,
+    ]
 
     /// Settings: one in use and measured, one with Argmax's estimate, one
     /// downloading (Small, with its tag), and Apple's.
@@ -255,6 +259,12 @@ enum SnapshotRenderer {
         )
         LocalModels.shared = local
         return settingsSheet(.local)
+    }
+
+    /// Lokal looked at while OpenRouter takes the dictations.
+    private static var localBrowseSheet: some View {
+        _ = localSettingsSheet
+        return settingsSheet(.openRouter).environment(\.showsProvider, .local)
     }
 
     /// Setup, where the card is narrow: one on the Mac but never timed, the
@@ -279,4 +289,7 @@ enum SnapshotRenderer {
 /// for a static stand-in.
 extension EnvironmentValues {
     @Entry var isSnapshot = false
+    /// The provider Settings shows at first, for a picture of one looked at
+    /// but not in use.
+    @Entry var showsProvider: Provider? = nil
 }

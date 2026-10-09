@@ -69,10 +69,16 @@ final class Setup {
 
     // MARK: - Fixing things
 
-    func store(key: String) throws {
+    /// For the provider in use, or for `provider`, one Settings shows without using it.
+    func store(key: String, for provider: Provider? = nil) throws {
         guard let preferences else { return }
-        try Secrets.store(key, for: preferences.provider)
+        try Secrets.store(key, for: provider ?? preferences.provider)
         refresh()
+    }
+
+    /// Whether `provider` has a key, in use or not. A fixture has one for each.
+    func hasKey(for provider: Provider) -> Bool {
+        preferences == nil ? hasKey : Secrets.exists(for: provider)
     }
 
     func removeKey() {

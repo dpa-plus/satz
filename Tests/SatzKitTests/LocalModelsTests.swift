@@ -8,22 +8,27 @@ import Testing
 /// fallback, for a chip it does not know yet, such as an M5), trimmed to the
 /// builds that matter here.
 private let newerChip: Set<String> = [
-    "openai_whisper-base", "openai_whisper-small", "openai_whisper-small.en", "openai_whisper-large-v3-v20240930",
-    LocalCatalog.turboFull, LocalCatalog.turboCompatible, LocalCatalog.turbo,
+    "openai_whisper-tiny", "openai_whisper-base", "openai_whisper-small", "openai_whisper-small.en", "openai_whisper-large-v3",
+    "openai_whisper-large-v3-v20240930", LocalCatalog.turboFull, LocalCatalog.turboCompatible, LocalCatalog.turbo,
+    LocalCatalog.distil, LocalCatalog.distilCompatible,
 ]
 /// The M1 list: no turbo build.
 private let m1: Set<String> = [
-    "openai_whisper-base", "openai_whisper-small", "openai_whisper-large-v3", LocalCatalog.turboCompatible,
+    "openai_whisper-tiny", "openai_whisper-base", "openai_whisper-small", "openai_whisper-large-v3",
+    LocalCatalog.turboCompatible, LocalCatalog.distilCompatible,
 ]
+
+/// What both get besides their Turbo and Distil builds.
+private let others = [LocalCatalog.small, LocalCatalog.base, LocalCatalog.tiny]
 
 @Test func aNewerMacIsOfferedTheTurboBuildsAndNotTheCompatibleOne() {
     let ids = LocalCatalog.offered(supported: newerChip, hasApple: true).map(\.id)
-    #expect(ids == [LocalCatalog.turbo, LocalCatalog.turboFull, LocalCatalog.small, LocalCatalog.apple])
+    #expect(ids == [LocalCatalog.turbo, LocalCatalog.turboFull, LocalCatalog.largeV3, LocalCatalog.distil] + others + [LocalCatalog.apple])
 }
 
 @Test func anM1GetsTheCompatibleBuildInsteadOfTheTurboOnes() {
     let ids = LocalCatalog.offered(supported: m1, hasApple: false).map(\.id)
-    #expect(ids == [LocalCatalog.turboCompatible, LocalCatalog.small])
+    #expect(ids == [LocalCatalog.turboCompatible, LocalCatalog.largeV3, LocalCatalog.distilCompatible] + others)
 }
 
 @Test func appleIsOfferedOnlyWhereMacOSHasIt() {
@@ -38,12 +43,12 @@ private let m1: Set<String> = [
 @Test func aBuildOnTheMacStaysInTheListEvenWhereItIsNotOffered() {
     // Downloaded on an M1 before satz checked: it can still be used or removed.
     let rows = LocalCatalog.rows(supported: m1, hasApple: false, current: LocalCatalog.turboCompatible) { $0 == LocalCatalog.turbo }
-    #expect(rows == [LocalCatalog.turbo, LocalCatalog.turboCompatible, LocalCatalog.small])
+    #expect(rows == [LocalCatalog.turbo, LocalCatalog.turboCompatible, LocalCatalog.largeV3, LocalCatalog.distilCompatible] + others)
 }
 
 @Test func theDefaultIsNotAddedOnAMacThatCannotRunIt() {
     let rows = LocalCatalog.rows(supported: m1, hasApple: false, current: LocalCatalog.turbo) { _ in false }
-    #expect(rows == [LocalCatalog.turboCompatible, LocalCatalog.small])
+    #expect(rows == [LocalCatalog.turboCompatible, LocalCatalog.largeV3, LocalCatalog.distilCompatible] + others)
 }
 
 @Test func aModelTypedInEarlierGetsARowOfItsOwn() {
@@ -52,8 +57,13 @@ private let m1: Set<String> = [
     #expect(LocalCatalog.model("openai_whisper-medium") == nil)
 }
 
-@Test func onlySmallCarriesATag() {
-    #expect(LocalCatalog.all.filter { $0.tag != nil }.map(\.id) == [LocalCatalog.small])
+@Test func theTagSaysWhatTheNameDoesNot() {
+    #expect(LocalCatalog.all.filter { $0.tag == nil }.map(\.id)
+            == [LocalCatalog.turbo, LocalCatalog.turboFull, LocalCatalog.turboCompatible, LocalCatalog.apple])
+}
+
+@Test func onlyDistilHearsEnglishAlone() {
+    #expect(LocalCatalog.all.filter(\.isEnglishOnly).map(\.id) == [LocalCatalog.distil, LocalCatalog.distilCompatible])
 }
 
 // MARK: - Argmax's benchmarks, from trimmed copies of the live files (08.10.2026)
@@ -88,7 +98,8 @@ private let performance = """
 
 @Test func englishErrorsAreReadByFieldName() {
     let english = LocalBenchmarks.parseEnglish(Data(quality.utf8), ids: LocalCatalog.whisperIDs)
-    #expect(english == [LocalCatalog.turbo: 6.86, LocalCatalog.turboFull: 6.72, LocalCatalog.turboCompatible: 7.15, LocalCatalog.small: 8.11])
+    #expect(english == [LocalCatalog.turbo: 6.86, LocalCatalog.turboFull: 6.72, LocalCatalog.turboCompatible: 7.15,
+                        LocalCatalog.small: 8.11, LocalCatalog.base: 10.67])
 }
 
 @Test func germanErrorsAreTheRowsWhereWhisperFoundTheLanguage() {

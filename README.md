@@ -125,15 +125,19 @@ The model menu is the provider's **live list**, so new models show up without a 
 
 A few models OpenRouter lists are left out because they fail with dictation (no German, speaker tags in the text, refused requests). "Other model" takes any model id by hand. Each provider keeps its own key and model, so you can switch back and forth.
 
-**On your own computer.** Choose *Local* and Settings lists the models you can run. Each row shows the download size, how many words the model gets wrong in a published benchmark, and how long it takes for 10 s of speech. satz measures that on your computer right after the download, with a 10 s public-domain audiobook clip; before that, the Mac shows an estimate from Argmax's measurements on the nearest Apple chip. Pick one you like, press *Download*, then *Use*:
+**On your own computer.** Choose *Local* and Settings lists the models you can run. Each row shows the download size, how many words the model gets wrong in a published benchmark, and how long it takes for 10 s of speech. satz measures that on your computer right after the download, with a 10 s public-domain audiobook clip; before that, the Mac shows an estimate from Argmax's measurements on the nearest Apple chip. Clicking a provider in Settings only shows it; *Use* switches to it. Pick a model you like, press *Download*, then *Use*:
 
 | | Mac | Windows and Linux |
 |---|---|---|
 | Whisper Large v3 Turbo | 646 MB, via WhisperKit on the Neural Engine. The default. On an M1, a 627 MB build that runs there. | 981 MB, on the processor. The default. |
 | Whisper Large v3 Turbo, full size | 1.6 GB, a little more accurate. | |
-| Whisper Large v3 | | 1.4 GB, the most accurate, and slow. |
+| Whisper Large v3 | 3.1 GB, slow. | 1.4 GB, the most accurate, slow. |
+| Whisper Medium | | 786 MB |
 | Whisper Small | 486 MB, mostly for English. | 328 MB |
-| Whisper Base | | 149 MB, the fastest, and rough. |
+| Whisper Base | 147 MB, rough. | 149 MB, fast, rough. |
+| Whisper Tiny | 77 MB, very rough. | 99 MB, very rough. |
+| Distil-Whisper Large v3 | 607 MB, English only, fast. | 950 MB (v3.5), English only. |
+| Whisper Large v3 Turbo German | | 983 MB, German only. |
 | Apple's speech recognition | Built into macOS 26; macOS may fetch its language pack once. Instant, but hears only the language set in *Spoken in* and barely uses your vocabulary. | |
 
 On the Mac the error rates are Argmax's, for the exact builds satz downloads (English, and German where they measured it); on Windows and Linux, German on FLEURS for the original models. Both are fetched once a day, with the numbers satz ships as a fallback. Click a measured speed to measure again.

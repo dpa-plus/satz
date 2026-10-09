@@ -191,13 +191,19 @@ private struct KeyStep: View {
     @Environment(\.isSnapshot) private var isSnapshot
     @State private var input = ""
     @State private var problem: String?
+    /// The provider shown when it is not the one in use: clicking one only
+    /// shows it, Weiter makes it the one (as in Settings).
+    @State private var looking: Provider?
+
+    private var shown: Provider { looking ?? preferences.provider }
 
     var body: some View {
-        StepTitle(text: preferences.provider.needsKey ? de("Anbieter und Schlüssel", en: "Provider and key")
+        StepTitle(text: shown.needsKey ? de("Anbieter und Schlüssel", en: "Provider and key")
                                                       : de("Anbieter und Modell", en: "Provider and model"))
-        Segmented(options: Provider.allCases.map { (value: $0, label: $0.name) }, selection: $preferences.provider)
+        Segmented(options: Provider.allCases.map { (value: $0, label: $0.name) },
+                  selection: Binding(get: { shown }, set: { looking = $0 == preferences.provider ? nil : $0 }))
 
-        if preferences.provider.needsKey {
+        if shown.needsKey {
             keyField
         } else {
             // Nothing to paste here: a model is downloaded instead, the
@@ -207,7 +213,7 @@ private struct KeyStep: View {
                 .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(theme.control, lineWidth: 1.5))
         }
 
-        if preferences.provider == .custom {
+        if shown == .custom {
             customURLField
             customModelField
         }
@@ -221,27 +227,27 @@ private struct KeyStep: View {
                 .buttonStyle(AccentButtonStyle(height: 42))
                 .disabled(!canContinue)
             Spacer()
-            if let page = preferences.provider.keyPage {
+            if let page = shown.keyPage {
                 Button { NSWorkspace.shared.open(page) } label: {
                     Text(de("Schlüssel holen", en: "Get a key")).font(Typography.text(14)).underline().foregroundStyle(theme.ink)
                 }
                 .buttonStyle(.plain)
             }
         }
-        .onChange(of: preferences.provider) { input = ""; problem = nil; setup.refresh() }
+        .onChange(of: shown) { input = ""; problem = nil; setup.refresh() }
     }
 
     private var keyField: some View {
         HStack(spacing: 10) {
-            Image(systemName: setup.hasKey ? "checkmark" : "lock")
+            Image(systemName: hasKey ? "checkmark" : "lock")
                 .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(setup.hasKey ? theme.accent : theme.inkOnCard)
+                .foregroundStyle(hasKey ? theme.accent : theme.inkOnCard)
             if isSnapshot {
-                Text(setup.hasKey ? de("Schlüssel gespeichert", en: "Key saved") : preferences.provider.keyPlaceholder)
+                Text(hasKey ? de("Schlüssel gespeichert", en: "Key saved") : shown.keyPlaceholder)
                     .foregroundStyle(theme.inkOnCard)
                 Spacer()
             } else {
-                SecureField("", text: $input, prompt: Text(setup.hasKey ? de("Schlüssel gespeichert", en: "Key saved") : preferences.provider.keyPlaceholder)
+                SecureField("", text: $input, prompt: Text(hasKey ? de("Schlüssel gespeichert", en: "Key saved") : shown.keyPlaceholder)
                     .foregroundStyle(theme.inkOnCard))
                     .textFieldStyle(.plain)
                     .onSubmit(next)
@@ -277,10 +283,10 @@ private struct KeyStep: View {
         HStack(spacing: 10) {
             Image(systemName: "cube").font(.system(size: 13, weight: .medium)).foregroundStyle(theme.inkOnCard)
             if isSnapshot {
-                Text(preferences.model.isEmpty ? de("Modell, z. B. whisper-1", en: "Model, e.g. whisper-1") : preferences.model)
+                Text(preferences.model(for: .custom).isEmpty ? de("Modell, z. B. whisper-1", en: "Model, e.g. whisper-1") : preferences.model(for: .custom))
                 Spacer()
             } else {
-                TextField("", text: $preferences.model, prompt: Text(de("Modell, z. B. whisper-1", en: "Model, e.g. whisper-1")).foregroundStyle(theme.inkOnCard))
+                TextField("", text: Binding(get: { preferences.model(for: .custom) }, set: { preferences.setModel($0, for: .custom) }), prompt: Text(de("Modell, z. B. whisper-1", en: "Model, e.g. whisper-1")).foregroundStyle(theme.inkOnCard))
                     .textFieldStyle(.plain)
                     .onSubmit(next)
             }
@@ -294,21 +300,36 @@ private struct KeyStep: View {
 
     private var canContinue: Bool {
         let typed = !input.trimmingCharacters(in: .whitespaces).isEmpty
-        return (typed || setup.hasKey) && !preferences.isEndpointMissing && !preferences.isModelMissing
+        return (typed && shown.needsKey) || canUse
     }
+
+    /// The shown provider can take a dictation once it is the one in use.
+    private var canUse: Bool {
+        switch shown {
+        case .local: return LocalModels.shared.isInstalled(preferences.localModel, language: preferences.spokenLanguage)
+        case .custom:
+            return hasKey && URL(string: preferences.customBaseURL.trimmingCharacters(in: .whitespaces))?.host != nil
+                && !preferences.model(for: .custom).trimmingCharacters(in: .whitespaces).isEmpty
+        default: return hasKey
+        }
+    }
+
+    private var hasKey: Bool { setup.hasKey(for: shown) }
 
     private func next() {
         let key = input.trimmingCharacters(in: .whitespacesAndNewlines)
         if !key.isEmpty {
             do {
-                try setup.store(key: key)
+                try setup.store(key: key, for: shown)
                 input = ""
             } catch {
                 problem = error.localizedDescription
                 return
             }
         }
-        guard setup.hasKey, !preferences.isEndpointMissing, !preferences.isModelMissing else { return }
+        guard canUse else { return }
+        preferences.provider = shown
+        looking = nil
         onNext()
     }
 }

@@ -1,8 +1,9 @@
 import Foundation
 
-/// The models "Lokal" offers on a Mac: a short list to pick from, each with
-/// its real download size. WhisperKit knows dozens of builds; these are the
-/// ones that hear German and English and are worth the download.
+/// The models "Lokal" offers on a Mac, each with its real download size:
+/// one build per Whisper size, from tiny and rough to large and slow, and
+/// one for English only. WhisperKit knows dozens more; the others are the
+/// same models built differently, or English-only twins of these.
 public enum LocalCatalog {
 
     /// Today's default: Whisper Large v3 Turbo, compressed for the Neural
@@ -13,9 +14,18 @@ public enum LocalCatalog {
     /// Argmax builds the two above only for M2 and newer; this one runs on
     /// every Apple chip, so an M1 gets it instead.
     public static let turboCompatible = "openai_whisper-large-v3-v20240930_626MB"
+    /// The original Large v3: 3.1 GB, a third of Turbo's speed.
+    public static let largeV3 = "openai_whisper-large-v3"
+    /// Distil-Whisper hears English only, fast. M2 and newer get Argmax's
+    /// faster build, an M1 this one.
+    public static let distil = "distil-whisper_distil-large-v3_turbo_600MB"
+    public static let distilCompatible = "distil-whisper_distil-large-v3_594MB"
     /// Fast and small, but weak in German (49 % word errors where Whisper
     /// finds the language itself, as satz lets it).
     public static let small = "openai_whisper-small"
+    /// Faster still, and rougher: 61 and 80 % word errors in German.
+    public static let base = "openai_whisper-base"
+    public static let tiny = "openai_whisper-tiny"
     public static let apple = ModelCatalog.apple
 
     public struct Model: Identifiable, Hashable, Sendable {
@@ -32,7 +42,11 @@ public enum LocalCatalog {
             switch id {
             case LocalCatalog.turboFull: de("Whisper Large v3 Turbo, volle Größe", en: "Whisper Large v3 Turbo, full size")
             case LocalCatalog.turbo, LocalCatalog.turboCompatible: "Whisper Large v3 Turbo"
+            case LocalCatalog.largeV3: "Whisper Large v3"
+            case LocalCatalog.distil, LocalCatalog.distilCompatible: "Distil-Whisper Large v3"
             case LocalCatalog.small: "Whisper Small"
+            case LocalCatalog.base: "Whisper Base"
+            case LocalCatalog.tiny: "Whisper Tiny"
             case LocalCatalog.apple: de("Apple Spracherkennung", en: "Apple speech recognition")
             default: id
             }
@@ -40,8 +54,19 @@ public enum LocalCatalog {
 
         /// A quiet word after the name, where the name alone would mislead.
         public var tag: String? {
-            id == LocalCatalog.small ? de("meist Englisch", en: "mostly English") : nil
+            switch id {
+            case LocalCatalog.largeV3: de("groß, langsam", en: "large, slow")
+            case LocalCatalog.distil, LocalCatalog.distilCompatible: de("nur Englisch", en: "English only")
+            case LocalCatalog.small: de("meist Englisch", en: "mostly English")
+            case LocalCatalog.base: de("ungenau", en: "rough")
+            case LocalCatalog.tiny: de("sehr ungenau", en: "very rough")
+            default: nil
+            }
         }
+
+        /// Hears English only: always decoded as English, never asked which
+        /// language it heard (it would answer English anyway, and translate).
+        public var isEnglishOnly: Bool { id == LocalCatalog.distil || id == LocalCatalog.distilCompatible }
     }
 
     /// In the order shown: the default first, Apple's last.
@@ -49,7 +74,12 @@ public enum LocalCatalog {
         Model(id: turbo, bytes: 645_668_913),
         Model(id: turboFull, bytes: 1_638_464_446),
         Model(id: turboCompatible, bytes: 626_718_238),
+        Model(id: largeV3, bytes: 3_090_319_899),
+        Model(id: distil, bytes: 607_114_331),
+        Model(id: distilCompatible, bytes: 594_534_261),
         Model(id: small, bytes: 486_487_465),
+        Model(id: base, bytes: 146_719_453),
+        Model(id: tiny, bytes: 76_635_397),
         Model(id: apple, bytes: nil),
     ]
 
@@ -74,6 +104,7 @@ public enum LocalCatalog {
             // One Large v3 Turbo per Mac: the compatible build only where
             // the faster ones cannot run.
             case turboCompatible: supported.contains(turboCompatible) && !supported.contains(turbo)
+            case distilCompatible: supported.contains(distilCompatible) && !supported.contains(distil)
             default: supported.contains(model.id)
             }
         }

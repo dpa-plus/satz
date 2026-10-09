@@ -1,3 +1,4 @@
+import SatzKit
 import SwiftUI
 
 // The handful of pieces every surface is built from. Each reads the theme, so
@@ -192,6 +193,9 @@ extension ButtonStyle where Self == IconButtonStyle {
 struct Segmented<Value: Hashable>: View {
     let options: [(value: Value, label: String)]
     @Binding var selection: Value
+    /// The option in use where what is shown can differ from it: a dot in
+    /// the accent colour before its name.
+    var marked: Value? = nil
 
     @Environment(\.theme) private var theme
 
@@ -199,32 +203,30 @@ struct Segmented<Value: Hashable>: View {
         HStack(spacing: 3) {
             ForEach(options, id: \.value) { option in
                 let chosen = option.value == selection
-                Button { selection = option.value } label: {
-                    // Never broken over two lines: a long name takes room from the short ones.
-                    Text(option.label)
-                        .font(Typography.text(14, .semibold))
-                        .lineLimit(1)
-                        .fixedSize()
-                        .foregroundStyle(chosen ? theme.ink : theme.inkSecondary)
-                        .padding(.horizontal, 8)
-                        .frame(maxWidth: .infinity, minHeight: 28)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(chosen ? theme.card : .clear)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .strokeBorder(chosen ? theme.cardBorder : .clear, lineWidth: 1.5)
-                        )
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                // VoiceOver says which one is chosen.
-                .accessibilityAddTraits(chosen ? .isSelected : [])
+                Button { selection = option.value } label: { segment(option.label, chosen: chosen, marked: option.value == marked) }
+                    .buttonStyle(.plain)
+                    // VoiceOver says which one is chosen, and which one is in use.
+                    .accessibilityAddTraits(chosen ? .isSelected : [])
+                    .accessibilityValue(option.value == marked ? de("in Benutzung", en: "in use") : "")
             }
         }
         .padding(3)
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(theme.hairline))
+    }
+
+    private func segment(_ label: String, chosen: Bool, marked: Bool) -> some View {
+        // Never broken over two lines: a long name takes room from the short ones.
+        HStack(spacing: 5) {
+            if marked { Circle().fill(theme.accent).frame(width: 6, height: 6) }
+            Text(label).lineLimit(1).fixedSize()
+        }
+        .font(Typography.text(14, .semibold))
+        .foregroundStyle(chosen ? theme.ink : theme.inkSecondary)
+        .padding(.horizontal, 8)
+        .frame(maxWidth: .infinity, minHeight: 28)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(chosen ? theme.card : .clear))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(chosen ? theme.cardBorder : .clear, lineWidth: 1.5))
+        .contentShape(Rectangle())
     }
 }
 
