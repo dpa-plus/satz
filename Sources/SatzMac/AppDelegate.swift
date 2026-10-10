@@ -6,7 +6,11 @@ import SwiftUI
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
-    private let preferences = Preferences()
+    /// Made when first used, not with the app: `--snapshot` and the other
+    /// one-shot flags quit before they need it, and reading the user's
+    /// preferences must not be the first thing they do (it creates the
+    /// preferences file).
+    private lazy var preferences = Preferences()
     /// In test mode next to the state file: a test that clears or trims the
     /// history must not touch the user's.
     private lazy var history = History(
@@ -25,7 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// History and settings, one window.
     private var mainWindow: AppWindow!
     private let navigation = MainNavigation()
-    private let models = ModelStore()
+    private lazy var models = ModelStore()
     private var setupWindow: AppWindow!
     private var devControl: DevControl?
     private let mediaPause = MediaPause()
@@ -57,9 +61,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Typography.registerBundledFonts()
-        NSApp.mainMenu = Self.mainMenu()
 
-        if let directory = argument(after: "--snapshot") {
+        if let directory = LaunchMode.argument("--snapshot") {
             try? SnapshotRenderer.write(to: directory)
             NSApp.terminate(nil)
             return
@@ -69,17 +72,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
-        if let folder = argument(after: "--icon") {
+        if let folder = LaunchMode.argument("--icon") {
             try? IconRenderer.write(to: folder)
             NSApp.terminate(nil)
             return
         }
-        if let path = argument(after: "--hero") {
+        if let path = LaunchMode.argument("--hero") {
             try? HeroRenderer.write(to: path)
             NSApp.terminate(nil)
             return
         }
-        if let path = argument(after: "--showcase") {
+        if let path = LaunchMode.argument("--showcase") {
             try? SnapshotRenderer.writeShowcase(to: path)
             NSApp.terminate(nil)
             return
@@ -91,6 +94,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
+        installMainMenu()
+        followLanguage()
         // One satz at a time. Two copies (an old one still running after an
         // update, or one opened from Downloads next to the one in
         // Applications) both heard the shortcut, and every text was pasted
@@ -109,9 +114,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // unless a test asks for it.
         mediaPause.isOn = { [weak self] in
             guard let self else { return false }
-            return preferences.pausesMedia && (LaunchMode.current.stateFile == nil || CommandLine.arguments.contains("--test-media"))
+            return preferences.pausesMedia && (LaunchMode.current.stateFile == nil || LaunchMode.allowsMediaInTest)
         }
-        if let files = argument(after: "--test-audio") {
+        if let files = LaunchMode.argument("--test-audio") {
             AudioSources.testFiles = files.split(separator: ":").map { URL(fileURLWithPath: String($0)) }
         }
         if let stateFile = LaunchMode.current.stateFile {
@@ -233,6 +238,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { await LocalModels.shared.check(model, language: spoken) }
         }
 
+        followProvider()
+
         // Nothing works until setup is done, and a menu bar icon alone gives a
         // new user no hint of that. A test copy opens no window by itself
         // (`setup` does): a fresh models folder left its setup unfinished,
@@ -266,6 +273,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// back, not whichever app macOS picks.
     func applicationWillTerminate(_ notification: Notification) {
         mediaPause.quitting()
+        // Quitting within a second of a paste: the user's clipboard is put
+        // back now, not by a timer that will never run.
+        Paster.restorePendingNow()
         AppWindow.handBack()
     }
 
@@ -286,6 +296,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             AppIcon.apply(Look.shared.family)
         } onChange: { [weak self] in
             Task { @MainActor in self?.followColourFamily() }
+        }
+    }
+
+    /// The menu bar of the app, which shows while the settings or the setup
+    /// are open (satz is then a regular app), in the language chosen now.
+    private func installMainMenu() {
+        NSApp.mainMenu = Self.mainMenu()
+    }
+
+    /// Built again on every language change: made once, it stayed in the
+    /// language satz started in until the next launch.
+    private func followLanguage() {
+        withObservationTracking {
+            _ = preferences.language
+        } onChange: { [weak self] in
+            // After the change, not before: `onChange` runs ahead of it.
+            Task { @MainActor in
+                self?.installMainMenu()
+                self?.followLanguage()
+            }
+        }
+    }
+
+    /// What the last switch of provider or model was acted on.
+    private var servedLocal: (provider: Provider, model: String)?
+
+    /// Loads or gives back the local model when the provider or the model
+    /// changes, wherever that happens: Settings, the setup, a model card. A
+    /// loaded model is a gigabyte of memory nobody uses once another provider
+    /// is in use, and one just chosen should be ready by the first dictation.
+    /// It used to live in the Settings view, which the setup does not have.
+    private func followProvider() {
+        servedLocal = (preferences.provider, preferences.model)
+        watchProvider()
+    }
+
+    private func watchProvider() {
+        withObservationTracking {
+            _ = preferences.provider
+            _ = preferences.model
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.providerChanged()
+                self?.watchProvider()
+            }
+        }
+    }
+
+    private func providerChanged() {
+        let now = (provider: preferences.provider, model: preferences.model)
+        guard servedLocal?.provider != now.provider || servedLocal?.model != now.model else { return }
+        servedLocal = now
+        setup.refresh()
+        if now.provider.needsKey || now.model == ModelCatalog.apple {
+            LocalModels.shared.unload()
+        } else {
+            LocalModels.shared.warmUp(now.model, language: preferences.spokenLanguage)
         }
     }
 
@@ -322,9 +389,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Never shown (satz has no menu bar of its own), but macOS routes ⌘Z,
-    /// ⌘X, ⌘C, ⌘V and ⌘A to text fields through it. Without it pasting a key
-    /// with ⌘V did nothing.
+    /// Shown only while a window is open, when satz is a regular app (the
+    /// rest of the time it has no menu bar). macOS routes ⌘Z, ⌘X, ⌘C, ⌘V and
+    /// ⌘A to text fields through it. Without it pasting a key with ⌘V did
+    /// nothing.
     private static func mainMenu() -> NSMenu {
         let main = NSMenu()
         let appMenu = NSMenu()
@@ -353,11 +421,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editItem.submenu = edit
         main.addItem(editItem)
         return main
-    }
-
-    private func argument(after flag: String) -> String? {
-        guard let index = CommandLine.arguments.firstIndex(of: flag),
-              CommandLine.arguments.indices.contains(index + 1) else { return nil }
-        return CommandLine.arguments[index + 1]
     }
 }

@@ -189,22 +189,43 @@ final class Preferences {
 
     /// A custom provider without a usable URL has nowhere to send the audio.
     var isEndpointMissing: Bool {
-        provider == .custom && URL(string: customBaseURL.trimmingCharacters(in: .whitespaces))?.host == nil
+        provider == .custom && !ProviderReadiness.hasUsableAddress(customBaseURL)
     }
 
     /// A custom endpoint has no default model; without one every request fails.
     var isModelMissing: Bool {
-        provider == .custom && model.trimmingCharacters(in: .whitespaces).isEmpty
+        provider == .custom && !ProviderReadiness.hasModel(model)
+    }
+
+    /// What `provider` still lacks before it can take a dictation, in use or
+    /// not. `hasKey` is its key being saved, or for Lokal its model being on
+    /// this Mac (`Setup` knows).
+    func missing(_ provider: Provider, hasKey: Bool) -> [ProviderReadiness.Need] {
+        ProviderReadiness.missing(provider, hasKey: hasKey, customBaseURL: customBaseURL, model: model(for: provider))
     }
 
     func addWord(_ word: String) {
         let clean = word.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !clean.isEmpty, !words.contains(where: { $0.caseInsensitiveCompare(clean) == .orderedSame }) else { return }
+        guard !clean.isEmpty, !Restoring.containsWord(clean, in: words) else { return }
         words.append(clean)
     }
 
     func removeWord(_ word: String) {
         words.removeAll { $0 == word }
+    }
+
+    /// Undo of `removeWord`: not when the word is there again. Added a second
+    /// time, it stood twice in the list, with one identity for both rows.
+    func restoreWord(_ word: String, at index: Int) {
+        let restored = Restoring.word(word, at: index, in: words)
+        if restored != words { words = restored }
+    }
+
+    /// Undo of removing a rule: not when its phrase has a rule again, which
+    /// is the newer one and must win (the first match in the list does).
+    func restoreReplacement(_ rule: Replacement, at index: Int) {
+        let restored = Restoring.rule(rule, at: index, in: replacements)
+        if restored != replacements { replacements = restored }
     }
 
     private var models: [String: String] {
@@ -263,7 +284,10 @@ final class Preferences {
         self.appTheme = appTheme
         cardOffset = (defaults?.dictionary(forKey: Key.cardOffset) as? [String: Double])
             .flatMap { values in values["x"].flatMap { x in values["y"].map { CGPoint(x: x, y: $0) } } }
-        defaults?.removeObject(forKey: "cardOffset")
+        // Only when there is something to drop: removing a key that is not
+        // there still creates the preferences file, which a `--snapshot` run
+        // must not do.
+        if defaults?.object(forKey: "cardOffset") != nil { defaults?.removeObject(forKey: "cardOffset") }
         let language = defaults?.string(forKey: Key.language).flatMap(Language.init(rawValue:)) ?? .system
         self.language = language
         let spokenChoice = defaults?.string(forKey: Key.spokenLanguage).flatMap(Language.init(rawValue:))

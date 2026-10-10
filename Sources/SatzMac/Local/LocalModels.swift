@@ -101,6 +101,15 @@ final class LocalModels {
            let kept = try? JSONDecoder().decode([String: LocalSpeed].self, from: data) {
             speeds = kept
         }
+        // A load that was under way when satz ended: sherpa-onnx cannot read
+        // one of the model's files and takes the process with it. Loaded
+        // again at this start, satz would end again, and the model could
+        // never be deleted or downloaded anew. So it is not loaded: it is
+        // shown as failed, which offers both.
+        for model in LocalCatalog.all where model.sherpa != nil && LoadMark(folder: Self.sherpaFolder(model.id)).isSet {
+            Log.note("local: satz ended while loading \(model.id) last time, not loading it again")
+            states[model.id] = .failed(SherpaModel.Failure.endedWhileLoading.localizedDescription)
+        }
     }
 
     /// satz's own folder for models. In test mode, `--models-dir <folder>`
@@ -211,6 +220,14 @@ final class LocalModels {
     // MARK: - Download
 
     func download(_ model: String, language: Language) {
+        // Before the engine is chosen: a test copy once installed Apple's
+        // language pack past this check. That goes into macOS's own store,
+        // which a test copy's `--models-dir` does not reach.
+        guard LocalCatalog.mayDownload(model, in: LaunchMode.current) else {
+            return Log.note(model == ModelCatalog.apple
+                ? "local: not installing Apple's language pack from a test copy, it would change macOS's own store"
+                : "local: not downloading \(model), a test copy needs --models-dir for that")
+        }
         if model == ModelCatalog.apple {
             downloadApple(language)
             return
@@ -218,9 +235,9 @@ final class LocalModels {
         // Not while a cancelled one is still winding down: it removes its
         // folder on the way out.
         guard !isBusy(model), downloads[model] == nil else { return }
-        guard Self.canChangeFiles else {
-            return Log.note("local: not downloading \(model), a test copy needs --models-dir for that")
-        }
+        // The click that asks for it again after a load ended satz: its files
+        // are checked first, and loaded again below.
+        if LocalCatalog.model(model)?.sherpa != nil { LoadMark(folder: Self.sherpaFolder(model)).clear() }
         states[model] = .downloading(0)
         Log.note("local: downloading \(model) into \(Self.root.path)")
         downloads[model] = Task {
@@ -308,9 +325,20 @@ final class LocalModels {
     /// Into the Trash, like everything satz removes.
     func remove(_ model: String) {
         guard model != ModelCatalog.apple, Self.canChangeFiles, let folder = Self.folder(of: model) else { return }
+        let before = states[model]
         if loaded?.variant == model { unload() }
         releaseSpare(model)
-        try? FileManager.default.trashItem(at: folder, resultingItemURL: nil)
+        do {
+            try FileManager.default.trashItem(at: folder, resultingItemURL: nil)
+        } catch {
+            // No Trash on that volume, or a folder that cannot be moved: the
+            // model is still there, so it stays what it was on this Mac (a
+            // sherpa one keeps its mark, a Whisper one its marker; one that
+            // failed to load stays failed) and loads again when needed.
+            // Deleting it for good is not what "Löschen" says.
+            states[model] = before
+            return Log.note("local: \(model) could not be moved to the Trash, it stays: \(error.localizedDescription)")
+        }
         try? FileManager.default.removeItem(at: Self.marker(model))
         states[model] = .missing
         Log.note("local: \(model) moved to the Trash")
@@ -410,6 +438,9 @@ final class LocalModels {
                 // A failed load is tried again by the next dictation.
                 Log.note("local: loading \(variant) failed: \(error.localizedDescription)")
                 if loaded?.kit == task { loaded = nil }
+                // Except a model whose files are not all there: that stays so
+                // until it is deleted or downloaded again.
+                if case .damaged? = error as? SherpaModel.Failure { states[variant] = .failed(error.localizedDescription) }
             }
             if saysPreparing, states[variant] == .preparing { states[variant] = nil }
         }
@@ -492,6 +523,8 @@ final class LocalModels {
     /// and right after a download: never in the background on its own.
     func measure(_ model: String, language: Language) {
         guard model != ModelCatalog.apple, isOnMac(model), !isBusy(model) else { return }
+        // Loading it would end satz again.
+        if case .failed = states[model] { return }
         // Shown as being timed while it waits for a test before it.
         measuring.insert(model)
         Task { await inLane(model) { await self.time(model, language: language, kit: nil) } }
@@ -636,8 +669,9 @@ final class LocalModels {
         guard let folder = given ?? folder(of: variant) else { throw Failure.notDownloaded }
         if let sherpa = LocalCatalog.model(variant)?.sherpa {
             // Canary's language is set before each transcription (`run`).
-            let settings = sherpa.settings(folder: folder, spoken: .german)
-            let kit = Kit(try SherpaRecognizer(settings))
+            // A test copy on the user's own models folder only reads there:
+            // no mark in it.
+            let kit = Kit(try sherpa.load(from: folder, spoken: .german, marking: canChangeFiles) { try SherpaRecognizer($0) })
             Log.note("local: \(variant) loaded through sherpa-onnx \(SherpaRecognizer.version)")
             return kit
         }
@@ -720,7 +754,7 @@ final class LocalModels {
         // one cut short loses words, so the plain text is kept.
         let limit = 2 * tokenizer.encode(text: plain).count + 20
         let kept = WordCheck.keepEveryWord(prompted: try await decode(prompt, limit), plain: plain)
-        if !kept.usedPrompt { Log.note("local: the word list cost words here, kept the text without it") }
+        if !kept.usedPrompt { Log.note("local: the word list was not used here (it cost words, or the dictation is too long to check), kept the text without it") }
         return kept.text
     }
 

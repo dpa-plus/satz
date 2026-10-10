@@ -37,27 +37,19 @@ enum Paster {
         guard !text.isEmpty else { return .pasted }
 
         let pasteboard = NSPasteboard.general
-        // A paste right after another (Insert while a dictation finishes)
-        // keeps the clipboard the user had before both: saved now, it was the
-        // first transcript, and that came back instead.
-        let previous = waiting?.previous ?? copy(of: pasteboard)
-        waiting?.restore.cancel()
-        waiting = nil
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
-        let ours = pasteboard.changeCount
+        let ours = put(text, on: pasteboard)
 
         if let blocker = whatIsBlockingPaste() {
             // Leave the transcript on the clipboard: it is the fallback.
-            return .clipboardOnly(blocker)
+            return abandon(ours, .clipboardOnly(blocker))
         }
         // Started while satz itself was in front (its settings, say): ⌘V
         // would go to satz, and with no field there the text went nowhere.
         guard let origin else {
-            return .clipboardOnly(de("Auf der Zwischenablage.", en: "On the clipboard."))
+            return abandon(ours, .clipboardOnly(de("Auf der Zwischenablage.", en: "On the clipboard.")))
         }
         guard !origin.isTerminated else {
-            return .clipboardOnly(de("Auf der Zwischenablage, die App wurde beendet.", en: "On the clipboard, the app was closed."))
+            return abandon(ours, .clipboardOnly(de("Auf der Zwischenablage, die App wurde beendet.", en: "On the clipboard, the app was closed.")))
         }
 
         if IsSecureEventInputEnabled() { Log.note("paste: Secure Input is on (held by \(secureInputHolder())), sending ⌘V anyway") }
@@ -66,28 +58,85 @@ enum Paster {
         closeMenus()
         waitUntil(timeout: 0.2) { NSApp.keyWindow == nil }
         guard bringForward(origin) else {
-            return .clipboardOnly(de("Auf der Zwischenablage, die App ließ sich nicht aktivieren.", en: "On the clipboard, the app could not be brought forward."))
+            return abandon(ours, .clipboardOnly(de("Auf der Zwischenablage, die App ließ sich nicht aktivieren.", en: "On the clipboard, the app could not be brought forward.")))
         }
         guard bringBack(window: window, field: field, in: origin) else {
-            return .clipboardOnly(de("Auf der Zwischenablage, das Fenster ist nicht mehr da.", en: "On the clipboard, the window is gone."))
+            return abandon(ours, .clipboardOnly(de("Auf der Zwischenablage, das Fenster ist nicht mehr da.", en: "On the clipboard, the window is gone.")))
         }
         sendCommandV()
-        if !keepsOnClipboard {
-            // A second, not 400 ms: a busy app (Word, a remote desktop) took ⌘V
-            // after the old clipboard was back and pasted that instead.
-            let restore = Task { @MainActor in
-                try? await Task.sleep(for: .seconds(1))
-                guard !Task.isCancelled else { return }
-                waiting = nil
-                putBack(previous, on: pasteboard, ifStill: ours)
-            }
-            waiting = (previous, restore)
+        if keepsOnClipboard {
+            // Nothing to give back: the transcript stays, as chosen.
+            if loan?.ours == ours { loan = nil }
+        } else {
+            handBackSoon(ours, on: pasteboard)
         }
         return .pasted
     }
 
-    /// The clipboard to give back, and the task that will.
-    private static var waiting: (previous: [NSPasteboardItem], restore: Task<Void, Never>)?
+    // MARK: - The clipboard on loan
+
+    /// What the user had on the clipboard before the transcript took its
+    /// place, and whether it is satz's to give back.
+    private struct Loan {
+        let previous: [NSPasteboardItem]
+        /// The pasteboard's change count right after the transcript went on
+        /// it. While the count is still this, nobody has copied anything since.
+        let ours: Int
+        var restore: Task<Void, Never>?
+    }
+    private static var loan: Loan?
+
+    /// Puts `text` on the clipboard and remembers what was there. Returns the
+    /// change count that says the transcript is still what is on it.
+    static func put(_ text: String, on pasteboard: NSPasteboard) -> Int {
+        // A paste right after another (Insert while a dictation finishes)
+        // keeps the clipboard the user had before both: saved now, it was the
+        // first transcript, and that came back instead. Only while that
+        // transcript is still what is on the clipboard: something copied in
+        // between is the user's, and is what comes back this time.
+        let previous: [NSPasteboardItem]
+        if let loan, pasteboard.changeCount == loan.ours {
+            previous = loan.previous
+        } else {
+            previous = copy(of: pasteboard)
+        }
+        loan?.restore?.cancel()
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        let ours = pasteboard.changeCount
+        loan = Loan(previous: previous, ours: ours)
+        return ours
+    }
+
+    /// The paste did not go out: the transcript stays on the clipboard as the
+    /// fallback, and nothing is given back over it.
+    private static func abandon(_ ours: Int, _ outcome: Outcome) -> Outcome {
+        if loan?.ours == ours { loan = nil }
+        return outcome
+    }
+
+    /// Gives the clipboard back a second from now.
+    static func handBackSoon(_ ours: Int, on pasteboard: NSPasteboard, after delay: Duration = .seconds(1)) {
+        // The loan may be another paste's by now.
+        guard loan?.ours == ours else { return }
+        // A second, not 400 ms: a busy app (Word, a remote desktop) took ⌘V
+        // after the old clipboard was back and pasted that instead.
+        loan?.restore = Task { @MainActor in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else { return }
+            restorePendingNow(on: pasteboard)
+        }
+    }
+
+    /// Gives the clipboard back at once, if a paste has it on loan. Also for
+    /// quitting: the second's wait would never end, and the transcript would
+    /// stay where the user's own clipboard was.
+    static func restorePendingNow(on pasteboard: NSPasteboard = .general) {
+        guard let pending = loan else { return }
+        pending.restore?.cancel()
+        loan = nil
+        putBack(pending.previous, on: pasteboard, ifStill: pending.ours)
+    }
 
     /// Set by the app: closes satz's menu bar panel.
     static var closeMenus: @MainActor () -> Void = {}
@@ -133,33 +182,27 @@ enum Paster {
     }
 
     /// The window and field the dictation started in, if the user went to
-    /// another window of the same app meanwhile. False only when that window
-    /// is gone or will not come forward; apps that do not say where their
-    /// keyboard is are left as they are.
+    /// another window or field of the same app meanwhile. False only when that
+    /// window is gone or will not come forward; apps that do not say where
+    /// their keyboard is are left as they are.
     private static func bringBack(window: AXUIElement?, field: AXUIElement?, in origin: NSRunningApplication) -> Bool {
+        bringBack(window: window, field: field, in: AppKeyboard(origin))
+    }
+
+    static func bringBack(window: AXUIElement?, field: AXUIElement?, in keyboard: some KeyboardPlace) -> Bool {
         guard let window else { return true }
-        AXUIElementSetMessagingTimeout(window, 0.25)
-        let app = AXUIElementCreateApplication(origin.processIdentifier)
-        AXUIElementSetMessagingTimeout(app, 0.25)
-        let focusedWindow = { () -> AXUIElement? in
-            var value: CFTypeRef?
-            guard AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &value) == .success,
-                  let value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
-            return (value as! AXUIElement)
+        guard let now = keyboard.focusedWindow else { return true }
+        if !CFEqual(now, window) {
+            // Still there? A closed window answers no more.
+            guard keyboard.exists(window) else { return false }
+            keyboard.bringForward(window)
+            waitUntil(timeout: 0.5) { keyboard.focusedWindow.map { CFEqual($0, window) } ?? false }
+            guard keyboard.focusedWindow.map({ CFEqual($0, window) }) ?? false else { return false }
         }
-        guard let now = focusedWindow() else { return true }
-        if CFEqual(now, window) { return true }
-        // Still there? A closed window answers no more.
-        var role: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(window, kAXRoleAttribute as CFString, &role) == .success else { return false }
-        AXUIElementPerformAction(window, kAXRaiseAction as CFString)
-        AXUIElementSetAttributeValue(window, kAXMainAttribute as CFString, kCFBooleanTrue)
-        AXUIElementSetAttributeValue(app, kAXFocusedWindowAttribute as CFString, window)
-        waitUntil(timeout: 0.5) { focusedWindow().map { CFEqual($0, window) } ?? false }
-        guard focusedWindow().map({ CFEqual($0, window) }) ?? false else { return false }
-        if let field {
-            AXUIElementSetMessagingTimeout(field, 0.25)
-            AXUIElementSetAttributeValue(field, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        // The right window says nothing about the field in it: the user may
+        // have clicked into another one while the text was on its way.
+        if let field, !(keyboard.focusedField.map { CFEqual($0, field) } ?? false) {
+            keyboard.focus(field)
             waitUntil(timeout: 0.05) { false }
         }
         return true
@@ -190,11 +233,12 @@ enum Paster {
     /// Hands the clipboard back once the transcript has been pasted. Dictating
     /// should not destroy whatever the user had copied, but only while the
     /// transcript is still what is there: something copied in the meantime
-    /// stays.
+    /// stays. A clipboard that was empty becomes empty again, so a dictation
+    /// does not stay behind on it.
     static func putBack(_ previous: [NSPasteboardItem], on pasteboard: NSPasteboard, ifStill ours: Int) {
-        guard !previous.isEmpty, pasteboard.changeCount == ours else { return }
+        guard pasteboard.changeCount == ours else { return }
         pasteboard.clearContents()
-        pasteboard.writeObjects(previous)
+        if !previous.isEmpty { pasteboard.writeObjects(previous) }
     }
 
     /// The key that types "v" with ⌘ in the current keyboard layout. Paste is
@@ -231,5 +275,56 @@ enum Paster {
 
         down?.post(tap: .cgAnnotatedSessionEventTap)
         up?.post(tap: .cgAnnotatedSessionEventTap)
+    }
+}
+
+/// Where the keyboard is in one app, and how to move it. What `Paster` asks
+/// of Accessibility, so the order of its steps can be tested without another
+/// app's windows.
+@MainActor
+protocol KeyboardPlace {
+    var focusedWindow: AXUIElement? { get }
+    var focusedField: AXUIElement? { get }
+    /// False once the window has been closed.
+    func exists(_ window: AXUIElement) -> Bool
+    func bringForward(_ window: AXUIElement)
+    func focus(_ field: AXUIElement)
+}
+
+/// The keyboard of a running app, through Accessibility.
+@MainActor
+struct AppKeyboard: KeyboardPlace {
+    private let app: AXUIElement
+
+    init(_ origin: NSRunningApplication) {
+        app = AXUIElementCreateApplication(origin.processIdentifier)
+        AXUIElementSetMessagingTimeout(app, 0.25)
+    }
+
+    var focusedWindow: AXUIElement? { element(kAXFocusedWindowAttribute) }
+    var focusedField: AXUIElement? { element(kAXFocusedUIElementAttribute) }
+
+    func exists(_ window: AXUIElement) -> Bool {
+        AXUIElementSetMessagingTimeout(window, 0.25)
+        var role: CFTypeRef?
+        return AXUIElementCopyAttributeValue(window, kAXRoleAttribute as CFString, &role) == .success
+    }
+
+    func bringForward(_ window: AXUIElement) {
+        AXUIElementPerformAction(window, kAXRaiseAction as CFString)
+        AXUIElementSetAttributeValue(window, kAXMainAttribute as CFString, kCFBooleanTrue)
+        AXUIElementSetAttributeValue(app, kAXFocusedWindowAttribute as CFString, window)
+    }
+
+    func focus(_ field: AXUIElement) {
+        AXUIElementSetMessagingTimeout(field, 0.25)
+        AXUIElementSetAttributeValue(field, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+    }
+
+    private func element(_ attribute: String) -> AXUIElement? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, attribute as CFString, &value) == .success,
+              let value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+        return (value as! AXUIElement)
     }
 }

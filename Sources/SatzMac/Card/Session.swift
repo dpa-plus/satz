@@ -43,6 +43,9 @@ final class Session {
         var audio: [Float] = []
         var transcribed = 0
         var failure: String?
+        /// False when `failure` is one that asking again cannot fix, such as
+        /// a recording over the provider's upload limit.
+        var retryHelps = true
     }
 
     private(set) var phase: Phase = .idle
@@ -130,8 +133,13 @@ final class Session {
     /// The shortcut was pressed to finish while the microphone was still opening.
     @ObservationIgnored private var finishWhenOpen = false
     /// Where the keyboard was in `origin` when the dictation started.
-    @ObservationIgnored private var originWindow: AXUIElement?
-    @ObservationIgnored private var originField: AXUIElement?
+    @ObservationIgnored private(set) var originWindow: AXUIElement?
+    @ObservationIgnored private(set) var originField: AXUIElement?
+    /// Reads where the keyboard is in an app; replaced by tests, which have no
+    /// other app's windows to read it from.
+    @ObservationIgnored var captureFocus: (NSRunningApplication?) -> (window: AXUIElement?, field: AXUIElement?) = {
+        FocusedField.capture(in: $0)
+    }
     /// The shortcut was pressed while the last dictation was being written.
     @ObservationIgnored private var startWhenDone = false
     /// Set by the app, for Escape while the menu bar panel is open.
@@ -168,6 +176,9 @@ final class Session {
         // it begins as soon as this one is out. Ignored, the words said
         // meanwhile were never recorded.
         case (.tap, .finishing): startWhenDone.toggle()
+        // Held down: see `release()`, which takes it back if the key comes up
+        // before this one is out.
+        case (.hold, .finishing): startWhenDone = true
         case (.hold, .paused): resume()
         default: break
         }
@@ -176,6 +187,10 @@ final class Session {
     /// The shortcut came up. Only meaningful while holding to talk.
     func release() {
         guard preferences.triggerMode == .hold else { return }
+        // Pressed while the last dictation was being written and let go
+        // before it was out: nothing was said. A recording that began after
+        // the key is up would run until the next press.
+        startWhenDone = false
         switch phase {
         case .listening: finish()
         // Let go before the microphone even opened: nothing was said. With
@@ -271,8 +286,17 @@ final class Session {
         segments = snapshot.segments
         activeID = snapshot.activeID
         nextID = snapshot.nextID
+        let before = origin
         origin = keepingOrigin ? snapshot.origin ?? Self.frontmostOtherApp() : Self.frontmostOtherApp() ?? snapshot.origin
-        (originWindow, originField) = keepingOrigin ? (nil, nil) : FocusedField.capture(in: origin)
+        // Undo straight after the × keeps the window and field the dictation
+        // started in: the card still has them, and cleared, the paste went to
+        // whichever window of the app was in front by then.
+        if !keepingOrigin {
+            (originWindow, originField) = captureFocus(origin)
+        } else if origin?.processIdentifier != before?.processIdentifier {
+            // The card closed since, and forgot where the keyboard was.
+            (originWindow, originField) = (nil, nil)
+        }
         if let activeID, markerRange(activeID) == nil {
             self.activeID = newSegment(at: text.length)
         }
@@ -335,7 +359,7 @@ final class Session {
         stopEverything()
         reset()
         origin = Self.frontmostOtherApp()
-        (originWindow, originField) = FocusedField.capture(in: origin)
+        (originWindow, originField) = captureFocus(origin)
         // Checked before recording: finding out there is no key, or no model,
         // once you have finished speaking loses the whole message.
         if let missing = missingForProvider() {
@@ -348,12 +372,6 @@ final class Session {
         if !preferences.provider.needsKey {
             LocalModels.shared.warmUp(preferences.model, language: preferences.spokenLanguage)
         }
-        guard !preferences.isEndpointMissing else {
-            phase = .failed(de("Adresse fehlt", en: "Address missing"), canRetry: false)
-            onOpen()
-            closeLater(after: .seconds(5))
-            return
-        }
         activeID = newSegment(at: 0)
         Log.note("dictation started, for \(origin?.localizedName ?? "?")")
         onOpen()
@@ -365,7 +383,11 @@ final class Session {
     private func missingForProvider() -> String? {
         let provider = preferences.provider
         if provider.needsKey {
-            return Secrets.exists(for: provider) ? nil : Transcriber.Failure.noKey.short
+            guard Secrets.exists(for: provider) else { return Transcriber.Failure.noKey.short }
+            // A custom endpoint has neither a default address nor a default model.
+            if preferences.isEndpointMissing { return de("Adresse fehlt", en: "Address missing") }
+            if preferences.isModelMissing { return de("Modell fehlt", en: "Model missing") }
+            return nil
         }
         switch LocalModels.shared.state(of: preferences.model, language: preferences.spokenLanguage) {
         case .ready: return nil
@@ -488,7 +510,9 @@ final class Session {
                 guard token == sessionToken else { return }
             }
             if let failure = segments.values.compactMap(\.failure).first {
-                phase = .failed(failure, canRetry: true)
+                // "Nochmal" only where the same audio can get through: a
+                // recording over the provider's limit never does.
+                phase = .failed(failure, canRetry: !segments.values.contains { $0.failure != nil && !$0.retryHelps })
                 return
             }
             deliver()
@@ -561,6 +585,7 @@ final class Session {
         if sends[id] != nil, sendCovers[id] == segment.audio.count, segment.failure == nil { return }
         sends[id]?.cancel()
         segment.failure = nil
+        segment.retryHelps = true
         segments[id] = segment
 
         let audio = segment.audio
@@ -577,6 +602,7 @@ final class Session {
 
         sends[id] = Task {
             let result: Result<String, Error>
+            var sent = true
             if !provider.needsKey {
                 do {
                     result = .success(try await LocalModels.shared.transcribe(audio, model: model, language: spoken, vocabulary: settings.vocabulary))
@@ -584,11 +610,19 @@ final class Session {
                     result = .failure(error)
                 }
             } else if let key = Secrets.read(for: provider), !key.isEmpty {
-                let wav = await Task.detached { WAVEncoder.encode(samples: audio, sampleRate: 16_000) }.value
-                do {
-                    result = .success(try await Transcriber(settings: settings).transcribe(wav: wav, apiKey: key))
-                } catch {
-                    result = .failure(error)
+                // Silence is not uploaded: Whisper-class models make up an
+                // answer for it ("Vielen Dank."), and the room's sound is
+                // nobody else's business. The local models do the same.
+                let wav = await Task.detached { SpeechGate.hasSpeech(audio) ? WAVEncoder.encode(samples: audio, sampleRate: 16_000) : nil }.value
+                if let wav {
+                    do {
+                        result = .success(try await Transcriber(settings: settings).transcribe(wav: wav, apiKey: key))
+                    } catch {
+                        result = .failure(error)
+                    }
+                } else {
+                    sent = false
+                    result = .success("")
                 }
             } else {
                 result = .failure(Transcriber.Failure.noKey)
@@ -597,7 +631,11 @@ final class Session {
             inFlight.remove(id)
             sends[id] = nil
             sendCovers[id] = nil
-            Log.note(String(format: "sent %.1f s of audio, answer after %.1f s", Double(covered) / 16_000, Date().timeIntervalSince(started)))
+            if sent {
+                Log.note(String(format: "sent %.1f s of audio, answer after %.1f s", Double(covered) / 16_000, Date().timeIntervalSince(started)))
+            } else {
+                Log.note(String(format: "no speech in %.1f s of audio, not sent", Double(covered) / 16_000))
+            }
             switch result {
             case .success(let raw):
                 let transcript = Replacements.apply(rules, to: raw)
@@ -617,6 +655,7 @@ final class Session {
                 // user retrying something that could not work.
                 segments[id]?.failure = (error as? Transcriber.Failure)?.short ?? (error as? LocalModels.Failure)?.short
                     ?? (provider.needsKey ? de("Fehler", en: "Error") : de("Modell-Fehler", en: "Model error"))
+                segments[id]?.retryHelps = (error as? Transcriber.Failure)?.retryHelps ?? true
             }
         }
     }

@@ -1,16 +1,19 @@
 import Foundation
 
 /// Moonshine, SenseVoice and Canary hear about 30 seconds well and lose
-/// words past that. A longer recording is split for them at the quietest
-/// tenth of a second in the last ten seconds of each window, so no word is
-/// cut in half, the same way Windows and Linux feed Whisper (windows.ts).
-/// Still one recording and one text: the pieces only go through the model
-/// one after another. A dictation under 30 seconds stays one piece.
+/// words past that, and Parakeet's encoder stops at 400 seconds. A longer
+/// recording is split for them at the quietest tenth of a second in the last
+/// ten seconds of each window, so no word is cut in half, the same way
+/// Windows and Linux feed Whisper (windows.ts). Still one recording and one
+/// text: the pieces only go through the model one after another. A dictation
+/// under the window stays one piece.
 public enum QuietWindows {
 
-    /// The pieces, in order, together exactly `samples`.
+    /// The pieces, in order, together exactly `samples`, none longer than
+    /// `longest` (30 seconds if not given).
     public static func split(_ samples: [Float], sampleRate: Int = 16_000, longest: Int? = nil) -> [ArraySlice<Float>] {
-        let longest = longest ?? 30 * sampleRate
+        // A window of nothing would never move on.
+        let longest = max(1, longest ?? 30 * sampleRate)
         let frame = max(1, sampleRate / 10)
         let searched = min(10 * sampleRate, longest)
         var pieces: [ArraySlice<Float>] = []

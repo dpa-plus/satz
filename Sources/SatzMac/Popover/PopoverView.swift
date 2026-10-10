@@ -84,9 +84,7 @@ struct PopoverActions {
 
 private struct ProblemCard: View {
     let title: String
-    var detail: String?
     let primary: (String, () -> Void)
-    var secondary: (String, () -> Void)?
 
     @Environment(\.theme) private var theme
 
@@ -98,20 +96,10 @@ private struct ProblemCard: View {
                 Text(title)
                     .font(Typography.display(18))
                 Spacer()
-                if let detail {
-                    Text(detail)
-                        .font(Typography.mono(12))
-                        .foregroundStyle(theme.inkOnCard)
-                }
             }
             .foregroundStyle(theme.ink)
 
-            HStack(spacing: 8) {
-                Button(primary.0, action: primary.1).buttonStyle(.accent)
-                if let secondary {
-                    Button(secondary.0, action: secondary.1).buttonStyle(.outline)
-                }
-            }
+            Button(primary.0, action: primary.1).buttonStyle(.accent)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)

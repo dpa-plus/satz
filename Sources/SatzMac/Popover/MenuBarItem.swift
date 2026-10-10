@@ -10,7 +10,7 @@ import SwiftUI
 final class MenuBarItem {
 
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-    private let dot = NSView()
+    private let dot = AttentionDot()
     private var panel: PopoverPanel?
     private var outsideClicks: Any?
     /// Clicks in satz's own windows, which the global monitor does not see:
@@ -28,11 +28,8 @@ final class MenuBarItem {
         button.action = #selector(toggle)
         button.setAccessibilityLabel("satz")
 
-        // An orange dot on the icon when something needs attention, so a
-        // problem is visible without opening anything.
-        dot.wantsLayer = true
-        dot.layer?.backgroundColor = NSColor(Theme.light.accent).cgColor
-        dot.layer?.cornerRadius = 3
+        // A dot on the icon when something needs attention, so a problem is
+        // visible without opening anything.
         dot.frame = NSRect(x: button.bounds.width - 7, y: button.bounds.height - 8, width: 6, height: 6)
         dot.autoresizingMask = [.minXMargin, .minYMargin]
         dot.isHidden = true
@@ -42,8 +39,8 @@ final class MenuBarItem {
     var needsAttention = false {
         didSet {
             dot.isHidden = !needsAttention
-            // The dot takes the current colour family's accent.
-            dot.layer?.backgroundColor = NSColor(Theme.light.accent).cgColor
+            // Set again whenever the colour family may have changed.
+            dot.needsDisplay = true
         }
     }
 
@@ -54,6 +51,11 @@ final class MenuBarItem {
     }
 
     func open() {
+        // Open already (the test command `menu` does not ask): a second set
+        // of monitors would be lost, and the first one's Escape handler would
+        // swallow every Escape in satz for the rest of the session.
+        guard !isOpen else { return }
+        removeMonitors()
         let panel = panel ?? PopoverPanel()
         self.panel = panel
 
@@ -80,6 +82,10 @@ final class MenuBarItem {
 
     func close() {
         panel?.orderOut(nil)
+        removeMonitors()
+    }
+
+    private func removeMonitors() {
         if let outsideClicks { NSEvent.removeMonitor(outsideClicks) }
         if let ownClicks { NSEvent.removeMonitor(ownClicks) }
         if let escape { NSEvent.removeMonitor(escape) }
@@ -118,6 +124,33 @@ final class MenuBarItem {
         }
         image.isTemplate = true
         return image
+    }
+}
+
+/// The dot on the menu bar icon. Its colour is the colour family's accent in
+/// the appearance of the menu bar, not of the windows: the light accent on a
+/// dark bar was 1.9:1 for Forest. The status button reports the bar's own
+/// appearance, which follows the wallpaper as well as the Mac's setting.
+@MainActor
+final class AttentionDot: NSView {
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.cornerRadius = 3
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        layer?.backgroundColor = NSColor(dark ? Theme.dark.accent : Theme.light.accent).cgColor
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        needsDisplay = true
     }
 }
 

@@ -78,6 +78,9 @@ public enum Replacements {
         var output = ""
         var cursor = 0
         var quoteIsOpen = false
+        // Where a spoken "!" or "?" ends in `output`: what the model wrote
+        // beside a trigger is tidied away, but not a mark that was said.
+        var spokenMarkEnd = 0
         // After a line break or a spoken "?" a new sentence starts, but the
         // model wrote what follows in lower case, as the middle of one.
         var capitalizeNext = false
@@ -108,9 +111,13 @@ public enum Replacements {
                 output.trimTrailing(" ,")
                 output += written
             case .punctuation:
-                output.trimTrailing(" ,")
+                // The model often writes a mark of its own beside the word
+                // ("Zeit. Fragezeichen." or "dir Fragezeichen?"): the one that
+                // was said wins, or ".?" and "??" were left to fix by hand.
+                output.trimTrailing(" ,.;:!?", above: spokenMarkEnd)
                 output += written
-                after = source.skip(" ,.;:", from: after)
+                if "!?".contains(written) { spokenMarkEnd = output.utf8.count }
+                after = source.skip(" ,.;:!?", from: after)
                 if after < source.length, !source.hasNewline(at: after) { output += " " }
                 capitalizeNext = ".!?".contains(written)
             case .lineBreak:
@@ -196,8 +203,9 @@ public enum Replacements {
 }
 
 private extension String {
-    mutating func trimTrailing(_ characters: String) {
-        while let last, characters.contains(last) { removeLast() }
+    /// - Parameter floor: how many UTF-8 bytes at the front are left alone.
+    mutating func trimTrailing(_ characters: String, above floor: Int = 0) {
+        while utf8.count > floor, let last, characters.contains(last) { removeLast() }
     }
 }
 

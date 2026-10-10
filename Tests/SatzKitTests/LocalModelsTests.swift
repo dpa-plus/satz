@@ -158,11 +158,12 @@ private let sherpaIDs = [LocalCatalog.parakeetV3, LocalCatalog.canary, LocalCata
     #expect(LocalCatalog.model(LocalCatalog.moonshineTiny)?.bytes.map { LocalFacts.size($0, language: .german) } == "124 MB")
 }
 
-@Test func filesComeFromCsukuangfjsRepositoriesOneByOne() throws {
+@Test func filesComeFromCsukuangfjsRepositoriesOneByOneAtAPinnedCommit() throws {
     let canary = try #require(LocalCatalog.model(LocalCatalog.canary)?.sherpa)
     let encoder = try #require(canary.files.first)
+    // Not "main": a file changed there would not be the one whose checksum is pinned.
     #expect(canary.url(of: encoder).absoluteString
-            == "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8/resolve/main/encoder.int8.onnx")
+            == "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8/resolve/9077164e0d3dd1d5353743e89ceaa1d3a770838c/encoder.int8.onnx")
 }
 
 @Test func whisperBuildsAreTheOnlyOnesArgmaxIsAskedAbout() {
@@ -184,7 +185,7 @@ private let folder = URL(fileURLWithPath: "/m/sherpa/x", isDirectory: true)
 
 @Test func canaryIsToldTheSpokenLanguageToHearAndWrite() throws {
     let canary = try #require(LocalCatalog.model(LocalCatalog.canary)?.sherpa)
-    #expect(canary.isToldTheLanguage && canary.hearsInWindows)
+    #expect(canary.isToldTheLanguage && canary.windowSeconds == 30)
     #expect(canary.settings(folder: folder, spoken: .german).canary
             == .init(encoder: "/m/sherpa/x/encoder.int8.onnx", decoder: "/m/sherpa/x/decoder.int8.onnx", language: "de", punctuation: true))
     #expect(canary.settings(folder: folder, spoken: .english).canary?.language == "en")
@@ -229,9 +230,11 @@ private let folder = URL(fileURLWithPath: "/m/sherpa/x", isDirectory: true)
     #expect(SpeechGate.speechEnd([Float](repeating: 0, count: 16_000)) == nil)
 }
 
-@Test func onlyParakeetTakesAWholeDictationInOneGo() {
-    let whole = sherpaIDs.filter { LocalCatalog.model($0)?.sherpa?.hearsInWindows == false }
-    #expect(whole == [LocalCatalog.parakeetV3, LocalCatalog.parakeetV2])
+@Test func onlyParakeetIsHeardInPiecesOfFourMinutes() {
+    // Its encoder holds 400 s: longer pieces ended satz. The others lose words past 30 s.
+    let long = sherpaIDs.filter { LocalCatalog.model($0)?.sherpa?.windowSeconds == 240 }
+    #expect(long == [LocalCatalog.parakeetV3, LocalCatalog.parakeetV2])
+    #expect(sherpaIDs.filter { !long.contains($0) }.allSatisfy { LocalCatalog.model($0)?.sherpa?.windowSeconds == 30 })
 }
 
 // MARK: - The bars
@@ -426,15 +429,6 @@ func eachChipFindsTheNearestOneArgmaxMeasured(chip: String, nearest: String) {
     #expect(LocalSpeed.secondsPer10(elapsed: 1, clipSeconds: 0) == 0)
 }
 
-@Test func onlyANumberFromThisChipAndThisSatzIsCurrent() {
-    let speed = LocalSpeed(secondsPer10: 0.7, measured: Date(), version: "0.5.0", machine: "Apple M5 Pro")
-    #expect(speed.isCurrent(chip: "Apple M5 Pro", version: "0.5.0"))
-    // An update can change how fast a model runs: measured again, as on another Mac.
-    #expect(!speed.isCurrent(chip: "Apple M5 Pro", version: "0.5.1"))
-    #expect(!speed.isCurrent(chip: "Apple M4", version: "0.5.0"))
-    #expect(speed.isCurrent(chip: nil, version: "0.5.0"))
-}
-
 @Test func theSpeedClipIsTenSecondsOf16kHzMono() throws {
     let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         .appendingPathComponent("Resources/speedtest.wav")
@@ -591,8 +585,6 @@ private final class Calls: @unchecked Sendable {
     // Only Canary is told; the others find the language or hear one.
     #expect(LocalCatalog.all.filter { $0.toldLanguages != nil }.map(\.id) == [LocalCatalog.canary])
     #expect(LocalCatalog.model(LocalCatalog.parakeetV3)?.told(choice: "es", spoken: .german) == nil)
-    let settings = try #require(canary.sherpa).settings(folder: folder, spoken: .german, told: "fr")
-    #expect(settings.canary?.language == "fr")
 }
 
 // MARK: - Test mode and the models folder
@@ -626,13 +618,15 @@ private final class Calls: @unchecked Sendable {
 private func cachedModel() throws -> (SherpaModel, URL) {
     let folder = FileManager.default.temporaryDirectory.appendingPathComponent("satz-test-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-    try Data(repeating: 1, count: 10).write(to: folder.appendingPathComponent("model.int8.onnx"))
-    try Data(repeating: 2, count: 4).write(to: folder.appendingPathComponent("tokens.txt"))
+    let model = Data(repeating: 1, count: 10), tokens = Data(repeating: 2, count: 4)
+    try model.write(to: folder.appendingPathComponent("model.int8.onnx"))
+    try tokens.write(to: folder.appendingPathComponent("tokens.txt"))
     // A repository that does not exist: nothing here may reach the network.
-    return (SherpaModel(kind: .senseVoice, repo: "satz-test-none", files: [.init("model.int8.onnx", 10), .init("tokens.txt", 4)]), folder)
+    return (SherpaModel(kind: .senseVoice, repo: "satz-test-none", revision: String(repeating: "0", count: 40),
+                        files: [.init("model.int8.onnx", 10, sha256: sha256Hex(model)), .init("tokens.txt", 4, sha256: sha256Hex(tokens))]), folder)
 }
 
-@Test func filesAlreadyThereAtTheirSizeAreKept() async throws {
+@Test func filesAlreadyThereWithTheirChecksumAreKept() async throws {
     let (model, folder) = try cachedModel()
     defer { try? FileManager.default.removeItem(at: folder) }
     try await FileDownload(progress: { _ in }).run(model, into: folder)

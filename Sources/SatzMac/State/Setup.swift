@@ -28,8 +28,17 @@ final class Setup {
     /// mouse button need the same Accessibility permission to work at all.
     var isComplete: Bool {
         let pasteNeeded = preferences?.trigger.needsEventTap ?? true
-        return hasKey && microphone == .allowed && (canPaste || !pasteNeeded)
-            && !(preferences?.isEndpointMissing ?? false) && !(preferences?.isModelMissing ?? false)
+        return providerReady && microphone == .allowed && (canPaste || !pasteNeeded)
+    }
+
+    /// The provider in use can take a dictation: its key (for Lokal its
+    /// model), and for an own endpoint also an address and a model. The same
+    /// rule as `missing`, which Settings and the setup ask about a provider
+    /// not yet in use; from the values read at `refresh`, so it stays cheap
+    /// where a view asks it on every draw.
+    var providerReady: Bool {
+        guard let preferences else { return hasKey }
+        return preferences.missing(preferences.provider, hasKey: hasKey).isEmpty
     }
 
     /// nil for a fixture, whose values never change.
@@ -81,10 +90,15 @@ final class Setup {
         preferences == nil ? hasKey : Secrets.exists(for: provider)
     }
 
-    func removeKey() {
-        guard let preferences else { return }
-        Secrets.remove(for: preferences.provider)
-        refresh()
+    /// What `provider` still lacks before it can take a dictation, in use or
+    /// not: the one rule behind Settings' "… benutzen", the setup's Weiter and
+    /// the menu's "Einrichtung fehlt". Read from the system as it is now, not
+    /// from the values `refresh` keeps for the provider in use.
+    func missing(_ provider: Provider, in preferences: Preferences) -> [ProviderReadiness.Need] {
+        let ready = provider == .local
+            ? LocalModels.shared.isInstalled(preferences.localModel, language: preferences.spokenLanguage)
+            : hasKey(for: provider)
+        return preferences.missing(provider, hasKey: ready)
     }
 
     func requestMicrophone() async {

@@ -31,5 +31,12 @@ let package = Package(
             linkerSettings: [.unsafeFlags(["-L", sherpaLibraries, "-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]
         ),
         .testTarget(name: "SatzKitTests", dependencies: ["SatzKit"]),
+        // The app's own logic (paste, card, media): built from the app's
+        // code, so it links sherpa-onnx too, found where make sherpa puts it.
+        .testTarget(
+            name: "SatzMacTests",
+            dependencies: ["SatzMac"],
+            linkerSettings: [.unsafeFlags(["-L", sherpaLibraries, "-Xlinker", "-rpath", "-Xlinker", sherpaLibraries])]
+        ),
     ]
 )

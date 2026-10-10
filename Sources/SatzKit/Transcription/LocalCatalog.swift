@@ -150,8 +150,8 @@ public enum LocalCatalog {
         }
     }
 
-    private static func sherpa(_ kind: SherpaModel.Kind, _ repo: String, _ files: [SherpaModel.File]) -> Engine {
-        .sherpa(SherpaModel(kind: kind, repo: repo, files: files))
+    private static func sherpa(_ kind: SherpaModel.Kind, _ repo: String, revision: String, _ files: [SherpaModel.File]) -> Engine {
+        .sherpa(SherpaModel(kind: kind, repo: repo, revision: revision, files: files))
     }
 
     /// Whisper's 99, of which satz names the two it is spoken to in.
@@ -167,41 +167,62 @@ public enum LocalCatalog {
         Model(turboFull, bytes: 1_638_464_446, languages: whisperLanguages, accuracy: 0.82, speed: 0.50),
         Model(turboCompatible, bytes: 626_718_238, languages: whisperLanguages, accuracy: 0.80, speed: 0.55),
         Model(largeV3, bytes: 3_090_319_899, languages: whisperLanguages, accuracy: 0.85, speed: 0.30),
-        Model(parakeetV3, engine: sherpa(.nemoTransducer, "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8", [
-            .init("encoder.int8.onnx", 652_184_281), .init("decoder.int8.onnx", 11_845_275),
-            .init("joiner.int8.onnx", 6_355_277), .init("tokens.txt", 93_939),
+        Model(parakeetV3, engine: sherpa(.nemoTransducer, "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8", revision: "2bda32ec70b097a55adaa07d9a7173915b43cc78", [
+            .init("encoder.int8.onnx", 652_184_281, sha256: "acfc2b4456377e15d04f0243af540b7fe7c992f8d898d751cf134c3a55fd2247"),
+            .init("decoder.int8.onnx", 11_845_275, sha256: "179e50c43d1a9de79c8a24149a2f9bac6eb5981823f2a2ed88d655b24248db4e"),
+            .init("joiner.int8.onnx", 6_355_277, sha256: "3164c13fc2821009440d20fcb5fdc78bff28b4db2f8d0f0b329101719c0948b3"),
+            .init("tokens.txt", 93_939, sha256: "d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d"),
         ]), bytes: 670_478_772, languages: european, accuracy: 0.80, speed: 0.85),
-        Model(canary, engine: sherpa(.canary, "sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8", [
-            .init("encoder.int8.onnx", 132_678_643), .init("decoder.int8.onnx", 74_437_848), .init("tokens.txt", 53_555),
+        Model(canary, engine: sherpa(.canary, "sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8", revision: "9077164e0d3dd1d5353743e89ceaa1d3a770838c", [
+            .init("encoder.int8.onnx", 132_678_643, sha256: "7a75b4e2a5857a6dcc0819503bbe3fad66943db4a3ccf21d3f27c633667d303f"),
+            .init("decoder.int8.onnx", 74_437_848, sha256: "e41a2ab9c0c2fe81a1e8ade5a45fb02a74bc4db7d1f91b89a54a25e2cf79cba2"),
+            .init("tokens.txt", 53_555, sha256: "2dae6fc7815f9640645e0c765522b278ee0cef49b482d91f6913e334628d3e77"),
         ]), bytes: 207_170_046, languages: LocalLanguages(["en", "de", "es", "fr"]), accuracy: 0.75, speed: 0.85),
         Model(distil, bytes: 607_114_331, languages: .english, accuracy: 0.75, speed: 0.70),
         Model(distilCompatible, bytes: 594_534_261, languages: .english, accuracy: 0.75, speed: 0.65),
-        Model(parakeetV2, engine: sherpa(.nemoTransducer, "sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8", [
-            .init("encoder.int8.onnx", 652_184_296), .init("decoder.int8.onnx", 7_257_753),
-            .init("joiner.int8.onnx", 1_739_080), .init("tokens.txt", 9_384),
+        Model(parakeetV2, engine: sherpa(.nemoTransducer, "sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8", revision: "1ab9323565ddb038682214b292f588070a538ce2", [
+            .init("encoder.int8.onnx", 652_184_296, sha256: "a32b12d17bbbc309d0686fbbcc2987b5e9b8333a7da83fa6b089f0a2acd651ab"),
+            .init("decoder.int8.onnx", 7_257_753, sha256: "b6bb64963457237b900e496ee9994b59294526439fbcc1fecf705b31a15c6b4e"),
+            .init("joiner.int8.onnx", 1_739_080, sha256: "7946164367946e7f9f29a122407c3252b680dbae9a51343eb2488d057c3c43d2"),
+            .init("tokens.txt", 9_384, sha256: "ec182b70dd42113aff6c5372c75cac58c952443eb22322f57bbd7f53977d497d"),
         ]), bytes: 661_190_513, languages: .english, accuracy: 0.85, speed: 0.85),
-        Model(moonshineBase, engine: sherpa(.moonshine, "sherpa-onnx-moonshine-base-en-int8", [
-            .init("preprocess.onnx", 14_077_290), .init("encode.int8.onnx", 50_311_494),
-            .init("uncached_decode.int8.onnx", 122_120_451), .init("cached_decode.int8.onnx", 99_983_837),
-            .init("tokens.txt", 436_688),
+        Model(moonshineBase, engine: sherpa(.moonshine, "sherpa-onnx-moonshine-base-en-int8", revision: "052b0798ad1bf046a140fdd4efcd9426530fa3f5", [
+            .init("preprocess.onnx", 14_077_290, sha256: "ffa630d395c5ccf76f5d4954be5b882df76aaf6491519ec01fd82ea7a3819fb2"),
+            .init("encode.int8.onnx", 50_311_494, sha256: "7e38770f776f2e5583a53b052936005df2ba5c833d7e09c2a5fd796b94bf73e2"),
+            .init("uncached_decode.int8.onnx", 122_120_451, sha256: "c01f4b35093bcac20d352d23a75a539e772964579f9d024a90e5e6f09cae9987"),
+            .init("cached_decode.int8.onnx", 99_983_837, sha256: "2db74e51cedf64a8b1be3c8192e0bb5e4923af0e90bd9e87f8e8771873f8ea03"),
+            .init("tokens.txt", 436_688, sha256: "1165c2aeb9f72f457a83be2d459a09054f27490acd9b41bd43794dfd25e296ea"),
         ]), bytes: 286_929_760, languages: .english, accuracy: 0.70, speed: 0.90),
-        Model(moonshineTiny, engine: sherpa(.moonshine, "sherpa-onnx-moonshine-tiny-en-int8", [
-            .init("preprocess.onnx", 6_800_738), .init("encode.int8.onnx", 18_249_187),
-            .init("uncached_decode.int8.onnx", 53_216_096), .init("cached_decode.int8.onnx", 45_264_830),
-            .init("tokens.txt", 436_688),
+        Model(moonshineTiny, engine: sherpa(.moonshine, "sherpa-onnx-moonshine-tiny-en-int8", revision: "bf2b762c076d8ea61e2af0b3851c9564fb77552e", [
+            .init("preprocess.onnx", 6_800_738, sha256: "f33addce61a143460fe753b5ee5b7db255e5140b5b779c065b94f6c83ff0bf4e"),
+            .init("encode.int8.onnx", 18_249_187, sha256: "8774dfba578de027ec6595c2c654a0836434489bc963a0db124a7f181f571acb"),
+            .init("uncached_decode.int8.onnx", 53_216_096, sha256: "216737000dd5881a17aa043f6bbd286add33e4c3b0ae257153e2ec15438bdc41"),
+            .init("cached_decode.int8.onnx", 45_264_830, sha256: "2aff28bba6a03d8dcf5c9feac45462629bae37317442299f28115ad09da773f6"),
+            .init("tokens.txt", 436_688, sha256: "1165c2aeb9f72f457a83be2d459a09054f27490acd9b41bd43794dfd25e296ea"),
         ]), bytes: 123_967_539, languages: .english, accuracy: 0.55, speed: 0.95),
         // FunAudioLLM's original SenseVoice Small. The newer "2025-09-09"
         // export is a Cantonese fine-tune (ASLP-lab's WSYue): on satz's
         // English clip it wrote "PNNYES ... BULLDOSZING THE GROOSSER", this
         // one "Pennies ... bulldozing the grocer".
-        Model(senseVoice, engine: sherpa(.senseVoice, "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17", [
-            .init("model.int8.onnx", 239_233_841), .init("tokens.txt", 315_894),
+        Model(senseVoice, engine: sherpa(.senseVoice, "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17", revision: "2365baeacb507f821a0c8120fcee3d484dba7a07", [
+            .init("model.int8.onnx", 239_233_841, sha256: "c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51"),
+            .init("tokens.txt", 315_894, sha256: "f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc"),
         ]), bytes: 239_549_735, languages: LocalLanguages(["zh", "en", "ja", "ko", "yue"]), accuracy: 0.65, speed: 0.95),
         Model(small, bytes: 486_487_465, languages: whisperLanguages, accuracy: 0.60, speed: 0.80),
         Model(base, bytes: 146_719_453, languages: whisperLanguages, accuracy: 0.45, speed: 0.90),
         Model(tiny, bytes: 76_635_397, languages: whisperLanguages, accuracy: 0.35, speed: 0.95),
         Model(apple, engine: .apple, bytes: nil, languages: LocalLanguages(["de", "en"]), accuracy: 0.70, speed: 0.90),
     ]
+
+    /// Whether a model may be downloaded in this launch mode. A test copy
+    /// without a models folder of its own shares the user's models and never
+    /// changes them. Apple's language pack is not in that folder at all: macOS
+    /// keeps it in its own store, which `--models-dir` cannot move, so only
+    /// the user's own satz installs it.
+    public static func mayDownload(_ id: String, in mode: LaunchMode) -> Bool {
+        guard mode.canChangeModels else { return false }
+        return id != apple || mode == .normal
+    }
 
     /// The Whisper builds, for the benchmark lookups.
     public static var whisperIDs: [String] { all.filter { $0.engine == .whisperKit }.map(\.id) }
@@ -405,7 +426,9 @@ public struct LocalSpeed: Codable, Hashable, Sendable {
     /// Seconds of work for 10 seconds of speech: lower is faster.
     public let secondsPer10: Double
     public let measured: Date
-    /// satz's version then: an update can change how fast a model runs.
+    /// satz's version then. Kept with the number for the test mode's state
+    /// file; the card shows any number with its date, as long as it is from
+    /// this chip.
     public let version: String
     /// The chip, as macOS names it ("Apple M5 Pro"): a number restored onto
     /// another Mac is not this one's.
@@ -416,13 +439,6 @@ public struct LocalSpeed: Codable, Hashable, Sendable {
         self.measured = measured
         self.version = version
         self.machine = machine
-    }
-
-    /// Measured on this chip by this version of satz. Any other number still
-    /// shows, with its date, and asks to be measured again. An unreadable
-    /// chip counts as the same.
-    public func isCurrent(chip: String?, version: String) -> Bool {
-        machine == (chip ?? machine) && self.version == version
     }
 
     /// Wall time for a clip, scaled to 10 seconds of speech.

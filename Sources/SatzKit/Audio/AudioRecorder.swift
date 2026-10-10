@@ -6,8 +6,8 @@ import Foundation
 ///
 /// Two behaviours here are deliberate rather than incidental:
 ///
-/// - `finish()` keeps the microphone open for `Settings.tail` after it is
-///   called. Stopping the instant the key is released clips the last word,
+/// - `finishSamples()` keeps the microphone open for `Settings.tail` after it
+///   is called. Stopping the instant the key is released clips the last word,
 ///   which is the most common complaint about dictation tools.
 /// - `cancel()` throws the audio away without ever producing a file, so a
 ///   cancelled recording cannot be uploaded by a later mistake.
@@ -142,15 +142,9 @@ public final class AudioRecorder: @unchecked Sendable {
         }
     }
 
-    /// Stops after the tail has elapsed and returns the recording as WAV bytes.
-    /// Returns `nil` if the recording was cancelled, or if it captured nothing.
-    public func finish() async -> Data? {
-        guard let captured = await finishSamples(), !captured.isEmpty else { return nil }
-        return WAVEncoder.encode(samples: captured, sampleRate: Int(settings.sampleRate))
-    }
-
-    /// Like `finish()`, but hands back the raw samples, for callers that join
-    /// several recordings into one before sending.
+    /// Stops after the tail has elapsed and returns the samples, for callers
+    /// that join several recordings into one before sending. nil if the
+    /// recording was cancelled or was not running.
     public func finishSamples() async -> [Float]? {
         guard lock.withLock({ isRunning }) else { return nil }
         try? await Task.sleep(for: settings.tail)

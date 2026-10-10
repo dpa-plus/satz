@@ -37,16 +37,13 @@ public struct Transcriber: Sendable {
         /// answers 429 "retry after 2 seconds" now and then, even when idle,
         /// and the next try goes through.
         public var attempts = 3
-        /// nil lets the model detect the language, which is what you want if
-        /// you switch languages mid-sentence.
-        public var language: String?
         /// How long to wait before asking a second time, with the same audio.
         /// MAI-Transcribe usually answers in one or two seconds but now and
         /// then takes ten or more for the same kind of audio (13 of 77 real
         /// dictations over five seconds, one 15.6 s); a second request is
         /// usually back long before. The first answer wins. nil: never.
-        /// OpenRouter only, where this was measured; plus a second for every
-        /// ten seconds of audio.
+        /// OpenRouter only, where this was measured; plus the time the upload
+        /// itself takes, see `backupDelay(after:for:)`.
         public var backupAfter: TimeInterval? = 2.5
 
         public init() {}
@@ -82,11 +79,17 @@ public struct Transcriber: Sendable {
         case server(status: Int, message: String?)
         case unreadableResponse
         /// The provider's upload limit (OpenAI and Groq take 25 MB, about 13
-        /// minutes): Retry would fail the same way.
+        /// minutes): Retry would fail the same way, until another provider is
+        /// chosen.
         case tooLarge
         /// The account is empty (OpenRouter 402, OpenAI 429 insufficient_quota),
         /// not a provider that is busy for a moment.
         case noCredit
+
+        /// Whether asking again with the same audio and the same provider can
+        /// work. A recording over the upload limit never will; a throttled,
+        /// offline or rejected request does once the cause is gone.
+        public var retryHelps: Bool { self != .tooLarge }
 
         /// Non-optional, so callers never have to invent a fallback string.
         public var message: String {
@@ -98,7 +101,9 @@ public struct Transcriber: Sendable {
             case .timedOut: de("Der Anbieter hat nicht rechtzeitig geantwortet.", en: "The provider did not answer in time.")
             case .server(let status, let message): message ?? de("Der Anbieter antwortete mit \(status).", en: "The provider answered with \(status).")
             case .unreadableResponse: de("Antwort des Anbieters nicht lesbar.", en: "Could not read the provider's answer.")
-            case .tooLarge: de("Die Aufnahme ist zu lang für den Anbieter. Den Text kopieren und neu ansetzen.", en: "The recording is too long for the provider. Copy the text and start again.")
+            // The audio is still there: another provider takes it with the
+            // shortcut, no need to say it again. There is no text to copy.
+            case .tooLarge: de("Die Aufnahme ist zu lang für den Anbieter. Einen anderen Anbieter wählen und noch einmal senden.", en: "The recording is too long for the provider. Pick another provider and send it again.")
             case .noCredit: de("Kein Guthaben beim Anbieter. Dort aufladen.", en: "No credit left at the provider. Top it up there.")
             }
         }
@@ -120,10 +125,7 @@ public struct Transcriber: Sendable {
         // Counted from the start of the upload, so a long recording, whose
         // upload alone takes a while, waits longer before a second copy goes.
         guard settings.format == .openRouter, let base = settings.backupAfter else { return try await attempt(wav: wav, apiKey: apiKey) }
-        // Plus the time the upload takes at 1 Mbit/s: on a slow line the second
-        // copy started while the first was still sending, and both ran out of
-        // time sharing it.
-        let delay = base + Double(max(0, wav.count - 44)) * 8 / 1_000_000
+        let delay = Self.backupDelay(after: base, for: wav)
 
         enum Event: Sendable {
             case answer(Result<String, any Error>)
@@ -164,6 +166,13 @@ public struct Transcriber: Sendable {
             }
             throw firstFailure ?? Failure.unreadableResponse
         }
+    }
+
+    /// `base` plus the time the upload takes at 1 Mbit/s: on a slow line the
+    /// second copy started while the first was still sending, and both ran
+    /// out of time sharing it. About 2.6 s more for ten seconds of audio.
+    static func backupDelay(after base: TimeInterval, for wav: Data) -> TimeInterval {
+        base + Double(max(0, wav.count - 44)) * 8 / 1_000_000
     }
 
     /// One request, tried again while the provider throttles.
@@ -213,7 +222,6 @@ public struct Transcriber: Sendable {
             var fields: [(name: String, value: String)] = [("model", settings.model)]
             let words = settings.vocabulary.joined(separator: ", ")
             if !words.isEmpty { fields.append(("prompt", words)) }
-            if let language = settings.language { fields.append(("language", language)) }
             fields.append(("response_format", "json"))
 
             let body = MultipartBody()
@@ -245,7 +253,6 @@ public struct Transcriber: Sendable {
         if settings.model.contains("mai-transcribe-2") {
             body["provider"] = ["options": ["azure": azure]]
         }
-        if let language = settings.language { body["language"] = language }
         // For models other than MAI. OpenRouter documents it as ignored for
         // multipart; in JSON it costs nothing to offer.
         if !settings.vocabulary.isEmpty { body["prompt"] = settings.vocabulary.joined(separator: ", ") }

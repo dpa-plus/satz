@@ -36,8 +36,9 @@ public enum WAVEncoder {
         data.append(littleEndian: UInt32(dataSize))
         for sample in samples {
             let clamped = max(-1, min(1, sample))
-            // -1 maps to Int16.min and 1 to Int16.max, so scale by 32767 and
-            // let the clamp above keep the result in range.
+            // Scaled by 32767 so that 1 maps to Int16.max and -1 to -32767, not
+            // Int16.min: both peaks sit the same distance from zero, and the
+            // clamp above keeps the result in range.
             data.append(littleEndian: Int16(clamped * 32767))
         }
         return data

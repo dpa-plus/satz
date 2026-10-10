@@ -6,15 +6,22 @@ import Foundation
 /// shows up under the system's Now Playing.
 ///
 /// Only what is really playing gets paused, and only what satz paused is
-/// played again: a song paused by hand a moment ago stays paused. The
+/// played again: a song paused by hand a moment ago stays paused, and so does
+/// any other player that became the system's current one meanwhile. The
 /// system's Pause and Play are separate commands, never a toggle, so neither
 /// can start something by mistake.
 @MainActor
 final class MediaPause {
 
     var isOn: () -> Bool = { true }
-    /// satz paused something and has not played it again yet.
-    private var pausedByUs = false
+    /// What the system says is playing, and how to pause and play it. Tests
+    /// replace both: a real Play would start the tester's own music.
+    var nowPlaying: @Sendable () -> NowPlaying.State? = { NowPlaying.read() }
+    var send: @Sendable (MediaCommand) -> Void = { MediaCommand.send($0) }
+    /// The app satz paused and has not played again yet. The system's Play
+    /// goes to whichever player is current, not to this one, so it is checked
+    /// before every Play.
+    private var pausedPlayer: Int32?
     private var pausing: Task<Void, Never>?
     private var resuming: Task<Void, Never>?
 
@@ -22,15 +29,16 @@ final class MediaPause {
         // The next dictation right after the last one: the music stays paused.
         resuming?.cancel()
         resuming = nil
-        guard isOn(), !pausedByUs, pausing == nil else { return }
+        guard isOn(), pausedPlayer == nil, pausing == nil else { return }
+        let read = nowPlaying, send = send
         pausing = Task {
-            let paused = await Task.detached(priority: .userInitiated) { () -> Bool in
-                guard let state = NowPlaying.read(), state.playing else { return false }
-                MediaCommand.send(.pause)
+            let paused = await Task.detached(priority: .userInitiated) { () -> Int32? in
+                guard let state = read(), state.playing else { return nil }
+                send(.pause)
                 Log.note("media paused (app \(state.pid))")
-                return true
+                return state.pid
             }.value
-            pausedByUs = paused
+            pausedPlayer = paused
             pausing = nil
         }
     }
@@ -42,17 +50,12 @@ final class MediaPause {
             await pausing?.value
             // A moment's grace: two dictations in a row did play-pause between them.
             try? await Task.sleep(for: .milliseconds(800))
-            guard !Task.isCancelled, pausedByUs else { return }
-            pausedByUs = false
+            guard !Task.isCancelled, let player = pausedPlayer else { return }
+            pausedPlayer = nil
             resuming = nil
+            let read = nowPlaying, send = send
             await Task.detached(priority: .userInitiated) {
-                // Something the user started in the meantime is theirs: leave it.
-                if let state = NowPlaying.read(), state.playing {
-                    Log.note("media left as the user set it")
-                    return
-                }
-                MediaCommand.send(.play)
-                Log.note("media resumed")
+                Self.play(player, read: read, send: send)
             }.value
         }
     }
@@ -60,70 +63,35 @@ final class MediaPause {
     /// satz quits: what it paused plays again, also in the middle of a dictation.
     func quitting() {
         resuming?.cancel()
-        guard pausedByUs else { return }
-        pausedByUs = false
-        MediaCommand.send(.play)
+        guard let player = pausedPlayer else { return }
+        pausedPlayer = nil
+        guard Self.play(player, read: nowPlaying, send: send) else { return }
         // The command is delivered after the call returns; a process that
         // exits at once never sends it.
         Thread.sleep(forTimeInterval: 0.3)
     }
-}
 
-/// What the system says is playing.
-///
-/// Since macOS 15.4 only Apple's own programs may read it; any other app is
-/// told "nothing". So satz asks /usr/bin/perl, which is Apple's, to load a
-/// small library that reads it (Resources/NowPlaying). Takes about 0.1 s.
-enum NowPlaying {
-    struct State: Decodable {
-        let playing: Bool
-        let pid: Int32
-    }
-
-    nonisolated static func read() -> State? {
-        guard let script = Bundle.main.url(forResource: "now-playing", withExtension: "pl"),
-              let library = libraryURL() else { return nil }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
-        process.arguments = [script.path, library.path]
-        let output = Pipe()
-        process.standardOutput = output
-        process.standardError = FileHandle.nullDevice
-        do { try process.run() } catch { return nil }
-        // Never hold up a dictation for it.
-        let deadline = Date().addingTimeInterval(1.5)
-        while process.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.01) }
-        if process.isRunning { process.terminate(); return nil }
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        return try? JSONDecoder().decode(State.self, from: data)
-    }
-
-    /// A downloaded app's files carry the quarantine mark, and Perl would be
-    /// refused a marked library. A copy written by satz itself carries none.
-    nonisolated private static func libraryURL() -> URL? {
-        guard let bundled = Bundle.main.url(forResource: "now-playing", withExtension: "dylib") else { return nil }
-        guard getxattr(bundled.path, "com.apple.quarantine", nil, 0, 0, 0) >= 0 else { return bundled }
-        let copy = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("satz/now-playing.dylib")
-        guard let data = try? Data(contentsOf: bundled) else { return nil }
-        if (try? Data(contentsOf: copy)) != data {
-            try? FileManager.default.createDirectory(at: copy.deletingLastPathComponent(), withIntermediateDirectories: true)
-            guard (try? data.write(to: copy)) != nil else { return nil }
+    /// Plays `player` again if it is still what the system shows, paused. True
+    /// when the command went out.
+    @discardableResult
+    nonisolated private static func play(_ player: Int32, read: () -> NowPlaying.State?, send: (MediaCommand) -> Void) -> Bool {
+        // Not knowing what is current is not a reason to play: Play goes to
+        // whatever is, and that may be something else.
+        guard let state = read() else {
+            Log.note("media not resumed, could not read what is current")
+            return false
         }
-        return copy
-    }
-}
-
-/// The system's media commands, the same the keyboard's media keys send, but
-/// as separate Pause and Play rather than a toggle.
-enum MediaCommand: UInt32 {
-    case play = 0
-    case pause = 1
-
-    nonisolated static func send(_ command: MediaCommand) {
-        typealias Send = @convention(c) (UInt32, CFDictionary?) -> Bool
-        guard let framework = dlopen("/System/Library/PrivateFrameworks/MediaRemote.framework/MediaRemote", RTLD_NOW),
-              let symbol = dlsym(framework, "MRMediaRemoteSendCommand") else { return }
-        _ = unsafeBitCast(symbol, to: Send.self)(command.rawValue, nil)
+        // Something the user started in the meantime is theirs: leave it.
+        if state.playing {
+            Log.note("media left as the user set it")
+            return false
+        }
+        guard state.pid == player else {
+            Log.note("media not resumed, app \(state.pid) is current now, not app \(player)")
+            return false
+        }
+        send(.play)
+        Log.note("media resumed")
+        return true
     }
 }

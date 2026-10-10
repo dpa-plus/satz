@@ -25,7 +25,6 @@ final class AppWindow: NSObject, NSWindowDelegate {
     private let content: () -> AnyView
     private let startsWithoutFocus: Bool
     private let freshEachTime: Bool
-    var onClose: (() -> Void)?
 
     /// The content sets its own width; the window follows its preferred size.
     /// The title is not drawn, but names the window in Mission Control, the
@@ -95,7 +94,6 @@ final class AppWindow: NSObject, NSWindowDelegate {
         counted = false
         Self.open = max(0, Self.open - 1)
         if Self.open == 0 { Self.stepBack() }
-        onClose?()
     }
 
     /// Hands the focus to the app the user came from. Only the active app may,

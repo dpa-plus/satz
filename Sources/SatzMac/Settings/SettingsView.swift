@@ -219,24 +219,17 @@ private struct ProviderBlock: View {
             .surface(radius: 16)
         }
         // Switched elsewhere (Benutzen on a local model): nothing left to look at.
+        // Loading and unloading the local model on a switch is the app's job
+        // (AppDelegate): the setup switches the provider too, and this view
+        // only exists once the settings have been opened.
         .onChange(of: preferences.provider) { _, provider in if looking == provider { looking = nil } }
-        .onChange(of: preferences.provider) { _, provider in
-            setup.refresh()
-            // A loaded model is a gigabyte of memory nobody uses any more.
-            if provider.needsKey { LocalModels.shared.unload() }
-            else { LocalModels.shared.warmUp(preferences.model, language: preferences.spokenLanguage) }
-        }
-        .onChange(of: preferences.model) { _, model in
-            guard preferences.provider == .local else { return }
-            if model == ModelCatalog.apple { LocalModels.shared.unload() }
-            else { LocalModels.shared.warmUp(model, language: preferences.spokenLanguage) }
-        }
     }
 }
 
 /// Under the providers while one is shown that is not in use: where
 /// dictation goes now, and the one button that changes it. Offered only
-/// once the shown provider can take a dictation.
+/// once the shown provider can take a dictation, by the same rule as the
+/// setup's Weiter. The words are the Windows and Linux ones.
 private struct SwitchRow: View {
     @Bindable var preferences: Preferences
     let setup: Setup
@@ -246,16 +239,16 @@ private struct SwitchRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Text(de("Diktate gehen an \(preferences.provider.name).", en: "Dictation goes to \(preferences.provider.name)."))
+            Text(SwitchWording.goesTo(preferences.provider))
                 .font(Typography.text(13))
                 .foregroundStyle(theme.inkSecondary)
             Spacer(minLength: 8)
-            if let missing {
+            if let missing = ProviderReadiness.message(setup.missing(shown, in: preferences)) {
                 Text(missing)
                     .font(Typography.text(13))
                     .foregroundStyle(theme.inkSecondary)
             } else {
-                Button(de("\(shown.name) benutzen", en: "Use \(shown.name)")) {
+                Button(SwitchWording.button(shown)) {
                     preferences.provider = shown
                     switched()
                 }
@@ -264,20 +257,6 @@ private struct SwitchRow: View {
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 10)
-    }
-
-    /// What the shown provider still needs before it can be used.
-    private var missing: String? {
-        switch shown {
-        case .local:
-            LocalModels.shared.isInstalled(preferences.localModel, language: preferences.spokenLanguage)
-                ? nil : de("Erst ein Modell laden", en: "Download a model first")
-        case .custom:
-            URL(string: preferences.customBaseURL.trimmingCharacters(in: .whitespaces))?.host == nil
-                ? de("Erst die Adresse eintragen", en: "Enter the address first") : nil
-        default:
-            setup.hasKey(for: shown) ? nil : de("Erst den Schlüssel eintragen", en: "Enter the key first")
-        }
     }
 }
 
@@ -612,9 +591,10 @@ private struct WordsBlock: View {
                     }
                     addChip
                 }
-                if let removed {
+                // Not once the word has been added again: there is nothing to bring back.
+                if let removed, !Restoring.containsWord(removed.word, in: preferences.words) {
                     UndoLine(label: de("„\(removed.word)“ entfernt", en: "Removed “\(removed.word)”")) {
-                        preferences.words.insert(removed.word, at: min(removed.index, preferences.words.count))
+                        preferences.restoreWord(removed.word, at: removed.index)
                         self.removed = nil
                     }
                 }
@@ -790,9 +770,10 @@ private struct ReplacementsBlock: View {
                 .frame(height: 34)
                 .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(theme.control, lineWidth: 1.5))
             }
-            if let removed {
+            // Not once the phrase has a rule again: the new one stays.
+            if let removed, Restoring.index(ofPhrase: removed.rule.spoken, in: preferences.replacements) == nil {
                 UndoLine(label: de("„\(removed.rule.spoken)“ entfernt", en: "Removed “\(removed.rule.spoken)”")) {
-                    preferences.replacements.insert(removed.rule, at: min(removed.index, preferences.replacements.count))
+                    preferences.restoreReplacement(removed.rule, at: removed.index)
                     self.removed = nil
                 }
             }
@@ -837,7 +818,7 @@ private struct ReplacementsBlock: View {
         }
         // The same phrase again changes the rule there is: a second one stayed
         // in the list while the first still won.
-        if let index = preferences.replacements.firstIndex(where: { $0.spoken.caseInsensitiveCompare(said) == .orderedSame }) {
+        if let index = Restoring.index(ofPhrase: said, in: preferences.replacements) {
             preferences.replacements[index].written = result
             preferences.replacements[index].isOn = true
         } else {
@@ -927,13 +908,22 @@ private struct GeneralBlock: View {
                 .padding(.horizontal, 16)
                 .frame(height: 52)
                 Rule()
-                Toggle(isOn: Binding(get: { launchAtLogin.isEnabled }, set: { launchAtLogin.set($0) })) {
-                    Text(de("Bei Anmeldung starten", en: "Start at login"))
+                VStack(alignment: .leading, spacing: 0) {
+                    Toggle(isOn: Binding(get: { launchAtLogin.isEnabled }, set: { launchAtLogin.set($0) })) {
+                        Text(de("Bei Anmeldung starten", en: "Start at login"))
+                    }
+                    .toggleStyle(AccentToggleStyle())
+                    .frame(height: 48)
+                    // Said where it happened, not in a tooltip nobody hovers
+                    // (as under the key).
+                    if let problem = launchAtLogin.problem {
+                        Text(problem)
+                            .font(Typography.text(12))
+                            .foregroundStyle(theme.accent)
+                            .padding(.bottom, 12)
+                    }
                 }
-                .toggleStyle(AccentToggleStyle())
                 .padding(.horizontal, 16)
-                .frame(height: 48)
-                .help(launchAtLogin.problem ?? "")
                 Rule()
                 Toggle(isOn: $preferences.pausesMedia) {
                     Text(de("Musik beim Diktieren pausieren", en: "Pause music while dictating"))

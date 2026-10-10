@@ -8,7 +8,8 @@ final class CardController {
 
     private let session: Session
     private let preferences: Preferences
-    private var panel: CardPanel?
+    /// Made when the card is first shown; tests put one in without showing it.
+    var panel: CardPanel?
     /// Where the mouse and the window were when the current drag began.
     private var dragStart: (mouse: NSPoint, origin: NSPoint)?
 
@@ -62,9 +63,12 @@ final class CardController {
     /// the card (which moves with it), and never past the edge of the screen:
     /// the card stops at the wall, even while the mouse goes on. The window
     /// server's own drag had no wall and let the card slide half off screen.
-    private func drag(_ isDragging: Bool) {
+    func drag(_ isDragging: Bool) {
         guard let panel else { return }
         guard isDragging else {
+            // The mouse button comes up: the card stays where it is now, also
+            // after a pause with the button held.
+            if dragStart != nil { panel.dropped() }
             dragStart = nil
             return
         }
@@ -115,6 +119,10 @@ final class CardPanel: NSPanel {
     private var settling: Task<Void, Never>?
     /// True while satz itself puts the window somewhere, which is not a drag.
     private var placing = false
+    /// The user moved the card and `onMoved` has not been told yet.
+    private var moveIsUnsaved = false
+    /// Whether a mouse button is down; replaced by tests, which cannot hold one.
+    var mouseIsDown: () -> Bool = { NSEvent.pressedMouseButtons != 0 }
 
     init() {
         super.init(
@@ -146,12 +154,28 @@ final class CardPanel: NSPanel {
     /// So the new spot is taken a moment after the last one.
     private func moved() {
         guard !placing else { return }
+        moveIsUnsaved = true
         settling?.cancel()
         settling = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(300))
-            guard !Task.isCancelled, NSEvent.pressedMouseButtons == 0 else { return }
-            self?.onMoved()
+            // Still holding the button after a pause: `dropped()` takes the spot.
+            guard !Task.isCancelled, self?.mouseIsDown() == false else { return }
+            self?.settle()
         }
+    }
+
+    /// The user let go of the card (the drag in the card's view tells us).
+    /// Waiting for the moves to stop lost the spot of a card held still for
+    /// a moment before letting go.
+    func dropped() {
+        settling?.cancel()
+        settle()
+    }
+
+    private func settle() {
+        guard moveIsUnsaved else { return }
+        moveIsUnsaved = false
+        onMoved()
     }
 
     override var canBecomeKey: Bool { true }

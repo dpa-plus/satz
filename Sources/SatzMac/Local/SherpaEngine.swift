@@ -41,6 +41,18 @@ final class SherpaRecognizer: @unchecked Sendable {
 
     /// - Parameter samples: 16 kHz mono.
     func transcribe(_ samples: ArraySlice<Float>) -> String {
+        // Parakeet's encoder holds 400 s: one second more and ONNX Runtime
+        // throws a C++ exception inside sherpa-onnx, which Swift cannot catch
+        // and which ends satz with the whole recording in it. SherpaModel
+        // hands over pieces of 240 s at most; this is the last line, for
+        // anything longer that gets here whole. It is heard in pieces.
+        guard samples.count > SherpaModel.longestCall else { return decode(samples) }
+        Log.note(String(format: "local: %.0f s in one call, heard in pieces instead", Double(samples.count) / 16_000))
+        return QuietWindows.split(Array(samples), longest: SherpaModel.longestCall).map(decode)
+            .filter { !$0.isEmpty }.joined(separator: " ")
+    }
+
+    private func decode(_ samples: ArraySlice<Float>) -> String {
         guard let stream = SherpaOnnxCreateOfflineStream(recognizer) else { return "" }
         defer { SherpaOnnxDestroyOfflineStream(stream) }
         samples.withUnsafeBufferPointer { buffer in

@@ -18,11 +18,21 @@ public enum WordCheck {
         // phrase must not beat a sentence it dropped. And five or more words
         // in a row the plain text does not have are something the prompt
         // brought in: it repeated a whole earlier passage once.
-        if Double(b.count) < 0.85 * Double(a.count) || longestGap(in: a, against: b) >= 3 || longestGap(in: b, against: a) >= 5 {
+        if Double(b.count) < 0.85 * Double(a.count) { return (plain, false) }
+        // The lining up needs a table of every plain word against every
+        // prompted one: 800 MB for an hour of talking, on top of the loaded
+        // model. A dictation that long is not checked, and the text without
+        // the prompt is the one that cannot have lost a word.
+        guard a.count * b.count <= largestComparison else { return (plain, false) }
+        if longestGap(in: a, against: b) >= 3 || longestGap(in: b, against: a) >= 5 {
             return (plain, false)
         }
         return (prompted, true)
     }
+
+    /// Words of the plain text times words of the prompted one that are still
+    /// lined up: 4 000 words each, about 27 minutes of talking, 64 MB of table.
+    static let largestComparison = 16_000_000
 
     static func words(_ text: String) -> [String] {
         text.lowercased()
@@ -35,17 +45,20 @@ public enum WordCheck {
     static func longestGap(in a: [String], against b: [String]) -> Int {
         guard !a.isEmpty else { return 0 }
         guard !b.isEmpty else { return a.count }
-        var table = Array(repeating: Array(repeating: 0, count: b.count + 1), count: a.count + 1)
+        // One flat table of 4-byte cells, not an array of arrays of 8-byte ones.
+        let width = b.count + 1
+        var table = [Int32](repeating: 0, count: (a.count + 1) * width)
         for i in stride(from: a.count - 1, through: 0, by: -1) {
             for j in stride(from: b.count - 1, through: 0, by: -1) {
-                table[i][j] = a[i] == b[j] ? table[i + 1][j + 1] + 1 : max(table[i + 1][j], table[i][j + 1])
+                table[i * width + j] = a[i] == b[j] ? table[(i + 1) * width + j + 1] + 1
+                    : max(table[(i + 1) * width + j], table[i * width + j + 1])
             }
         }
         var i = 0, j = 0, run = 0, longest = 0
         while i < a.count {
             if j < b.count, a[i] == b[j] {
                 run = 0; i += 1; j += 1
-            } else if j < b.count, table[i][j + 1] >= table[i + 1][j] {
+            } else if j < b.count, table[i * width + j + 1] >= table[(i + 1) * width + j] {
                 j += 1
             } else {
                 run += 1; longest = max(longest, run); i += 1
@@ -64,19 +77,26 @@ public enum SpeechGate {
     /// level: a fixed -45 dB alone dropped clear speech from a low-gain
     /// microphone, and steady quiet noise is not speech.
     public static func hasSpeech(_ samples: [Float], sampleRate: Double = 16_000) -> Bool {
-        let frame = max(1, Int(sampleRate * 0.03))
-        let needed = max(1, Int(0.2 / 0.03))
-        var levels: [Float] = []
-        var start = 0
-        while start + frame <= samples.count {
-            var sum: Float = 0
-            for k in start ..< start + frame { sum += samples[k] * samples[k] }
-            levels.append((sum / Float(frame)).squareRoot())
-            start += frame
-        }
-        guard levels.count >= needed else { return false }
+        threshold(for: samples, sampleRate: sampleRate) != nil
+    }
+
+    /// The level above which a 30 ms frame of this recording is speech; nil
+    /// when the recording has none. The recording's own quiet level is part
+    /// of it, so it is worked out once, on the whole recording: a piece cut
+    /// out of it that holds no silence (a quiet voice over a hum, a long
+    /// stretch of talking) read its own words as noise and lost them
+    /// (`hasSpeech(_:above:)`).
+    public static func threshold(for samples: [Float], sampleRate: Double = 16_000) -> Float? {
+        let levels = levels(samples[...], sampleRate: sampleRate)
+        guard levels.count >= framesNeeded else { return nil }
         let threshold = threshold(levels)
-        return levels.filter { $0 > threshold }.count >= needed
+        return levels.filter { $0 > threshold }.count >= framesNeeded ? threshold : nil
+    }
+
+    /// Whether a piece of a recording has speech by that recording's
+    /// `threshold`, not by a level worked out from the piece alone.
+    public static func hasSpeech(_ piece: ArraySlice<Float>, above threshold: Float, sampleRate: Double = 16_000) -> Bool {
+        levels(piece, sampleRate: sampleRate).filter { $0 > threshold }.count >= framesNeeded
     }
 
     /// Where the last 30 ms above the speech level end; nil when nothing is
@@ -84,16 +104,42 @@ public enum SpeechGate {
     /// mid-word and followed by quiet (a tenth of a second was enough), and
     /// the same audio up to here came back whole.
     public static func speechEnd(_ samples: [Float], sampleRate: Double = 16_000) -> Int? {
-        let frame = max(1, Int(sampleRate * 0.03))
-        let levels = stride(from: 0, to: samples.count - frame + 1, by: frame).map { start in
-            var sum: Float = 0
-            for k in start ..< start + frame { sum += samples[k] * samples[k] }
-            return (sum / Float(frame)).squareRoot()
-        }
+        let levels = levels(samples[...], sampleRate: sampleRate)
         guard !levels.isEmpty else { return nil }
-        let threshold = threshold(levels)
+        return end(of: levels, above: threshold(levels), sampleRate: sampleRate)
+    }
+
+    /// The same for a piece of a recording, by the recording's `threshold`.
+    /// Counted from the start of the piece.
+    public static func speechEnd(_ piece: ArraySlice<Float>, above threshold: Float, sampleRate: Double = 16_000) -> Int? {
+        end(of: levels(piece, sampleRate: sampleRate), above: threshold, sampleRate: sampleRate)
+    }
+
+    private static func end(of levels: [Float], above threshold: Float, sampleRate: Double) -> Int? {
         guard let last = levels.lastIndex(where: { $0 > threshold }) else { return nil }
-        return (last + 1) * frame
+        return (last + 1) * frameLength(sampleRate)
+    }
+
+    /// 30 ms frames above the threshold that make speech: a fifth of a second.
+    private static let framesNeeded = max(1, Int(0.2 / 0.03))
+
+    private static func frameLength(_ sampleRate: Double) -> Int { max(1, Int(sampleRate * 0.03)) }
+
+    /// The RMS level of each whole 30 ms frame.
+    private static func levels(_ samples: ArraySlice<Float>, sampleRate: Double) -> [Float] {
+        let frame = frameLength(sampleRate)
+        var levels: [Float] = []
+        levels.reserveCapacity(samples.count / frame)
+        samples.withUnsafeBufferPointer { buffer in
+            var start = 0
+            while start + frame <= buffer.count {
+                var sum: Float = 0
+                for k in start ..< start + frame { sum += buffer[k] * buffer[k] }
+                levels.append((sum / Float(frame)).squareRoot())
+                start += frame
+            }
+        }
+        return levels
     }
 
     private static func threshold(_ levels: [Float]) -> Float {

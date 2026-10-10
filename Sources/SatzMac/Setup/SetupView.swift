@@ -35,7 +35,7 @@ struct SetupView: View {
 
     /// Where a returning user picks up: the first thing that is missing.
     static func firstOpenStep(setup: Setup, preferences: Preferences) -> Step {
-        if !setup.hasKey || preferences.isEndpointMissing || preferences.isModelMissing { return .key }
+        if !setup.providerReady { return .key }
         if setup.microphone != .allowed { return .microphone }
         if !setup.canPaste && preferences.trigger.needsEventTap { return .paste }
         return .probe
@@ -191,6 +191,9 @@ private struct KeyStep: View {
     @Environment(\.isSnapshot) private var isSnapshot
     @State private var input = ""
     @State private var problem: String?
+    /// Weiter was pressed and the provider was still not ready: what is
+    /// missing is said, and keeps being said as long as it is.
+    @State private var refused = false
     /// The provider shown when it is not the one in use: clicking one only
     /// shows it, Weiter makes it the one (as in Settings).
     @State private var looking: Provider?
@@ -228,6 +231,8 @@ private struct KeyStep: View {
 
         if let problem {
             Text(problem).font(Typography.text(13)).foregroundStyle(theme.inkSecondary)
+        } else if refused, let missing = ProviderReadiness.message(needs) {
+            Text(missing).font(Typography.text(13)).foregroundStyle(theme.inkSecondary)
         }
 
         HStack {
@@ -242,7 +247,7 @@ private struct KeyStep: View {
                 .buttonStyle(.plain)
             }
         }
-        .onChange(of: shown) { input = ""; problem = nil; setup.refresh() }
+        .onChange(of: shown) { input = ""; problem = nil; refused = false; setup.refresh() }
     }
 
     private var keyField: some View {
@@ -311,16 +316,12 @@ private struct KeyStep: View {
         return (typed && shown.needsKey) || canUse
     }
 
+    /// What the shown provider still lacks before it can take a dictation:
+    /// the rule that Settings' "… benutzen" follows too.
+    private var needs: [ProviderReadiness.Need] { setup.missing(shown, in: preferences) }
+
     /// The shown provider can take a dictation once it is the one in use.
-    private var canUse: Bool {
-        switch shown {
-        case .local: return LocalModels.shared.isInstalled(preferences.localModel, language: preferences.spokenLanguage)
-        case .custom:
-            return hasKey && URL(string: preferences.customBaseURL.trimmingCharacters(in: .whitespaces))?.host != nil
-                && !preferences.model(for: .custom).trimmingCharacters(in: .whitespaces).isEmpty
-        default: return hasKey
-        }
-    }
+    private var canUse: Bool { needs.isEmpty }
 
     private var hasKey: Bool { setup.hasKey(for: shown) }
 
@@ -335,7 +336,12 @@ private struct KeyStep: View {
                 return
             }
         }
-        guard canUse else { return }
+        // The key is kept either way. Pressing Weiter and getting nothing,
+        // with no word why, left the user to guess what else was needed.
+        guard canUse else {
+            refused = true
+            return
+        }
         preferences.provider = shown
         looking = nil
         onNext()
