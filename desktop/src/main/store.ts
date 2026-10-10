@@ -29,7 +29,7 @@ export interface Preferences {
   keepsOnClipboard: boolean
   /** Music and videos pause while dictating, and play on afterwards. */
   pausesMedia: boolean
-  /** How many dictations the history keeps: 0 none, KEEP_ALL every one. */
+  /** How many dictations the history keeps: 0 none, KEEP_ALL every one (core/historyLimits.ts). */
   historyLimit: number
   showsText: boolean
   /** Where the user dragged the card, from its starting spot. */
@@ -42,10 +42,6 @@ export interface Preferences {
 export interface HistoryEntry { id: string; text: string; date: string; pasted: boolean }
 
 export const STANDARD_HISTORY = 50
-/** "All": no limit anyone would reach. */
-export const KEEP_ALL = 100_000
-/** The choices in the settings, 0 being "keep none". */
-export const HISTORY_LIMITS = [0, 10, 50, 200, KEEP_ALL]
 const newId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 
 const dir = () => app.getPath('userData')

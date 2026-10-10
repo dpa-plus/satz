@@ -10,7 +10,8 @@
 // switching to it, or open with `?show=local` to start there.
 // `&language=de` shows the German words, `&failed=1` a download that failed,
 // `&model=sherpa/canary-180m` Canary as Local's model (with its "Spoken in"),
-// `&fresh=1` nothing downloaded yet, `&slow=1` holds every state still for a picture.
+// `&fresh=1` nothing downloaded yet, `&slow=1` holds every state still for a picture,
+// `&noshortcut=1` right Ctrl cannot start a dictation (the hint under "Shortcut").
 import { germanErrors, localModelIds, type Speed } from '../src/core/localModels'
 import { models as shipped } from '../src/core/models'
 import { standardReplacements } from '../src/core/replacements'
@@ -97,7 +98,7 @@ window.confirm = (message?: string) => { calls.push(['confirm', message]); retur
         // The provider the page shows; dictations go to prefs.provider.
         const opened = query.get('show')
         const shown = isProvider(args[0]) ? args[0] : isProvider(opened) ? opened : prefs.provider
-        return { prefs, shown, hasKey: keys[shown], keyboard: 'right Ctrl twice', wayland: false, platform: 'win32', history, startAtLogin: true,
+        return { prefs, shown, hasKey: keys[shown], keyboard: 'right Ctrl twice', shortcutWorks: !query.has('noshortcut'), wayland: false, platform: 'win32', history, startAtLogin: true,
           spokenLanguage: prefs.spokenLanguage ?? prefs.language, models: shipped[shown],
           local: { inUse: localModel(), models: localModelIds(localModel()).map(id => ({ id, ...entry(id) })), germanErrors: germanErrors(), machine, version } }
       }

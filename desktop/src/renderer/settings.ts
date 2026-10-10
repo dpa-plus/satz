@@ -1,7 +1,9 @@
 import { satz } from './bridge'
 import { formatSize, languageLine, languageName, localModel, measuredHere, modelBars, toldLanguage, type Speed } from '../core/localModels'
 import { choiceFor, type ModelChoice } from '../core/models'
-import { localRowAction, providerLabel, providerOrder, switchRow, useLocalModel } from '../core/browse'
+import { localRowAction, providerLabel, providerOrder, shortcutHint, switchRow, useLocalModel } from '../core/browse'
+import { HISTORY_LIMITS, KEEP_ALL } from '../core/historyLimits'
+import { LoadAfterBlur } from './deferredLoad'
 
 /**
  * Settings: the provider and its key, the vocabulary, the Ersetzungen with
@@ -19,7 +21,9 @@ interface Info {
   }
   /** The provider the page shows, which `hasKey` and `models` are about; dictations go to `prefs.provider`. */
   shown: Provider
-  hasKey: boolean; keyboard: string; wayland: boolean; platform: string; startAtLogin: boolean; spokenLanguage: 'de' | 'en'
+  hasKey: boolean; wayland: boolean; platform: string; startAtLogin: boolean; spokenLanguage: 'de' | 'en'
+  /** False where right Ctrl cannot start a dictation, so only "satz --toggle" does; missing counts as working. */
+  shortcutWorks?: boolean
   /** The shown provider's live list, or the shipped one until it arrives. */
   models: ModelChoice[]
   /** The models for "Lokal", one card each, and the one in use. */
@@ -86,6 +90,10 @@ function render() {
   const p = info.prefs
   // Everything in the provider box is about the provider shown, and is kept for it.
   const provider = info.shown
+  // Local models are a list to choose from, each with its size, speed and
+  // errors: nothing to paste (they are downloaded) and no id to type (an id
+  // satz cannot run downloaded fine and then failed every dictation).
+  const isLocal = provider === 'local'
 
   // Shortcut
   const shortcut = el('div', { className: 'box' },
@@ -94,12 +102,7 @@ function render() {
       : t('Rechte Strg-Taste zweimal tippen und halten: sprechen, loslassen: einfügen', 'Tap right Ctrl twice and hold to talk, let go to paste') }),
       select(p.triggerMode, [['tap', t('Tippen', 'Tap')], ['hold', t('Halten', 'Hold')]], v => update({ triggerMode: v }), t('Tippen oder halten', 'Tap or hold'), 'trigger-mode')))
   // Only worth a line when something is missing.
-  const shortcutHint = el('div', { className: 'hint', textContent: '' })
-  if (info.wayland && info.keyboard?.startsWith('Wayland')) {
-    shortcutHint.textContent = t(
-      'Wayland lässt Apps die Tastatur nicht mitlesen. Entweder in den System-Einstellungen eine Tastenkombination anlegen, die „satz --toggle“ ausführt, oder einmal „sudo usermod -aG input $USER“ ausführen und neu anmelden.',
-      'Wayland does not let apps watch the keyboard. Either add a keyboard shortcut in the system settings that runs "satz --toggle", or run "sudo usermod -aG input $USER" once and sign in again.')
-  }
+  const shortcutNote = el('div', { className: 'hint', textContent: shortcutHint(info.shortcutWorks ?? true, info.wayland, p.language) })
 
   // Provider and key
   const keyRow = el('div', { className: 'row' })
@@ -154,8 +157,11 @@ function render() {
     ...(model.dollarsPerHour === undefined ? [] : model.dollarsPerHour === 0 ? [t('kostenlos', 'free')]
       : [t(`${number(model.dollarsPerHour, 2)} $ pro Stunde`, `$${number(model.dollarsPerHour, 2)} an hour`)]),
   ].join(' · ')
-  for (const model of info.models) modelMenu.append(el('option', { value: model.id, textContent: title(model) }))
-  modelMenu.append(el('option', { value: '', textContent: t('Anderes Modell …', 'Other model …') }))
+  // Not for Local, whose cards are its list.
+  if (!isLocal) {
+    for (const model of info.models) modelMenu.append(el('option', { value: model.id, textContent: title(model) }))
+    modelMenu.append(el('option', { value: '', textContent: t('Anderes Modell …', 'Other model …') }))
+  }
   const chosen = choiceFor(info.models, currentModel)
   const known = chosen !== undefined
   const facts = el('div', { className: 'hint', textContent: !chosen ? t('Ein Modell, das nicht in der Liste steht.', 'A model that is not in the list.') : [
@@ -170,10 +176,6 @@ function render() {
     update({ models: { ...p.models, [provider]: modelMenu.value } })
   }
   const showsModelField = provider === 'custom' || typingModel || !known
-  // Local models are a list to choose from, each with its size, speed and
-  // errors: nothing to paste (they are downloaded) and no id to type (an id
-  // satz cannot run downloaded fine and then failed every dictation).
-  const isLocal = provider === 'local'
   // Choosing in the menu only shows that provider. On Windows the arrow keys
   // step through a closed menu, one change each: that alone used to switch
   // dictations from provider to provider.
@@ -212,7 +214,8 @@ function render() {
   // Vocabulary
   const words = el('div', { className: 'chips' })
   for (const word of p.words) {
-    const remove = el('button', { textContent: '×' })
+    const remove = el('button', { textContent: '×', title: t('Entfernen', 'Remove') })
+    remove.setAttribute('aria-label', `${t('Entfernen', 'Remove')}: ${word}`)
     remove.onclick = () => update({ words: p.words.filter(w => w !== word) })
     words.append(el('span', { className: 'chip' }, word, remove))
   }
@@ -232,13 +235,15 @@ function render() {
       select(info.spokenLanguage, [['de', 'Deutsch'], ['en', 'English']], v => update({ spokenLanguage: v }), t('Gesprochen auf', 'Spoken in'), 'spoken-language')))
     const chips = el('div', { className: 'chips' })
     for (const rule of p.replacements.filter(r => r.isOn)) {
-      const remove = el('button', { textContent: '×' })
+      const remove = el('button', { textContent: '×', title: t('Entfernen', 'Remove') })
+      remove.setAttribute('aria-label', `${t('Entfernen', 'Remove')}: ${rule.spoken}`)
       remove.onclick = () => update({ replacements: p.replacements.filter(r => r.id !== rule.id) })
       chips.append(el('span', { className: 'chip' }, `${rule.spoken} → `, el('code', { textContent: shown(rule.written) }), remove))
     }
     const spoken = el('input', { type: 'text', id: 'new-spoken', placeholder: t('gesprochen', 'spoken') })
     const written = el('input', { type: 'text', id: 'new-written', placeholder: t('wird zu', 'becomes'), size: 6 })
-    const add = el('button', { textContent: '+' })
+    const add = el('button', { textContent: '+', title: t('Hinzufügen', 'Add') })
+    add.setAttribute('aria-label', t('Ersetzung hinzufügen', 'Add replacement'))
     add.onclick = () => {
       if (!spoken.value.trim() || !written.value) return
       focusNext = 'new-spoken'
@@ -274,7 +279,7 @@ function render() {
     if (all > 0 && confirm(t(`Alle ${all} Diktate aus dem Verlauf löschen? Das lässt sich nicht rückgängig machen.`, `Delete all ${all} dictations from the history? This cannot be undone.`)))
       satz.invoke('settings:clear-history')
   }
-  const keep = select(String(p.historyLimit ?? 50), [['0', t('Aus', 'Off')], ['10', '10'], ['50', '50'], ['200', '200'], ['100000', t('Alle', 'All')]],
+  const keep = select(String(p.historyLimit ?? 50), HISTORY_LIMITS.map((limit): [string, string] => [String(limit), limit === 0 ? t('Aus', 'Off') : limit === KEEP_ALL ? t('Alle', 'All') : String(limit)]),
     async v => {
       const limit = Number(v)
       const all = await count()
@@ -300,7 +305,7 @@ function render() {
   // it was in, so several words can be typed one after the other.
   const focused = (document.activeElement as HTMLElement | null)?.id || null
   app.replaceChildren(
-    section(t('Kurzbefehl', 'Shortcut'), shortcut, shortcutHint),
+    section(t('Kurzbefehl', 'Shortcut'), shortcut, shortcutNote),
     section(t('Anbieter', 'Provider'), providerBox, ...localCaption, ...(isLocal ? localCards() : []), ...(keyProblem ? [el('div', { className: 'error', textContent: keyProblem })] : [])),
     section(t('Wortschatz', 'Vocabulary'), el('div', { className: 'box' }, words)),
     section(t('Ersetzungen', 'Replacements'), replacementBox),
@@ -472,12 +477,12 @@ async function load() {
 }
 
 // A new model list draws the page again, but not under someone typing: that
-// emptied a half-typed word. It waits until the field is left.
+// emptied a half-typed word. It waits until the field is left, once.
+const afterBlur = new LoadAfterBlur()
 function loadWhenFree() {
   const field = document.activeElement
-  if (field instanceof HTMLInputElement && field.type !== 'checkbox' && field.closest('#settings-page')) {
-    field.addEventListener('blur', () => load(), { once: true })
-  } else load()
+  if (field instanceof HTMLInputElement && field.type !== 'checkbox' && field.closest('#settings-page')) afterBlur.later(field, load)
+  else load()
 }
 satz.on('models:changed', loadWhenFree)
 satz.on('local:changed', loadWhenFree)

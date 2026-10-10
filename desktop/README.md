@@ -40,28 +40,50 @@ Each engine runs in a helper process of its own (`local-worker.js`, `sherpa-work
 
 Licences of the models satz downloads (none ship with satz): Parakeet TDT 0.6B [v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) and [v2](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) and [Canary 180M Flash](https://huggingface.co/nvidia/canary-180m-flash) by NVIDIA, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); Moonshine [Base](https://huggingface.co/UsefulSensors/moonshine-base) and [Tiny](https://huggingface.co/UsefulSensors/moonshine-tiny) by Useful Sensors, MIT; [SenseVoiceSmall](https://huggingface.co/FunAudioLLM/SenseVoiceSmall) by FunAudioLLM (Alibaba), [FunASR model licence](https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE), in its [sherpa-onnx export](https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17); Whisper by OpenAI, MIT.
 
+## Paste and the clipboard
+
+The text goes on the clipboard, Ctrl+V is sent to the window the dictation started in (brought back first if you went elsewhere meanwhile), and a second later the clipboard is handed back in every form it held, but only while it still holds just the transcript: something you copied meanwhile stays. A second, not less: a busy app (Word, a remote desktop, a VM) took Ctrl+V after the old clipboard was back and pasted that instead. Pastes that follow each other give back the clipboard from before all of them, unless you copied something in between: that is then the one that comes back (`src/main/clipboardHandback.ts`). Where no keystroke can be sent, or the window is gone, the text stays on the clipboard.
+
 ## Linux and Wayland
 
 Wayland (Ubuntu's default) lets no app watch the keyboard or type into other apps. satz handles it like this:
 
 - **Shortcut:** right Ctrl twice works when the user may read the keyboard devices: `sudo usermod -aG input $USER`, then sign out and in. Without that, make a keyboard shortcut in the system settings that runs `satz --toggle`.
 - **Paste:** with [ydotool](https://github.com/ReimuNotMoe/ydotool) running (`ydotoold`), satz pastes by itself. Without it the text goes to the clipboard and the card says "On the clipboard · Ctrl+V".
+- **Terminals:** Wayland shows satz no window at all, so it cannot tell a terminal from any other app and sends Ctrl+V, which GNOME Terminal, Console and the like do not take as paste. Nothing is lost: every dictation is in the history, and with *Keep text on the clipboard* switched on the text stays on the clipboard for Ctrl+Shift+V by hand. Under X11 satz knows the terminal and sends Ctrl+Shift+V itself.
 - The card runs through XWayland, the only way a window can stay on top and choose where it sits. The `satz` start script takes care of that and of Chromium's sandbox (see `build/after-pack.cjs`).
+
+### Tools satz calls on Linux
+
+Besides the libraries the `.deb` depends on, satz runs a few small programs. Each is optional; without it one thing is missing, never the dictation.
+
+| Program | Package (Debian, Ubuntu) | What it is for |
+|---|---|---|
+| `xprop` | `x11-utils` | X11 only. The window a dictation started in, and whether it is a terminal (Ctrl+Shift+V). Without it every window gets Ctrl+V, and terminals take nothing. |
+| `xdotool` or `wmctrl` | `xdotool`, `wmctrl` | X11 only. Brings that window back when you clicked into another one while talking. Without either, the text goes to the clipboard ("the window is gone") instead of being pasted. |
+| `gdbus` | `libglib2.0-bin` | Pauses music and videos while you dictate (MPRIS over D-Bus). Without it the setting does nothing. |
+| `ydotool` and `ydotoold` | `ydotool` | Wayland only. Sends Ctrl+V. See above. |
+
+The `.deb` recommends `x11-utils` and `xdotool`, so `apt install` brings them unless recommends are switched off; `xprop` and `gdbus` usually are on a desktop install already. The tar.gz brings nothing: install them yourself.
+
+### When the shortcut is missing
+
+On ARM Linux under X11 the keyboard library's prebuilt binary is x86-64, so satz starts without the hook (and a blocked native module on Windows does the same). Settings then says so under *Shortcut*, in the language of the app, and names the way out: a keyboard shortcut that runs `satz --toggle` (system settings on Linux, a shortcut with a shortcut key on Windows).
 
 ## Build
 
 ```bash
 npm install
-npm test               # 147 tests: the shared core, ported from the Mac app, and the local engines
+npm test               # the shared core, ported from the Mac app, the local engines and the app's own parts
 npm run dist:win       # release/*.zip
 npm run dist:linux     # release/*.deb, *.tar.gz
 ```
 
-Everything builds on a Mac. `npm start` runs it locally. npm installs sherpa-onnx's native code only for the Mac that builds (`sherpa-onnx-darwin-arm64`, kept out of the packages); `build/after-pack.cjs` puts each package's own, `sherpa-onnx-linux-x64`, `-linux-arm64` or `-win-x64`, at the version and checksum `package-lock.json` names (cached in `build/sherpa/`), beside `app.asar` in `resources/app.asar.unpacked/node_modules/`, where `src/main/sherpaEngine.ts` loads it. That adds 8 to 13 MB to a download (23 to 40 MB unpacked); the Windows ARM zip gets nothing.
+Everything builds on a Mac. The helper processes and the main process are esbuild bundles (transformers.js is inside `local-worker.js`), so a package carries only what is loaded from beside them: `onnxruntime-node`, `uiohook-napi` and sherpa-onnx. `package.json`'s `files` leaves out the rest of transformers.js' dependencies (`onnxruntime-web`, `sharp` with its macOS libraries and the like, tens of MB in a package), and `build/after-pack.cjs` keeps one ONNX Runtime and one keyboard-hook library per package. `test/appFix.test.ts` checks that the Whisper bundle still asks for nothing else. On Windows `signExecutable: false` only skips signing: electron-builder still writes satz's name, version, company and icon into `satz.exe`. `npm start` runs it locally. npm installs sherpa-onnx's native code only for the Mac that builds (`sherpa-onnx-darwin-arm64`, kept out of the packages); `build/after-pack.cjs` puts each package's own, `sherpa-onnx-linux-x64`, `-linux-arm64` or `-win-x64`, at the version and checksum `package-lock.json` names (cached in `build/sherpa/`), beside `app.asar` in `resources/app.asar.unpacked/node_modules/`, where `src/main/sherpaEngine.ts` loads it. That adds 8 to 13 MB to a download (23 to 40 MB unpacked); the Windows ARM zip gets nothing.
 
 ## Test mode
 
-`satz --dev-control 48700 --test-audio a.wav:b.wav` plays WAV files instead of the microphone and takes commands on `http://127.0.0.1:48700/<command>`: `press`, `release`, `mic`, `discard`, `undo`, `restore`, `eye`, `caret?at=N`, `state`, `picture`, `js?code=…`, `local`, `local-download`, `local-cancel` and `local-measure` (a local model's state, its Download, its Cancel and its speed test; `?id=…` names the model, e.g. `sherpa/moonshine-tiny`, else the one in use; set `"provider": "local"` in preferences.json to dictate with it). `--models-dir <folder>` keeps the models of a test elsewhere, never in the user's folder. Texts are recorded instead of pasted unless `--test-paste` is given. Windows takes `;` between the files.
+`satz --dev-control 48700 --test-audio a.wav:b.wav` plays WAV files instead of the microphone and takes commands on `http://127.0.0.1:48700/<command>`: `press`, `release`, `mic`, `discard`, `undo`, `restore`, `eye`, `caret?at=N`, `state`, `picture`, `js?code=…`, `local`, `local-download`, `local-cancel` and `local-measure` (a local model's state, its Download, its Cancel and its speed test; `?id=…` names the model, e.g. `sherpa/moonshine-tiny`, else the one in use; set `"provider": "local"` in preferences.json to dictate with it). `--models-dir <folder>` keeps the models of a test elsewhere, never in the user's folder; it needs `--dev-control` (alone, satz exits at once rather than run as a normal satz on a folder of its own). Without it a test copy uses the user's models but never downloads into or deletes from that folder; the dev-control commands `local-download` and the Settings buttons log that and do nothing. Texts are recorded instead of pasted unless `--test-paste` is given, and a test never pauses the music unless `--test-media` is given. A test writes its history to the profile it runs in, so run it with Electron's `--user-data-dir <folder>` on a computer where that matters. Windows takes `;` between the files.
 
 ## What was verified (09.10.2026): Handy's models
 

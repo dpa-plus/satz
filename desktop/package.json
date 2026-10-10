@@ -42,14 +42,25 @@
       "node_modules/node-gyp-build/**",
       "node_modules/onnxruntime-node/**",
       "node_modules/onnxruntime-common/**",
-      "!node_modules/sherpa-onnx-*/**"
+      "!node_modules/sherpa-onnx-*/**",
+      "!node_modules/onnxruntime-web/**",
+      "!node_modules/@huggingface/**",
+      "!node_modules/sharp/**",
+      "!node_modules/@img/**",
+      "!node_modules/flatbuffers/**",
+      "!node_modules/guid-typescript/**",
+      "!node_modules/long/**",
+      "!node_modules/platform/**",
+      "!node_modules/protobufjs/**",
+      "!node_modules/@protobufjs/**"
     ],
     "asarUnpack": [
       "node_modules/uiohook-napi/**",
       "node_modules/onnxruntime-node/**"
     ],
     "win": {
-      "signAndEditExecutable": false,
+      "signExecutable": false,
+      "icon": "assets/icon.png",
       "artifactName": "satz-${version}-windows-${arch}.${ext}",
       "extraFiles": [
         {
@@ -82,6 +93,10 @@
         "libuuid1",
         "libsecret-1-0",
         "libxt6"
+      ],
+      "recommends": [
+        "x11-utils",
+        "xdotool"
       ]
     }
   },

@@ -1,4 +1,5 @@
 import { satz } from './bridge'
+import { KEEP_ALL } from '../core/historyLimits'
 
 /**
  * Everything dictated, newest first, by day. What opens when satz is started
@@ -11,7 +12,6 @@ const COPIED_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8
 interface Entry { id: string; text: string; date: string; pasted: boolean }
 interface Info { entries: Entry[]; limit: number; language: 'de' | 'en' }
 
-const KEEP_ALL = 100_000
 const app = document.getElementById('history-page')!
 let info: Info
 let query = ''

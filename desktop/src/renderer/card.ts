@@ -1,11 +1,12 @@
 import { satz } from './bridge'
+import { Microphone } from './microphone'
 
 /**
  * The card: text on top, under it one row with the waveform up to the
  * buttons at the right. The window around it is fixed; the card grows to the
  * left and upward inside it, so the buttons never move from under the mouse.
  */
-type Phase = { kind: string; message?: string; canRetry?: boolean }
+type Phase = { kind: string; message?: string; canRetry?: boolean; canRestore?: boolean }
 interface State {
   phase: Phase
   runs: { text: string; seg: number; mark: number }[]
@@ -92,6 +93,11 @@ function render() {
     if (phase.canRetry) {
       const retry = document.createElement('button'); retry.className = 'action retry'; retry.textContent = words('Nochmal', 'Retry')
       retry.dataset.action = 'retry'; middle.append(retry)
+    }
+    // A delivery that failed kept the text: it comes back right here.
+    if (phase.canRestore) {
+      const restore = document.createElement('button'); restore.className = 'action'; restore.textContent = words('Zurückholen', 'Restore')
+      restore.dataset.action = 'restore'; middle.append(restore)
     }
   } else if (k === 'discarded') {
     label(words('Verworfen', 'Discarded'))
@@ -184,9 +190,6 @@ strip.addEventListener('mousemove', event => {
 
 // MARK: - Microphone
 
-let stream: MediaStream | null = null
-let context: AudioContext | null = null
-
 const worklet = `
 class Tap extends AudioWorkletProcessor {
   constructor() { super(); this.buffer = []; this.size = 0 }
@@ -203,19 +206,33 @@ class Tap extends AudioWorkletProcessor {
 }
 registerProcessor('satz-tap', Tap)`
 
+const microphone = new Microphone({
+  getUserMedia: () => navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false } }),
+  async openTap(onChunk) {
+    const context = new AudioContext({ sampleRate: 16_000 })
+    const url = URL.createObjectURL(new Blob([worklet], { type: 'application/javascript' }))
+    try {
+      await context.audioWorklet.addModule(url)
+    } catch (error) {
+      context.close().catch(() => {})
+      throw error
+    } finally {
+      URL.revokeObjectURL(url)
+    }
+    const node = new AudioWorkletNode(context, 'satz-tap')
+    node.port.onmessage = message => onChunk(message.data as Float32Array)
+    return {
+      connect: stream => { context.createMediaStreamSource(stream).connect(node) },
+      close: () => { node.port.onmessage = null; context.close().catch(() => {}) },
+    }
+  },
+}, chunk => satz.send('rec:chunk', chunk))
+
 satz.on('rec:start', async (id: number) => {
   try {
-    if (!stream) {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false } })
-      context = new AudioContext({ sampleRate: 16_000 })
-      await context.audioWorklet.addModule(URL.createObjectURL(new Blob([worklet], { type: 'application/javascript' })))
-      const node = new AudioWorkletNode(context, 'satz-tap')
-      node.port.onmessage = message => satz.send('rec:chunk', message.data as Float32Array)
-      context.createMediaStreamSource(stream).connect(node)
-    }
-    satz.send('rec:started', id)
+    // Not answered when it was stopped meanwhile: the main process stopped waiting.
+    if (await microphone.start()) satz.send('rec:started', id)
   } catch (error) {
-    stop()
     const name = (error as Error).name
     // In the card's language, never Chromium's English.
     const message = name === 'NotFoundError' || name === 'OverconstrainedError' ? words('Kein Mikrofon', 'No microphone')
@@ -226,12 +243,6 @@ satz.on('rec:start', async (id: number) => {
   }
 })
 
-function stop() {
-  stream?.getTracks().forEach(track => track.stop())
-  stream = null
-  context?.close().catch(() => {})
-  context = null
-}
-satz.on('rec:stop', stop)
+satz.on('rec:stop', () => microphone.stop())
 
 satz.send('card:ready')

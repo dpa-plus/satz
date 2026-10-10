@@ -7,10 +7,6 @@ export function setLanguage(language: Language) {
   current = language
 }
 
-export function currentLanguage(): Language {
-  return current
-}
-
 /** The system's language, German if it is German, English otherwise. */
 export function systemLanguage(locale: string): Language {
   return locale.toLowerCase().startsWith('de') ? 'de' : 'en'

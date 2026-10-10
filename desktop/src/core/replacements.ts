@@ -195,9 +195,12 @@ export function applyReplacements(rules: Replacement[], text: string): string {
         output += written
         break
       case 'punctuation':
-        output = trimTrailing(output, ' ,')
+        // The model writes a sentence mark of its own beside the spoken one
+        // ("Zeit. Fragezeichen." and "dir Fragezeichen?"): what was said wins,
+        // one mark, not ".?" or "? ?".
+        output = trimTrailing(output, ' ,.;:!?')
         output += written
-        after = skip(text, ' ,.;:', after)
+        after = skip(text, '.!?'.includes(written) ? ' ,.;:!?' : ' ,.;:', after)
         if (after < text.length && text[after] !== '\n') output += ' '
         capitalizeNext = '.!?'.includes(written)
         break

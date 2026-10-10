@@ -23,3 +23,23 @@ test('every channel the preload lets through is answered by main.ts, and nothing
   assert.deepEqual([...invoke].filter(channel => !handled.has(channel)), [])
   assert.deepEqual([...handled].filter(channel => !invoke.has(channel)), [])
 })
+
+/**
+ * These read the main process's source for channel names. They prove the
+ * names agree on both sides, not that a handler runs: unit tests do not reach
+ * main.ts, so a change there is also checked by starting the packaged app
+ * once (AGENTS.md).
+ */
+const mainSources = ['main.ts', 'card.ts'].map(file => fs.readFileSync(path.join(__dirname, '..', 'src', 'main', file), 'utf8')).join('\n')
+
+test('every channel the pages may send is listened for by the main process, and nothing else is', () => {
+  const listened = new Set([...mainSources.matchAll(/ipcMain\.(?:on|once)\(\s*'([^']+)'/g)].map(([, channel]) => channel))
+  assert.deepEqual([...send].filter(channel => !listened.has(channel)), [])
+  assert.deepEqual([...listened].filter(channel => !send.has(channel)), [])
+})
+
+test('every channel the pages may receive is sent by the main process, and nothing else is', () => {
+  const sent = new Set([...mainSources.matchAll(/(?:card\.send|tellWindow|webContents\.send)\(\s*'([^']+)'/g)].map(([, channel]) => channel))
+  assert.deepEqual([...receive].filter(channel => !sent.has(channel)), [])
+  assert.deepEqual([...sent].filter(channel => !receive.has(channel)), [])
+})

@@ -3,7 +3,8 @@
  * pages use has to be listed here, or the call is refused: the Local model's
  * Download button did nothing because its channel was missing
  * (test/channels.test.ts checks the pages against these lists, and these
- * lists against what main.ts answers).
+ * lists against the channels main.ts and card.ts handle, listen to and send;
+ * names only, it does not run a handler).
  */
 export const send = new Set(['card:ready', 'card:button', 'card:caret', 'card:rect', 'card:pointer-inside', 'card:drag', 'rec:started', 'rec:chunk'])
 export const receive = new Set(['card:state', 'rec:start', 'rec:stop', 'history:changed', 'models:changed', 'local:changed', 'window:page'])

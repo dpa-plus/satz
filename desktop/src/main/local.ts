@@ -2,7 +2,7 @@ import { utilityProcess, type UtilityProcess } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import { engineOf, secondsPer10, type LocalModel, type Speed } from '../core/localModels'
-import { gaveWay, isDownloaded, isModelId, machineName, markerPath, readSpeed, writeSpeed, type LocalState } from './localFiles'
+import { gaveWay, isDownloaded, isModelId, machineName, markerPath, readSpeed, removeStaleTemps, writeSpeed, type LocalState } from './localFiles'
 
 export type { LocalState } from './localFiles'
 
@@ -77,6 +77,18 @@ class Helper {
   }
 }
 
+export interface LocalModelsOptions {
+  /** Starts a helper process; Electron's utilityProcess.fork unless a test gives its own. */
+  fork?: Fork
+  /**
+   * false: nothing in the models folder is downloaded, removed or swept. A
+   * test copy of satz that was not given a folder of its own would be using
+   * the real satz's models, and must not change them (like the Mac's
+   * LaunchMode.canChangeModels).
+   */
+  canChangeFiles?: boolean
+}
+
 /**
  * The models on this computer, for the provider "Lokal": Whisper on
  * transformers.js and ONNX Runtime, and Handy's models on sherpa-onnx, each
@@ -107,10 +119,19 @@ export class LocalModels {
   /** A download that arrived complete: satz may start using it, and measures its speed. */
   onArrived: (id: string) => void = () => {}
 
-  constructor(private dir: string, private log: (message: string) => void, private changed: () => void, private version: string, fork: Fork = electronFork) {
+  private canChangeFiles: boolean
+
+  constructor(private dir: string, private log: (message: string) => void, private changed: () => void, private version: string, options: LocalModelsOptions = {}) {
+    const fork = options.fork ?? electronFork
+    this.canChangeFiles = options.canChangeFiles ?? true
     const make = (engine: Engine, script: string, name: string) =>
       new Helper(script, name, dir, fork, message => this.receive(message), () => this.helperStopped(engine), log)
     this.helpers = { whisper: make('whisper', 'local-worker.js', 'satz Whisper'), sherpa: make('sherpa', 'sherpa-worker.js', 'satz sherpa-onnx') }
+    // Before any helper runs: what a satz that quit in the middle of a download left behind.
+    if (this.canChangeFiles) {
+      const removed = removeStaleTemps(dir)
+      if (removed.length) log(`local: removed ${removed.length} half-written file${removed.length === 1 ? '' : 's'} of a download that was cut off`)
+    }
   }
 
   private helperFor(id: string) { return this.helpers[engineOf(id)] }
@@ -133,8 +154,13 @@ export class LocalModels {
     // Ready and missing come from the disk from now on.
     if (state.kind === 'ready' || state.kind === 'missing') this.states.delete(id)
     else this.states.set(id, state)
-    if (state.kind === 'ready' && (was === 'downloading' || was === 'preparing')) this.onArrived(id)
+    const wasDownloading = was === 'downloading' || was === 'preparing'
+    if (state.kind === 'ready' && wasDownloading) this.onArrived(id)
     this.changed()
+    // A download that ended without a model (failed, cancelled) was the
+    // helper's last work if nothing is wanted of it; one that arrived is
+    // followed by its speed test, which looks again when it is over.
+    if (wasDownloading && (state.kind === 'failed' || state.kind === 'missing')) void this.letGo(engineOf(id))
   }
 
   /** A helper that crashed fails the downloads it had under way. */
@@ -164,7 +190,9 @@ export class LocalModels {
    * ends if nothing else needs it: ONNX Runtime keeps much of a model's
    * memory after letting go of it (700 MB of Parakeet's 1.9 GB, more with
    * each load), and only the process ending gives it all back. The next
-   * model starts it again.
+   * model starts it again. Asked again whenever the work that kept the
+   * helper alive is over (a download, a speed test): a switch to another
+   * provider made meanwhile found it busy and left it running for good.
    */
   private async letGo(engine: Engine) {
     const helper = this.helpers[engine]
@@ -182,6 +210,7 @@ export class LocalModels {
   /** Fetches the files beside the model in use, which stays loaded. */
   download(id: string) {
     if (!isModelId(id) || this.downloading) return
+    if (!this.canChangeFiles) return this.log(`local: not downloading ${id}, a test copy needs --models-dir for that`)
     this.set(id, { kind: 'downloading', fraction: 0 })
     this.helperFor(id).post({ type: 'download', id })
   }
@@ -201,6 +230,8 @@ export class LocalModels {
     if (!this.isReady(id) || this.measuring.has(id)) return 'failed'
     this.measuring.add(id)
     this.changed()
+    // Asked again after a dictation: the helper is still needed.
+    let again = false
     try {
       const { ms } = await this.ask(this.helperFor(id), { type: 'measure', id, samples: clip, vocabulary, spoken, told })
       const speed: Speed = { secondsPer10: secondsPer10(Number(ms), clip.length / 16_000), date: new Date().toISOString(), version: this.version, machine: machineName() }
@@ -209,6 +240,7 @@ export class LocalModels {
       return 'done'
     } catch (error) {
       if ((error as Error).message === gaveWay) {
+        again = true
         this.log(`local: ${id}'s speed test gave way to a dictation, again later`)
         return 'deferred'
       }
@@ -217,12 +249,16 @@ export class LocalModels {
     } finally {
       this.measuring.delete(id)
       this.changed()
+      // The last of a download's work, for a model nobody uses: a download
+      // started on another provider, or on the other engine than the one in use.
+      if (!again) void this.letGo(engineOf(id))
     }
   }
 
   /** The folder goes to the Trash, like everything satz removes, once the engine has let go of it. The model in use stays loaded when another goes. */
   async remove(id: string, trash: (folder: string) => Promise<void>) {
     if (!isModelId(id)) return
+    if (!this.canChangeFiles) return this.log(`local: not removing ${id}, a test copy needs --models-dir for that`)
     const helper = this.helperFor(id)
     if (helper.running) await this.ask(helper, { type: 'release', id }).catch(() => {})
     const folder = path.join(this.dir, id)

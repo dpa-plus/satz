@@ -21,7 +21,8 @@ export type Phase =
   | { kind: 'listening' }
   | { kind: 'paused' }
   | { kind: 'finishing' }
-  | { kind: 'failed'; message: string; canRetry: boolean }
+  /** `canRestore`: the text is kept as a snapshot and the card can bring it back (a delivery that threw). */
+  | { kind: 'failed'; message: string; canRetry: boolean; canRestore?: boolean }
   | { kind: 'discarded' }
   | { kind: 'clipboard' }
 
@@ -51,9 +52,12 @@ export interface SessionDeps {
   log?(message: string): void
   /** Sample rate of everything the sources produce. */
   sampleRate?: number
+  /** Whether a recording has speech in it; core/speech.ts's gate unless a test (audio made of letters) gives its own. */
+  hasSpeech?(samples: Float32Array): boolean
 }
 
-interface Segment { audio: Float32Array; transcribed: number; failure?: string }
+/** `futile`: asking again with this audio fails the same way (the provider's upload limit), so no Retry. */
+interface Segment { audio: Float32Array; transcribed: number; failure?: string; futile?: boolean }
 interface Held { id: number; source: AudioSource; start: number; end?: number }
 
 export interface Snapshot {
@@ -103,10 +107,17 @@ export class Session {
   private stopping: Held[] = []
   private sessionToken = 0
   private startToken = 0
+  /**
+   * Counts the dictations begun (and restored): a queued start belongs to the
+   * delivery that read it and is dropped when another dictation began since.
+   */
+  private generation = 0
   /** The shortcut was pressed to finish while the microphone was still opening. */
   private finishWhenOpen = false
   /** The shortcut was pressed while the last dictation was being written. */
   private startWhenDone = false
+  /** The shortcut is down now (hold to talk): a queued start waits for it. */
+  private keyHeld = false
   private closeTimer: ReturnType<typeof setTimeout> | null = null
   private breathTimer: ReturnType<typeof setInterval> | null = null
   breathBright = true
@@ -114,6 +125,7 @@ export class Session {
   constructor(private deps: SessionDeps) {}
 
   private get rate() { return this.deps.sampleRate ?? 16_000 }
+  private hears(samples: Float32Array) { return this.deps.hasSpeech ? this.deps.hasSpeech(samples) : hasSpeech(samples, this.rate) }
   private changed() { this.onChange() }
   private log(message: string) { this.deps.log?.(message) }
 
@@ -125,14 +137,17 @@ export class Session {
     return this.hasRealText || [...this.segments.values()].some(s => s.audio.length > 0) || this.stopping.length > 0 || this.sends.size > 0
   }
   get inFlight() { return this.sends.size }
-  get canRestore() { return ['idle', 'discarded', 'clipboard'].includes(this.phase.kind) }
-  get activeMarkerRange(): Range | null { return this.activeID ? this.doc.rangeOf('mark', this.activeID) : null }
+  get canRestore() {
+    const p = this.phase
+    return ['idle', 'discarded', 'clipboard'].includes(p.kind) || (p.kind === 'failed' && p.canRestore === true)
+  }
   plainText() { return this.doc.plain() }
 
   // MARK: - Shortcut
 
   /** The shortcut went down. */
   press() {
+    this.keyHeld = true
     const mode = this.deps.triggerMode(), p = this.phase
     if (p.kind === 'idle' || p.kind === 'discarded' || p.kind === 'clipboard') return this.begin()
     if (mode === 'tap' && (p.kind === 'listening' || p.kind === 'paused')) return this.finish()
@@ -148,7 +163,9 @@ export class Session {
     }
     // The next dictation, started while this one is still being written: it
     // begins once this one is out. Ignored, the words said meanwhile were lost.
-    if (mode === 'tap' && p.kind === 'finishing') { this.startWhenDone = !this.startWhenDone; return }
+    // Holding to talk, the key is down when it is asked for, and release()
+    // takes it back if the key comes up before this dictation is out.
+    if (p.kind === 'finishing') { this.startWhenDone = mode === 'hold' ? true : !this.startWhenDone; return }
     if (mode === 'hold' && p.kind === 'paused') return this.resume()
   }
 
@@ -168,8 +185,12 @@ export class Session {
 
   /** The shortcut came up. Only meaningful while holding to talk. */
   release() {
+    this.keyHeld = false
     if (this.deps.triggerMode() !== 'hold') return
     if (this.phase.kind === 'listening') return this.finish()
+    // Let go before the last dictation was out: there is nothing to hold for,
+    // and a recording started now would run on with the key up.
+    if (this.phase.kind === 'finishing') { this.startWhenDone = false; return }
     if (this.phase.kind === 'starting') {
       // Let go before the microphone opened. Earlier text stays, paused.
       if (this.hasRealText || [...this.segments.values()].some(s => s.audio.length > 0) || this.stopping.length > 0) {
@@ -233,6 +254,7 @@ export class Session {
 
   restore(snapshot: Snapshot) {
     if (!this.canRestore) return
+    this.generation++
     this.cancelClose()
     this.stopEverything()
     this.reset()
@@ -274,6 +296,7 @@ export class Session {
   // MARK: - Steps
 
   private begin() {
+    this.generation++
     this.cancelClose()
     this.stopEverything()
     this.reset()
@@ -388,9 +411,9 @@ export class Session {
         await [...this.sends.values()][0].promise
         if (token !== this.sessionToken) return
       }
-      const failure = [...this.segments.values()].find(s => s.failure)?.failure
-      if (failure) {
-        this.phase = { kind: 'failed', message: failure, canRetry: true }
+      const failed = [...this.segments.values()].find(s => s.failure)
+      if (failed) {
+        this.phase = { kind: 'failed', message: failed.failure!, canRetry: !failed.futile }
         this.changed()
         return
       }
@@ -401,10 +424,17 @@ export class Session {
   private async deliver() {
     // Read before close() resets it.
     const startNext = this.startWhenDone
+    const generation = this.generation
     try {
       await this.deliverText()
     } finally {
-      if (startNext) this.begin()
+      // The card is gone while the text is pasted, so the next dictation may
+      // already have been started by hand; starting the queued one now would
+      // cancel its microphone and wipe what was said.
+      // Holding to talk, a key let go while the text was pasted (the card
+      // already closed, so release() could not take the start back) means
+      // no new dictation: it would run on with the key up.
+      if (startNext && generation === this.generation && (this.deps.triggerMode() !== 'hold' || this.keyHeld)) this.begin()
     }
   }
 
@@ -431,9 +461,12 @@ export class Session {
       this.log(`delivery failed: ${(error as Error)?.message ?? error}`)
       this.discarded = snapshot
       if (this.phase.kind !== 'idle') return
-      this.phase = { kind: 'failed', message: de('Nicht eingefügt, im Menü wiederherstellen', 'Not pasted, restore it from the menu'), canRetry: false }
+      // The text is safe in `discarded`: the card offers it back right here
+      // (the tray's entry is there too), and closes like every other failure.
+      this.phase = { kind: 'failed', message: de('Nicht eingefügt', 'Not pasted'), canRetry: false, canRestore: true }
       this.onOpen()
       this.changed()
+      this.closeLater(5000)
       return
     }
     if (!outcome.pasted) {
@@ -455,16 +488,30 @@ export class Session {
     const running = this.sends.get(id)
     // Already on its way with exactly this audio: let it arrive.
     if (running && running.covers === segment.audio.length && !segment.failure) return
+    // Silence goes nowhere: a provider answers it with something made up
+    // ("Vielen Dank."), and the room's sound is nobody else's business. It
+    // counts as sent and said nothing, so a dictation of only silence ends in
+    // "Nichts gehört" without a request.
+    if (!this.hears(segment.audio)) {
+      this.log(`no speech in ${(segment.audio.length / this.rate).toFixed(1)} s of audio, not sent`)
+      segment.failure = undefined
+      segment.futile = undefined
+      this.apply('', id, segment.audio.length)
+      this.changed()
+      return
+    }
     segment.failure = undefined
+    segment.futile = undefined
     const audio = segment.audio, covered = audio.length, token = this.sessionToken, gen = ++this.sendGen
     const rules = this.deps.replacements()
     const started = Date.now()
     const promise = (async () => {
-      let raw: string | null = null, failure: string | null = null
+      let raw: string | null = null, failure: string | null = null, futile = false
       try {
         raw = await this.deps.transcribe(audio)
       } catch (error) {
         failure = error instanceof TranscriptionFailure ? error.short : de('Fehler', 'Error')
+        futile = error instanceof TranscriptionFailure && error.kind === 'tooLarge'
         this.log(`transcription failed: ${(error as Error).message}`)
       }
       if (token !== this.sessionToken || this.sends.get(id)?.gen !== gen) return
@@ -475,11 +522,11 @@ export class Session {
         // Nothing back for audio with speech in it is a failure, not silence:
         // applied, it wiped this spot's text, and "Nichts gehört" then threw
         // the audio away.
-        if (transcript.trim() === '' && hasSpeech(audio, this.rate)) {
+        if (transcript.trim() === '' && this.hears(audio)) {
           this.log(`empty answer for ${(covered / this.rate).toFixed(1)} s of speech, kept for another try`)
           const s = this.segments.get(id); if (s) s.failure = de('Nichts verstanden', 'Not understood')
         } else this.apply(transcript, id, covered)
-      } else { const s = this.segments.get(id); if (s) s.failure = failure ?? undefined }
+      } else { const s = this.segments.get(id); if (s) { s.failure = failure ?? undefined; s.futile = futile } }
       this.changed()
     })()
     this.sends.set(id, { promise, covers: covered, gen })

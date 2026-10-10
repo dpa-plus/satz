@@ -31,12 +31,24 @@ export interface SherpaSource {
   revision: string
   files: SherpaFile[]
   /**
-   * Split at quiet moments into pieces of at most 30 s (core/windows.ts), as
-   * Whisper is: Moonshine, SenseVoice and Canary were made for short clips.
-   * Parakeet takes a whole dictation.
+   * The longest piece, in seconds, a recording goes through the model in; a
+   * longer one is split at quiet moments (core/windows.ts), as Whisper's is.
+   * Moonshine, SenseVoice and Canary were made for short clips and lose words
+   * past 30 s. Parakeet takes minutes, but its encoder holds 5000 frames, 400 s
+   * of audio: one second more and ONNX Runtime refuses the whole call (on the
+   * Mac it aborts the app). 240 s leaves room, and a dictation under four
+   * minutes is still one piece.
    */
-  windowed: boolean
+  window: number
 }
+
+/**
+ * Whether each piece gets a second of silence after it. Canary dropped the
+ * last word of a piece cut right after it ("ohne Gutschriften" came back as
+ * "Ohne"), and with the second it kept it every time. Not Parakeet: after a
+ * word cut off mid-way, silence made it write nothing at all.
+ */
+export const padsEnd = (kind: SherpaKind) => kind === 'canary'
 
 const parts: Record<SherpaKind, { field: string; roles: SherpaRole[] }> = {
   'nemo-transducer': { field: 'transducer', roles: ['encoder', 'decoder', 'joiner'] },

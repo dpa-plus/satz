@@ -7,8 +7,8 @@ import v8 from 'node:v8'
 import vm from 'node:vm'
 import type { Language } from '../core/language'
 import { localModel } from '../core/localModels'
-import { sherpaConfig, sherpaPackage, sherpaURL, tidySherpaText, type SherpaConfig, type SherpaSource } from '../core/sherpa'
-import { hasSpeech } from '../core/speech'
+import { padsEnd, sherpaConfig, sherpaPackage, sherpaURL, tidySherpaText, type SherpaConfig, type SherpaSource } from '../core/sherpa'
+import { hasSpeech, pieceThreshold, speechEnd, speechThreshold } from '../core/speech'
 import { windows } from '../core/windows'
 import { LocalEngine } from './localEngine'
 import type { LocalState } from './localFiles'
@@ -38,6 +38,13 @@ export interface SherpaAddon {
 export interface SherpaLoaded { id: string; recognizer: unknown; config: SherpaConfig; language: string }
 
 const rate = 16_000
+
+/**
+ * Why a dictation fails: a piece of a longer recording with speech in it came
+ * back empty, even on a second try. Said in the log; the card says "Error"
+ * and offers Try again, which sends the audio once more (it is kept).
+ */
+export const pieceNotHeard = 'part of the recording came back empty'
 
 /**
  * V8's collector. Electron's helper processes do not expose it even when
@@ -171,6 +178,12 @@ export class SherpaEngine extends LocalEngine<SherpaLoaded> {
    * The word list is not passed: these models take no prompt (the
    * replacements still apply). A language goes to Canary only, which cannot
    * tell by itself: the one chosen for it, else the one set in Settings.
+   * A long recording goes through in pieces cut at quiet moments, one text
+   * in the end. Silence is never sent. A piece that comes back empty is
+   * tried once more up to its last sound (Parakeet wrote nothing for speech
+   * cut off mid-word and followed by quiet). One that stays empty fails the
+   * dictation: the other pieces' text would stand for the whole recording,
+   * and the lost words would never be asked for again.
    */
   protected async run(samples: Float32Array, loaded: SherpaLoaded, _vocabulary: string[], spoken: Language, told?: string): Promise<string> {
     const source = this.source(loaded.id)
@@ -180,16 +193,40 @@ export class SherpaEngine extends LocalEngine<SherpaLoaded> {
       this.native().offlineRecognizerSetConfig(loaded.recognizer, loaded.config)
       loaded.language = language
     }
+    const pieces = windows(samples, rate, source.window * rate)
+    // One decision about what is quiet for the whole recording: a piece judged
+    // alone lost its low-gain speech once more was said after a silence.
+    const whole = speechThreshold(samples, rate)
     const said: string[] = []
-    for (const piece of source.windowed ? windows(samples, rate) : [samples]) {
-      if (!hasSpeech(piece)) continue
-      const stream = this.native().createOfflineStream(loaded.recognizer)
-      this.native().acceptWaveformOffline(stream, { samples: piece, sampleRate: rate })
-      const { text } = JSON.parse(await this.native().decodeOfflineStreamAsync(loaded.recognizer, stream)) as { text?: string }
-      const tidy = tidySherpaText(text ?? '')
-      if (tidy) said.push(tidy)
+    for (const piece of pieces) {
+      const threshold = pieceThreshold(piece, whole, rate)
+      // The recording as a whole has speech (transcribe checked); a quiet piece of it is skipped.
+      if (!hasSpeech(piece, rate, threshold)) continue
+      let heard = await this.hear(loaded, source, piece)
+      const end = heard ? null : speechEnd(piece, rate, threshold)
+      if (end !== null && end < piece.length) heard = await this.hear(loaded, source, piece.subarray(0, end))
+      if (heard) said.push(heard)
+      // Only a piece that is speech by its own level fails the dictation. One
+      // that only the recording's lower level lets through (steady noise louder
+      // than the rest) may well be empty, and failing for it would fail every
+      // Try again as well. A lone piece's empty answer is the session's "not
+      // understood", which keeps the audio too.
+      else if (pieces.length > 1 && hasSpeech(piece, rate)) throw new Error(pieceNotHeard)
     }
     return said.join(' ').replace(/\s+/g, ' ').trim()
+  }
+
+  /** One call to the recognizer, with the second of silence after the audio that Canary needs. */
+  private async hear(loaded: SherpaLoaded, source: SherpaSource, audio: Float32Array): Promise<string> {
+    let samples = audio
+    if (padsEnd(source.kind)) {
+      samples = new Float32Array(audio.length + rate)
+      samples.set(audio)
+    }
+    const stream = this.native().createOfflineStream(loaded.recognizer)
+    this.native().acceptWaveformOffline(stream, { samples, sampleRate: rate })
+    const { text } = JSON.parse(await this.native().decodeOfflineStreamAsync(loaded.recognizer, stream)) as { text?: string }
+    return tidySherpaText(text ?? '')
   }
 
   /**

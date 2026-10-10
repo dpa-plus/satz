@@ -12,7 +12,8 @@ import { runsSherpa, type SherpaFile, type SherpaSource } from './sherpa'
  * Two engines. Whisper runs through transformers.js (whisperEngine.ts): all
  * are onnx-community repos whose three files satz loads (localFiles.ts)
  * exist and whose 4-bit decoders take no `cache_position`, which
- * transformers.js 4.3.1 never sends; each was run end to end on 09.10.2026.
+ * transformers.js 4.3.1 never sends; each was run end to end on 09.10.2026,
+ * and is fetched from the commit it was run at (`WhisperSource`).
  * Left out on purpose: the *.en models (one model for English alone is
  * enough: Distil Large v3.5), lite-whisper (no language table),
  * whisper-small-ONNX and whisper-large-v3-turbo-ONNX (their 4-bit decoders
@@ -48,9 +49,45 @@ export interface LocalModel {
   speed: number
   /** Where a sherpa-onnx model's files come from, and how it runs. */
   sherpa?: SherpaSource
+  /** The commit and the files of a Whisper repo; none for one typed in by hand. */
+  whisper?: WhisperSource
 }
 
-const whisper = { engine: 'whisper' as const, language: 'auto' as const, languages: ['de', 'en'], maker: 'OpenAI' }
+/** The three files satz loads from a Whisper repo (transformers.js names them for the encoder at 8 bits and the decoder at 4). */
+export const whisperFiles = ['onnx/encoder_model_quantized.onnx', 'onnx/decoder_model_merged_q4.onnx', 'tokenizer.json']
+
+/** What a Whisper file has to be, from the repo's file list at the commit. */
+export interface WhisperFile {
+  name: string
+  bytes: number
+  /** The two ONNX files are LFS files: Hugging Face lists their SHA-256. */
+  sha256?: string
+  /** tokenizer.json is a plain git file, listed by its git blob id: the SHA-1 of "blob <bytes>", a NUL byte and the content. */
+  gitOid?: string
+}
+
+/**
+ * Whisper's files come from one commit of the onnx-community repo, not
+ * whatever `main` holds that day (src/main/whisperEngine.ts asks for it, and
+ * checks each file while it arrives): a re-upload there broke every new
+ * download before, and a repo that changes must not change what satz runs.
+ */
+export interface WhisperSource {
+  revision: string
+  files: WhisperFile[]
+}
+
+/** The encoder, the decoder and the tokenizer of a Whisper repo, each as `[bytes, SHA-256 or git blob id]`. */
+function pinned(revision: string, encoder: [number, string], decoder: [number, string], tokenizer: [number, string]): WhisperSource {
+  const [encoderFile, decoderFile, tokenizerFile] = whisperFiles
+  return { revision, files: [
+    { name: encoderFile, bytes: encoder[0], sha256: encoder[1] },
+    { name: decoderFile, bytes: decoder[0], sha256: decoder[1] },
+    { name: tokenizerFile, bytes: tokenizer[0], gitOid: tokenizer[1] },
+  ] }
+}
+
+const whisperModel = { engine: 'whisper' as const, language: 'auto' as const, languages: ['de', 'en'], maker: 'OpenAI' }
 const total = (files: SherpaFile[]) => files.reduce((sum, file) => sum + file.bytes, 0)
 
 /** One sherpa-onnx model; its size is the sum of its files. */
@@ -67,48 +104,56 @@ const european = ['bg', 'hr', 'cs', 'da', 'nl', 'en', 'et', 'fi', 'fr', 'de', 'e
  * first. Sizes and checksums from each repo's file list (09.10.2026).
  */
 export const localModels: LocalModel[] = [
-  { ...whisper, id: 'onnx-community/whisper-large-v3-turbo', name: 'Whisper Large v3 Turbo', bytes: 981_450_034, original: 'openai/whisper-large-v3-turbo',
+  { ...whisperModel, id: 'onnx-community/whisper-large-v3-turbo', name: 'Whisper Large v3 Turbo', bytes: 981_450_034, original: 'openai/whisper-large-v3-turbo',
+    whisper: pinned('360ebcde2559d60bb474678be3c1de9ef347d01a', [644822195, 'd2f853dc3254fdc0079f55dd4433ea716ac98ec5574d3b475f288f2a77cebba9'], [334147222, '8b933ac24074a24a1635084d06a4ed37e387ef22d980f184a5fc27418e9ceeb8'], [2480617, '3a5e2ba63acdcac9a19ba56cf9bd27f185bfff61']),
     description: { de: 'Ausgewogen: genau und schnell.', en: 'Balanced: accurate and fast.' }, accuracy: 0.80, speed: 0.40 },
-  { ...whisper, id: 'onnx-community/whisper-large-v3-ONNX', name: 'Whisper Large v3', bytes: 1_445_984_744, original: 'openai/whisper-large-v3',
+  { ...whisperModel, id: 'onnx-community/whisper-large-v3-ONNX', name: 'Whisper Large v3', bytes: 1_445_984_744, original: 'openai/whisper-large-v3',
+    whisper: pinned('3b6257ad5e67aa523c7c07f4fea04d445eecc4a6', [644795348, 'f438cff17ce55089f5046c7392421ec646cdf3081098a6510558578321a15c3f'], [797258751, 'd02d5453f8dd09f7c5d34cb0c7432131c4e151f4797387282a59ad82db388655'], [3930645, '33c8354828689f5daef89956ad477df739eccd16']),
     description: { de: 'Sehr genau, aber langsam.', en: 'Very accurate, but slow.' }, accuracy: 0.85, speed: 0.30 },
   sherpaModel({ id: 'sherpa/parakeet-v3', name: 'Parakeet V3', original: 'nvidia/parakeet-tdt-0.6b-v3', maker: 'NVIDIA', language: 'auto', languages: european,
     description: { de: 'Schnell und genau. 25 europäische Sprachen.', en: 'Fast and accurate. 25 European languages.' }, accuracy: 0.80, speed: 0.85 }, {
-    kind: 'nemo-transducer', repo: 'sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8', revision: '2bda32ec70b097a55adaa07d9a7173915b43cc78', windowed: false, files: [
+    kind: 'nemo-transducer', repo: 'sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8', revision: '2bda32ec70b097a55adaa07d9a7173915b43cc78', window: 240, files: [
       { name: 'encoder.int8.onnx', role: 'encoder', bytes: 652_184_281, sha256: 'acfc2b4456377e15d04f0243af540b7fe7c992f8d898d751cf134c3a55fd2247' },
       { name: 'decoder.int8.onnx', role: 'decoder', bytes: 11_845_275, sha256: '179e50c43d1a9de79c8a24149a2f9bac6eb5981823f2a2ed88d655b24248db4e' },
       { name: 'joiner.int8.onnx', role: 'joiner', bytes: 6_355_277, sha256: '3164c13fc2821009440d20fcb5fdc78bff28b4db2f8d0f0b329101719c0948b3' },
       { name: 'tokens.txt', role: 'tokens', bytes: 93_939, sha256: 'd58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d' },
     ] }),
-  { ...whisper, id: 'onnx-community/whisper-medium-ONNX', name: 'Whisper Medium', bytes: 786_438_953, original: 'openai/whisper-medium',
+  { ...whisperModel, id: 'onnx-community/whisper-medium-ONNX', name: 'Whisper Medium', bytes: 786_438_953, original: 'openai/whisper-medium',
+    whisper: pinned('d3978248a6b5de6df7ec29ddfbde3993845fa806', [313154567, '2507d090bf9f1d468f4c1cef274aa34eda025894118f5476e24a0d80308a5315'], [469353892, 'ddd9200a8e1045a8432467e685632075fda1fca9cede9014e9556169b615bde5'], [3930494, '7e30a8ca85fc59e4ce975a4e6d488771714891fb']),
     description: { de: 'Gute Genauigkeit, mittleres Tempo.', en: 'Good accuracy, medium speed.' }, accuracy: 0.75, speed: 0.60 },
   sherpaModel({ id: 'sherpa/canary-180m', name: 'Canary 180M Flash', original: 'nvidia/canary-180m-flash', maker: 'NVIDIA', language: 'spoken', languages: ['en', 'de', 'es', 'fr'],
     description: { de: 'Sehr schnell. Englisch, Deutsch, Spanisch, Französisch.', en: 'Very fast. English, German, Spanish, French.' }, accuracy: 0.75, speed: 0.85 }, {
-    kind: 'canary', repo: 'sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8', revision: '9077164e0d3dd1d5353743e89ceaa1d3a770838c', windowed: true, files: [
+    kind: 'canary', repo: 'sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8', revision: '9077164e0d3dd1d5353743e89ceaa1d3a770838c', window: 30, files: [
       { name: 'encoder.int8.onnx', role: 'encoder', bytes: 132_678_643, sha256: '7a75b4e2a5857a6dcc0819503bbe3fad66943db4a3ccf21d3f27c633667d303f' },
       { name: 'decoder.int8.onnx', role: 'decoder', bytes: 74_437_848, sha256: 'e41a2ab9c0c2fe81a1e8ade5a45fb02a74bc4db7d1f91b89a54a25e2cf79cba2' },
       { name: 'tokens.txt', role: 'tokens', bytes: 53_555, sha256: '2dae6fc7815f9640645e0c765522b278ee0cef49b482d91f6913e334628d3e77' },
     ] }),
-  { ...whisper, id: 'onnx-community/whisper-small', name: 'Whisper Small', bytes: 327_955_953, original: 'openai/whisper-small',
+  { ...whisperModel, id: 'onnx-community/whisper-small', name: 'Whisper Small', bytes: 327_955_953, original: 'openai/whisper-small',
+    whisper: pinned('36050c46d777d46dc4b5f43f6d90574fc38f8732', [92326160, 'a43a83f3c5361cd591cfa7c36f14b43cf7cb22f47a415cc14a8d557be800fa92'], [233149327, '795c61b344576719c2b249cc9911c78b4cc552c8c6a5407be21a3380a0791b13'], [2480466, '1e95340ff836fad1b5932e800fb7b8c5e6d78a74']),
     description: { de: 'Schnell, ordentlich auf Englisch.', en: 'Fast, decent in English.' }, accuracy: 0.60, speed: 0.85 },
-  { ...whisper, id: 'onnx-community/whisper-base', name: 'Whisper Base', bytes: 149_284_199, original: 'openai/whisper-base',
+  { ...whisperModel, id: 'onnx-community/whisper-base', name: 'Whisper Base', bytes: 149_284_199, original: 'openai/whisper-base',
+    whisper: pinned('1846881b6b3a3024392c1eea3ad983695bc23925', [23201314, '5862993336bf33acd23736071aae2b32261d3b1b2f37780194460d4ef974dd46'], [123602419, '09f83b71ceedc97dab1d90b914715dc532a646a147abda11d83c64867b7c319c'], [2480466, '1e95340ff836fad1b5932e800fb7b8c5e6d78a74']),
     description: { de: 'Sehr schnell, ungenau.', en: 'Very fast, rough.' }, accuracy: 0.45, speed: 0.90 },
-  { ...whisper, id: 'onnx-community/whisper-tiny', name: 'Whisper Tiny', bytes: 99_319_158, original: 'openai/whisper-tiny',
+  { ...whisperModel, id: 'onnx-community/whisper-tiny', name: 'Whisper Tiny', bytes: 99_319_158, original: 'openai/whisper-tiny',
+    whisper: pinned('ff4177021cc41f7db950912b73ea4fdf7d01d8e7', [10124990, '2af4a414ca47aa30f61246017e5fe82b0a8d229281d1255ba666a2a7f6b84d19'], [86713702, 'a7573efde84f7d018d59e50e7f860c03e26623d68e23eb6037b76135367e72eb'], [2480466, '1e95340ff836fad1b5932e800fb7b8c5e6d78a74']),
     description: { de: 'Am schnellsten, sehr ungenau.', en: 'Fastest, very rough.' }, accuracy: 0.35, speed: 0.95 },
-  { ...whisper, id: 'onnx-community/whisper-large-v3-turbo-german-ONNX', name: 'Whisper Large v3 Turbo German', bytes: 982_774_635, original: 'primeLine/whisper-large-v3-turbo-german',
+  { ...whisperModel, id: 'onnx-community/whisper-large-v3-turbo-german-ONNX', name: 'Whisper Large v3 Turbo German', bytes: 982_774_635, original: 'primeLine/whisper-large-v3-turbo-german',
+    whisper: pinned('7a86cb9d63ad2517468c15fdac7dc9bb6d2abaed', [644795356, 'ac189ad19f63aa243af53cccd4dc4b82f27b2538c301cee7f861bf2076a39973'], [334048634, '997b30e5561f844e57424a8ea62a5d2b6fa7247aa060239f4b4142a40cb7a508'], [3930645, '33c8354828689f5daef89956ad477df739eccd16']),
     maker: 'primeLine', language: 'de', languages: ['de'], description: { de: 'Turbo, auf Deutsch trainiert.', en: 'Turbo, trained on German.' }, accuracy: 0.80, speed: 0.40 },
   sherpaModel({ id: 'sherpa/parakeet-v2', name: 'Parakeet V2', original: 'nvidia/parakeet-tdt-0.6b-v2', maker: 'NVIDIA', language: 'en', languages: ['en'],
     description: { de: 'Nur Englisch, das beste für Englisch.', en: 'English only. The best for English.' }, accuracy: 0.85, speed: 0.85 }, {
-    kind: 'nemo-transducer', repo: 'sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8', revision: '1ab9323565ddb038682214b292f588070a538ce2', windowed: false, files: [
+    kind: 'nemo-transducer', repo: 'sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8', revision: '1ab9323565ddb038682214b292f588070a538ce2', window: 240, files: [
       { name: 'encoder.int8.onnx', role: 'encoder', bytes: 652_184_296, sha256: 'a32b12d17bbbc309d0686fbbcc2987b5e9b8333a7da83fa6b089f0a2acd651ab' },
       { name: 'decoder.int8.onnx', role: 'decoder', bytes: 7_257_753, sha256: 'b6bb64963457237b900e496ee9994b59294526439fbcc1fecf705b31a15c6b4e' },
       { name: 'joiner.int8.onnx', role: 'joiner', bytes: 1_739_080, sha256: '7946164367946e7f9f29a122407c3252b680dbae9a51343eb2488d057c3c43d2' },
       { name: 'tokens.txt', role: 'tokens', bytes: 9_384, sha256: 'ec182b70dd42113aff6c5372c75cac58c952443eb22322f57bbd7f53977d497d' },
     ] }),
-  { ...whisper, id: 'onnx-community/distil-large-v3.5-ONNX', name: 'Distil-Whisper Large v3.5', bytes: 949_690_520, original: 'distil-whisper/distil-large-v3.5',
+  { ...whisperModel, id: 'onnx-community/distil-large-v3.5-ONNX', name: 'Distil-Whisper Large v3.5', bytes: 949_690_520, original: 'distil-whisper/distil-large-v3.5',
+    whisper: pinned('d908cd7fba0fb226f14b14ad955f22797ecfe5d5', [644795348, 'f438cff17ce55089f5046c7392421ec646cdf3081098a6510558578321a15c3f'], [300964527, '7d330d2a5b0ca10585d9687ac1690e1dfd0c99f46ebdfa35d6b914ebd7cd696f'], [3930645, '33c8354828689f5daef89956ad477df739eccd16']),
     maker: 'Hugging Face', language: 'en', languages: ['en'], description: { de: 'Schnell, nur Englisch.', en: 'Fast, English only.' }, accuracy: 0.75, speed: 0.45 },
   sherpaModel({ id: 'sherpa/moonshine-base', name: 'Moonshine Base', original: 'UsefulSensors/moonshine-base', maker: 'Useful Sensors', language: 'en', languages: ['en'],
     description: { de: 'Sehr schnell, nur Englisch. Kommt gut mit Akzenten klar.', en: 'Very fast, English only. Handles accents well.' }, accuracy: 0.70, speed: 0.90 }, {
-    kind: 'moonshine', repo: 'sherpa-onnx-moonshine-base-en-int8', revision: '052b0798ad1bf046a140fdd4efcd9426530fa3f5', windowed: true, files: [
+    kind: 'moonshine', repo: 'sherpa-onnx-moonshine-base-en-int8', revision: '052b0798ad1bf046a140fdd4efcd9426530fa3f5', window: 30, files: [
       { name: 'preprocess.onnx', role: 'preprocessor', bytes: 14_077_290, sha256: 'ffa630d395c5ccf76f5d4954be5b882df76aaf6491519ec01fd82ea7a3819fb2' },
       { name: 'encode.int8.onnx', role: 'encoder', bytes: 50_311_494, sha256: '7e38770f776f2e5583a53b052936005df2ba5c833d7e09c2a5fd796b94bf73e2' },
       { name: 'uncached_decode.int8.onnx', role: 'uncachedDecoder', bytes: 122_120_451, sha256: 'c01f4b35093bcac20d352d23a75a539e772964579f9d024a90e5e6f09cae9987' },
@@ -119,13 +164,13 @@ export const localModels: LocalModel[] = [
   // English as "PNNYES … BULLDOSZING THE GROOSSER" (this one writes it right).
   sherpaModel({ id: 'sherpa/sense-voice', name: 'SenseVoice', original: 'FunAudioLLM/SenseVoiceSmall', maker: 'Alibaba', language: 'auto', languages: ['zh', 'en', 'ja', 'ko', 'yue'],
     description: { de: 'Sehr schnell. Chinesisch, Englisch, Japanisch, Koreanisch, Kantonesisch.', en: 'Very fast. Chinese, English, Japanese, Korean, Cantonese.' }, accuracy: 0.65, speed: 0.95 }, {
-    kind: 'sense-voice', repo: 'sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17', revision: '2365baeacb507f821a0c8120fcee3d484dba7a07', windowed: true, files: [
+    kind: 'sense-voice', repo: 'sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17', revision: '2365baeacb507f821a0c8120fcee3d484dba7a07', window: 30, files: [
       { name: 'model.int8.onnx', role: 'model', bytes: 239_233_841, sha256: 'c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51' },
       { name: 'tokens.txt', role: 'tokens', bytes: 315_894, sha256: 'f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc' },
     ] }),
   sherpaModel({ id: 'sherpa/moonshine-tiny', name: 'Moonshine Tiny', original: 'UsefulSensors/moonshine-tiny', maker: 'Useful Sensors', language: 'en', languages: ['en'],
     description: { de: 'Extrem schnell, nur Englisch.', en: 'Extremely fast, English only.' }, accuracy: 0.55, speed: 0.95 }, {
-    kind: 'moonshine', repo: 'sherpa-onnx-moonshine-tiny-en-int8', revision: 'bf2b762c076d8ea61e2af0b3851c9564fb77552e', windowed: true, files: [
+    kind: 'moonshine', repo: 'sherpa-onnx-moonshine-tiny-en-int8', revision: 'bf2b762c076d8ea61e2af0b3851c9564fb77552e', window: 30, files: [
       { name: 'preprocess.onnx', role: 'preprocessor', bytes: 6_800_738, sha256: 'f33addce61a143460fe753b5ee5b7db255e5140b5b779c065b94f6c83ff0bf4e' },
       { name: 'encode.int8.onnx', role: 'encoder', bytes: 18_249_187, sha256: '8774dfba578de027ec6595c2c654a0836434489bc963a0db124a7f181f571acb' },
       { name: 'uncached_decode.int8.onnx', role: 'uncachedDecoder', bytes: 53_216_096, sha256: '216737000dd5881a17aa043f6bbd286add33e4c3b0ae257153e2ec15438bdc41' },

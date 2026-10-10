@@ -33,7 +33,7 @@ test('each sherpa-onnx model has exactly the files its recognizer needs, with si
     'https://huggingface.co/csukuangfj/sherpa-onnx-moonshine-tiny-en-int8/resolve/bf2b762c076d8ea61e2af0b3851c9564fb77552e/tokens.txt')
 })
 
-test('Parakeet runs as a NeMo transducer on the whole dictation', () => {
+test('Parakeet runs as a NeMo transducer, a dictation of up to four minutes in one piece', () => {
   const config = sherpaConfig(source('sherpa/parakeet-v3'), file, 'de', 4)
   assert.deepEqual(config, {
     featConfig: { sampleRate: 16_000, featureDim: 80 },
@@ -43,8 +43,9 @@ test('Parakeet runs as a NeMo transducer on the whole dictation', () => {
     },
     decodingMethod: 'greedy_search',
   })
-  assert.equal(source('sherpa/parakeet-v3').windowed, false)
-  assert.equal(source('sherpa/parakeet-v2').windowed, false)
+  // Its encoder holds 400 s: a longer piece is refused by ONNX Runtime.
+  assert.equal(source('sherpa/parakeet-v3').window, 240)
+  assert.equal(source('sherpa/parakeet-v2').window, 240)
 })
 
 test('Canary is told the language set in Settings, and writes punctuation', () => {
@@ -60,7 +61,7 @@ test('Moonshine has four parts; SenseVoice finds the language itself and writes 
     preprocessor: '/m/preprocess.onnx', encoder: '/m/encode.int8.onnx', uncachedDecoder: '/m/uncached_decode.int8.onnx', cachedDecoder: '/m/cached_decode.int8.onnx' })
   assert.deepEqual(sherpaConfig(source('sherpa/sense-voice'), file, 'en', 1).modelConfig.senseVoice, { model: '/m/model.int8.onnx', language: '', useInverseTextNormalization: 1 })
   // The models made for short clips are split at quiet moments.
-  for (const id of ['sherpa/moonshine-base', 'sherpa/moonshine-tiny', 'sherpa/sense-voice', 'sherpa/canary-180m']) assert.equal(source(id).windowed, true, id)
+  for (const id of ['sherpa/moonshine-base', 'sherpa/moonshine-tiny', 'sherpa/sense-voice', 'sherpa/canary-180m']) assert.equal(source(id).window, 30, id)
 })
 
 test('the native module for each system satz ships; none for Windows on ARM', () => {
@@ -104,7 +105,7 @@ function server(contents: Record<string, Uint8Array>, options: { delay?: number;
 function fakeSource(): { source: SherpaSource; contents: Record<string, Uint8Array> } {
   const contents: Record<string, Uint8Array> = { 'model.int8.onnx': new Uint8Array(5500).fill(7), 'tokens.txt': new TextEncoder().encode('a 0\nb 1\n') }
   const files = Object.entries(contents).map(([name, body]) => ({ name, role: name === 'tokens.txt' ? 'tokens' as const : 'model' as const, bytes: body.length, sha256: createHash('sha256').update(body).digest('hex') }))
-  return { source: { kind: 'sense-voice', repo: 'test', revision: '0'.repeat(40), windowed: true, files }, contents }
+  return { source: { kind: 'sense-voice', repo: 'test', revision: '0'.repeat(40), window: 30, files }, contents }
 }
 
 test('the files arrive one by one, with progress over all of them, each under its name only once complete', async () => {
@@ -195,7 +196,7 @@ async function withEngine(body: (engine: SherpaEngine, fake: ReturnType<typeof f
   try { await body(engine, fake, dir, states) } finally { fs.rmSync(dir, { recursive: true, force: true }) }
 }
 
-test('Parakeet hears a long dictation whole; Moonshine, SenseVoice and Canary get it in pieces of at most 30 s', () => withEngine(async (engine, fake, dir) => {
+test('Parakeet hears a long dictation whole (under four minutes); Moonshine, SenseVoice and Canary get it in pieces of at most 30 s', () => withEngine(async (engine, fake, dir) => {
   for (const id of ['sherpa/parakeet-v3', 'sherpa/moonshine-tiny']) placed(dir, id)
   assert.equal(await engine.transcribe(speech(70), 'sherpa/parakeet-v3', [], 'de'), 'piece of 70 s')
   fake.decoded.length = 0

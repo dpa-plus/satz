@@ -1,6 +1,6 @@
-import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
-import { createInterface } from 'node:readline'
+import { execFile } from 'node:child_process'
 import { isWayland } from './paste'
+import { PowerShellHelper } from './powershell'
 
 /**
  * The window the user was typing in when a dictation started, and getting it
@@ -77,49 +77,24 @@ while ($null -ne ($line = [Console]::In.ReadLine())) {
 }
 `
 
-class WindowsForeground implements Foreground {
-  private helper: ChildProcessWithoutNullStreams | null = null
-  private waiting: ((line: string) => void)[] = []
-  private ready: Promise<void> | null = null
+export class WindowsForeground implements Foreground {
+  constructor(private log: (message: string) => void, private helper = new PowerShellHelper(SCRIPT, 'window helper', log)) {}
 
-  constructor(private log: (message: string) => void) {}
-
-  private start(): Promise<void> {
-    if (this.ready) return this.ready
-    const encoded = Buffer.from(SCRIPT, 'utf16le').toString('base64')
-    const helper = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded], { windowsHide: true })
-    this.helper = helper
-    this.ready = new Promise((resolve, reject) => {
-      this.waiting.push(line => (line === 'ready' ? resolve() : reject(new Error(line))))
-      helper.on('error', reject)
-    })
-    createInterface({ input: helper.stdout }).on('line', line => this.waiting.shift()?.(line.trim()))
-    helper.stderr.on('data', chunk => {
-      const line = String(chunk).trim().split('\n')[0]
-      if (!line.startsWith('#< CLIXML')) this.log(`window helper: ${line}`)
-    })
-    helper.on('exit', () => { this.helper = null; this.ready = null; this.waiting.splice(0).forEach(answer => answer('error helper stopped')) })
-    return this.ready
-  }
-
-  private async ask(command: string): Promise<string> {
-    await this.start()
-    return new Promise<string>(resolve => {
-      const timer = setTimeout(() => resolve('error no answer'), 3000)
-      this.waiting.push(line => { clearTimeout(timer); resolve(line) })
-      this.helper?.stdin.write(command + '\r\n')
-    })
+  private ask(command: string): Promise<string> {
+    return this.helper.ask(command, 3000)
   }
 
   async current() {
-    const answer = await this.ask('current').catch(() => 'error')
-    return /^\d+$/.test(answer) && answer !== '0' ? answer : null
+    const answer = await this.ask('current').catch(() => null)
+    return answer !== null && /^\d+$/.test(answer) && answer !== '0' ? answer : null
   }
 
   async restore(window: string) {
-    const answer = await this.ask(`focus ${window}`).catch(() => 'error')
-    if (answer !== 'ok') this.log(`window helper: ${answer}`)
+    // No answer at all: the helper is down, which was logged where it failed.
     // A helper that cannot answer is no reason to hold the text back.
+    const answer = await this.ask(`focus ${window}`).catch(() => null)
+    if (answer === null) return true
+    if (answer !== 'ok') this.log(`window helper: ${answer}`)
     return answer === 'ok' || answer.startsWith('error')
   }
 
@@ -127,26 +102,33 @@ class WindowsForeground implements Foreground {
   async isTerminal() { return false }
 
   /** PowerShell takes a second or two to start: started with satz. */
-  prepare() { this.start().catch(error => this.log(`window helper: ${(error as Error).message}`)) }
+  prepare() { this.helper.prepare() }
 }
 
 // MARK: - Linux X11
 
-const run = (command: string, args: string[]) => new Promise<string | null>(resolve =>
+/** A command's output, or null if it is missing or failed. */
+export type Run = (command: string, args: string[]) => Promise<string | null>
+const execute: Run = (command, args) => new Promise<string | null>(resolve =>
   execFile(command, args, { timeout: 2000 }, (error, stdout) => resolve(error ? null : stdout.trim())))
 
-class X11Foreground implements Foreground {
+export class X11Foreground implements Foreground {
+  constructor(private run: Run = execute) {}
+
   async current() {
-    const output = await run('xprop', ['-root', '_NET_ACTIVE_WINDOW'])
-    return /0x[0-9a-f]+/i.exec(output ?? '')?.[0] ?? null
+    const output = await this.run('xprop', ['-root', '_NET_ACTIVE_WINDOW'])
+    const id = /0x[0-9a-f]+/i.exec(output ?? '')?.[0] ?? null
+    // 0x0 is "no active window" (focus on the desktop, or between windows),
+    // not a window to go back to: as 0 is none on Windows.
+    return id !== null && parseInt(id, 16) !== 0 ? id : null
   }
 
   async restore(window: string) {
     if ((await this.current()) === window) return true
     // xdotool or wmctrl, whichever is there; with neither, the window cannot
     // be brought back, and the text is not pasted into the wrong one.
-    if ((await run('xdotool', ['windowactivate', '--sync', String(parseInt(window, 16))])) !== null) return (await this.current()) === window
-    if ((await run('wmctrl', ['-i', '-a', window])) !== null) {
+    if ((await this.run('xdotool', ['windowactivate', '--sync', String(parseInt(window, 16))])) !== null) return (await this.current()) === window
+    if ((await this.run('wmctrl', ['-i', '-a', window])) !== null) {
       await new Promise(resolve => setTimeout(resolve, 150))
       return (await this.current()) === window
     }
@@ -154,7 +136,7 @@ class X11Foreground implements Foreground {
   }
 
   async isTerminal(window: string) {
-    const output = (await run('xprop', ['-id', window, 'WM_CLASS']))?.toLowerCase() ?? ''
+    const output = (await this.run('xprop', ['-id', window, 'WM_CLASS']))?.toLowerCase() ?? ''
     return TERMINALS.some(name => output.includes(`"${name}"`))
   }
 

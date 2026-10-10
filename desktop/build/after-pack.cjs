@@ -13,8 +13,11 @@ const { execFileSync } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
 
+exports.keepOnlyThisKeyboardHook = keepOnlyThisKeyboardHook
+
 exports.default = async function afterPack(context) {
   keepOnlyThisOnnxRuntime(context)
+  keepOnlyThisKeyboardHook(context)
   await addSherpa(context)
   if (context.electronPlatformName !== 'linux') return
   const name = context.packager.executableName
@@ -41,6 +44,17 @@ function keepOnlyThisOnnxRuntime(context) {
       if (system !== context.electronPlatformName || chip !== arch) fs.rmSync(path.join(bin, system, chip), { recursive: true, force: true })
     }
   }
+}
+
+// The keyboard hook (uiohook-napi) carries a prebuilt library for every system
+// and chip, found by name at run time: <system>-<chip>. Each package keeps its own.
+function keepOnlyThisKeyboardHook(context) {
+  const { Arch } = require('electron-builder')
+  const prebuilds = path.join(context.appOutDir, 'resources', 'app.asar.unpacked', 'node_modules', 'uiohook-napi', 'prebuilds')
+  if (!fs.existsSync(prebuilds)) return
+  const own = `${context.electronPlatformName}-${Arch[context.arch]}`
+  if (!fs.existsSync(path.join(prebuilds, own))) throw new Error(`uiohook-napi has no prebuilt library for ${own}`)
+  for (const name of fs.readdirSync(prebuilds)) if (name !== own) fs.rmSync(path.join(prebuilds, name), { recursive: true, force: true })
 }
 
 // sherpa-onnx (Handy's models) brings its native code as one npm package per

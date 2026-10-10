@@ -102,7 +102,8 @@ export function describe(id: string, provider: Provider, listedName?: string, pr
   const entry = known[id]
   // OpenRouter names its models "Maker: Name".
   const parts = listedName?.split(': ')
-  const maker = entry?.maker ?? (parts && parts.length > 1 ? parts[0] : undefined) ?? id.split('/')[0] ?? providers[provider].name()
+  // An id without a slash ("gpt-5-transcribe" at OpenAI or Groq) names no maker: the provider is the one.
+  const maker = entry?.maker ?? (parts && parts.length > 1 ? parts[0] : undefined) ?? (id.includes('/') ? id.split('/')[0] : providers[provider].name())
   const name = entry?.name ?? parts?.[parts.length - 1] ?? id
   return { id, name, maker, dollarsPerHour: entry?.measured ?? listedPrice(pricing), errorRate: entry?.errorRate }
 }

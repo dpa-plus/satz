@@ -1,10 +1,12 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
+import { createHash } from 'node:crypto'
+import path from 'node:path'
 import type { Language } from '../core/language'
-import { germanOrEnglish, onlyLanguage } from '../core/localModels'
-import { hasSpeech, keepEveryWord } from '../core/speech'
+import { germanOrEnglish, localModel, onlyLanguage, type WhisperFile, type WhisperSource } from '../core/localModels'
+import { hasSpeech, keepEveryWord, pieceThreshold, speechThreshold } from '../core/speech'
 import { windows } from '../core/windows'
 import { LocalEngine } from './localEngine'
-import type { LocalState } from './localFiles'
+import { removeStaleTemps, type LocalState } from './localFiles'
 
 /**
  * Whisper itself: transformers.js on ONNX Runtime, in satz's Whisper helper
@@ -26,15 +28,60 @@ const rate = 16_000
 /** Silence before each piece: speech from the very first instant lost its first words. */
 const lead = rate / 2
 
+/**
+ * transformers.js asks for `<host>/<repo>/resolve/main/<file>`. The same
+ * address at the commit the catalog names, and which of the model's three
+ * files it is (the others are small JSON, fetched as they are). Not an
+ * address on `main`: then it would be fetched unpinned, so it is an error.
+ * transformers.js's own `revision` option would do the first, but moves every
+ * file to a folder named for the commit, and the models already downloaded
+ * would be gone.
+ */
+export function pinnedRequest(id: string, source: WhisperSource, url: string): { url: string; file?: WhisperFile } {
+  const address = new URL(url)
+  const base = `/${id}/resolve/main/`
+  if (!address.pathname.startsWith(base)) throw new Error(`${id}: ${url} is not on the main branch, cannot pin it`)
+  const name = address.pathname.slice(base.length)
+  address.pathname = `/${id}/resolve/${source.revision}/${name}`
+  return { url: address.href, file: source.files.find(file => file.name === decodeURIComponent(name)) }
+}
+
+/**
+ * The same response, whose body fails at its end unless it is exactly the file
+ * the catalog names: the right size and checksum. transformers.js writes a
+ * file to `<file>.tmp…` and gives it its name when the body has been read; a
+ * body that ends in an error removes the temp file instead, so nothing damaged
+ * ever sits under the name the model is loaded from. (Too long a body fails at
+ * once: no need to fill the disk with it first.)
+ */
+export function checked(response: Response, file: WhisperFile): Response {
+  // tokenizer.json is a plain git file: its id is a SHA-1 over a header and the content.
+  const hash = createHash(file.sha256 ? 'sha256' : 'sha1')
+  if (!file.sha256) hash.update(`blob ${file.bytes}\0`)
+  let loaded = 0
+  const check = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      loaded += chunk.length
+      if (loaded > file.bytes) throw new Error(`${file.name} arrived damaged`)
+      hash.update(chunk)
+      controller.enqueue(chunk)
+    },
+    flush() {
+      if (loaded !== file.bytes || hash.digest('hex') !== (file.sha256 ?? file.gitOid)) throw new Error(`${file.name} arrived damaged`)
+    },
+  })
+  return new Response(response.body!.pipeThrough(check), { status: response.status, statusText: response.statusText, headers: response.headers })
+}
+
 export class WhisperEngine extends LocalEngine<Loaded> {
   private library: Promise<Transformers> | null = null
   /**
-   * The signal of the download a fetch belongs to, carried along with all of
-   * that download's work. One field for it was cleared as soon as the first
-   * part failed, while transformers.js went on fetching the other parts:
-   * without a signal, past Cancel.
+   * The download a fetch belongs to (its signal and the model), carried along
+   * with all of that download's work. One field for it was cleared as soon as
+   * the first part failed, while transformers.js went on fetching the other
+   * parts: without a signal, past Cancel.
    */
-  private download$ = new AsyncLocalStorage<AbortSignal>()
+  private download$ = new AsyncLocalStorage<{ signal: AbortSignal; id: string }>()
 
   /** @param fetcher Electron's net.fetch in the helper, put in globalThis.fetch there; asked for at each file. */
   constructor(dir: string, log: (message: string) => void, setState: (id: string, state: LocalState) => void,
@@ -45,11 +92,18 @@ export class WhisperEngine extends LocalEngine<Loaded> {
   private transformers(): Promise<Transformers> {
     this.library ??= import('@huggingface/transformers').then(library => {
       library.env.cacheDir = this.dir
-      // Every file transformers.js fetches for a download carries its signal, so Cancel stops it.
-      library.env.fetch = ((url: string, init?: RequestInit) => {
-        const signal = this.download$.getStore()
-        signal?.throwIfAborted()
-        return this.fetcher(url, { ...init, signal })
+      // Every file transformers.js fetches for a download carries its signal,
+      // so Cancel stops it, and comes from the commit the catalog names, its
+      // three big files checked on the way in. (A model typed in by hand has
+      // no commit to name.)
+      library.env.fetch = (async (url: string, init?: RequestInit) => {
+        const download = this.download$.getStore()
+        download?.signal.throwIfAborted()
+        const source = download && localModel(download.id)?.whisper
+        const asked = source ? pinnedRequest(download!.id, source, String(url)) : { url, file: undefined }
+        const response = await this.fetcher(asked.url, { ...init, signal: download?.signal })
+        // A range request (transformers.js asks for the size that way) is 206, not the file.
+        return asked.file && response.status === 200 && response.body ? checked(response, asked.file) : response
       }) as typeof fetch
       return library
     })
@@ -58,6 +112,9 @@ export class WhisperEngine extends LocalEngine<Loaded> {
 
   /** transformers.js fetches the files while it loads the model; its events are per file, the fraction is of all of them. */
   protected async fetchAndLoad(id: string, progress: (fraction: number) => void, signal: AbortSignal): Promise<Loaded> {
+    // What an earlier try left half written when this helper (or satz) stopped
+    // in the middle: transformers.js writes under a new name each time.
+    removeStaleTemps(path.join(this.dir, id))
     const files = new Map<string, { loaded: number; total: number }>()
     const onEvent = (event: { status: string; file?: string; loaded?: number; total?: number }) => {
       if (event.status !== 'progress' || !event.file || !event.total) return
@@ -67,7 +124,7 @@ export class WhisperEngine extends LocalEngine<Loaded> {
       for (const file of files.values()) { loaded += file.loaded; total += file.total }
       progress(loaded / Math.max(total, this.expectedBytes(id)))
     }
-    return this.download$.run(signal, () => this.load(id, onEvent, false))
+    return this.download$.run({ signal, id }, () => this.load(id, onEvent, false))
   }
 
   protected async free({ model }: Loaded) {
@@ -110,12 +167,18 @@ export class WhisperEngine extends LocalEngine<Loaded> {
     const transcribeToken = token('<|transcribe|>')
     const languages = { de: token('<|de|>'), en: token('<|en|>') }
     const said: string[] = []
+    /** The language the pieces so far were heard in. */
+    let heard: number | undefined
+    // What is quiet is decided once, for the whole recording: judged alone, a
+    // piece of low-gain speech over hum was dropped as soon as more was said
+    // after a silence (see pieceThreshold).
+    const whole = speechThreshold(samples, rate)
     // 30 s at a time, cut at the quietest moment of each piece's last ten
     // seconds. Whisper's own timestamps were tried for this: without its
     // timestamp rules it often wrote none and a whole window went by, and
     // with them it translated English sentences into German.
     for (const audio of windows(samples, rate, 30 * rate - lead)) {
-      if (!hasSpeech(audio)) continue
+      if (!hasSpeech(audio, rate, pieceThreshold(audio, whole, rate))) continue
       const piece = new Float32Array(lead + audio.length)
       piece.set(audio, lead)
       const { input_features } = await processor(piece)
@@ -128,14 +191,18 @@ export class WhisperEngine extends LocalEngine<Loaded> {
       // word after the start is the language it hears, asked for in every
       // piece and read for German and English only (germanOrEnglish), so
       // both work without a setting. Under two seconds the guess is a coin
-      // toss ("Ja." came back as "Yeah."): there the language set in Settings.
-      // A model for one language is never asked: it gets its own, in both
-      // decodes below.
-      let language = token(`<|${only ?? spoken}|>`)
-      if (!only && samples.length >= 2 * rate) {
+      // toss ("Ja." came back as "Yeah."): the piece, not the recording, is
+      // what counts there, since the last piece of a long dictation is often
+      // a few words ("Ja, genau." became "yeah, good now."). Such a piece
+      // takes the language of the pieces before it, one recording being in
+      // one language, else the language set in Settings. A model for one
+      // language is never asked: it gets its own, in both decodes below.
+      let language = heard ?? token(`<|${only ?? spoken}|>`)
+      if (!only && audio.length >= 2 * rate) {
         const { Tensor } = await this.transformers()
         const step = await model.forward({ input_features, decoder_input_ids: new Tensor('int64', [BigInt(start)], [1, 1]) })
-        language = germanOrEnglish(step.logits.data as Float32Array, languages) ?? language
+        heard = germanOrEnglish(step.logits.data as Float32Array, languages) ?? heard
+        language = heard ?? language
       }
       const plain = await decode([start, language, transcribeToken, notimestamps])
       let text = plain.text

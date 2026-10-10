@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { localModel, type Speed } from '../core/localModels'
+import { localModel, whisperFiles, type Speed } from '../core/localModels'
 
 /** Where a local model stands, as the settings and the card show it. */
 export type LocalState =
@@ -30,9 +30,6 @@ export const speedPath = (dir: string, id: string) => path.join(dir, `${fileName
  */
 export const isModelId = (id: unknown): id is string =>
   typeof id === 'string' && /^[\w.-]+\/[\w.-]+$/.test(id) && !id.split('/').some(part => /^\.+$/.test(part))
-
-/** The files a Whisper model loads (encoder at 8 bits, decoder at 4), as transformers.js names them. */
-const whisperFiles = ['onnx/encoder_model_quantized.onnx', 'onnx/decoder_model_merged_q4.onnx', 'tokenizer.json']
 
 /** What has to be in a model's folder: Whisper's three files, or every file of a sherpa-onnx model. */
 const modelFiles = (id: string) => localModel(id)?.sherpa?.files.map(file => file.name) ?? whisperFiles
@@ -64,4 +61,33 @@ export function writeSpeed(dir: string, id: string, speed: Speed) {
 export function machineName(): string {
   const cpus = os.cpus()
   return `${cpus[0]?.model.trim() || os.arch()}, ${cpus.length} cores`
+}
+
+/** A file transformers.js is still writing: `<file>.tmp.<pid of the writer>.<random>`, renamed to `<file>` once complete. */
+const tempFile = /\.tmp\.(\d+)\.[0-9a-z]+$/
+
+/** Whether a process with this id is running (one we may not signal still is). */
+function isRunning(pid: number): boolean {
+  try { process.kill(pid, 0); return true } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM' }
+}
+
+/**
+ * Removes the half files of downloads that stopped when satz did. A new
+ * download writes under a new name, so what satz left when it quit or
+ * crashed in the middle of a Whisper file (hundreds of MB) stayed beside the
+ * model for good. Only those whose writer is gone: a second satz (a test
+ * copy sharing the folder) may be downloading into it right now.
+ * @returns the paths removed
+ */
+export function removeStaleTemps(dir: string): string[] {
+  let entries: fs.Dirent[]
+  try { entries = fs.readdirSync(dir, { recursive: true, withFileTypes: true }) } catch { return [] }
+  const removed: string[] = []
+  for (const entry of entries) {
+    const writer = entry.isFile() ? tempFile.exec(entry.name)?.[1] : undefined
+    if (writer === undefined || isRunning(Number(writer))) continue
+    const file = path.join(entry.parentPath, entry.name)
+    try { fs.rmSync(file, { force: true }); removed.push(file) } catch { /* in use: the next start */ }
+  }
+  return removed
 }

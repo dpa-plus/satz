@@ -11,6 +11,7 @@ import { DoubleTap } from '../core/trigger'
 import { decodeWAV, encodeWAV, resample } from '../core/wav'
 import { CardWindow } from './card'
 import { startKeyboard, type Keyboard } from './keyboard'
+import { makeDelivery } from './delivery'
 import { deliver, isWayland } from './paste'
 import { FileSource, MicHub, MicRecorder } from './recorder'
 import { Store } from './store'
@@ -32,6 +33,7 @@ const flag = (name: string) => { const i = args.indexOf(name); return i >= 0 ? a
 const testAudio = flag('--test-audio')?.split(path.delimiter === ';' ? ';' : ':').filter(Boolean) ?? []
 const devPort = flag('--dev-control')
 const testMode = devPort !== undefined
+const testModelsDir = flag('--models-dir')
 const realPasteInTest = args.includes('--test-paste')
 /** A provider's name, as the settings page sends it. */
 const isProvider = (value: unknown): value is Provider => typeof value === 'string' && Object.hasOwn(providers, value)
@@ -43,7 +45,11 @@ if (process.platform === 'linux' && !process.env.SATZ_NATIVE_WAYLAND) {
 }
 
 // One satz at a time; a second start passes its command to the first.
-if (!app.requestSingleInstanceLock({ argv: args })) {
+if (testModelsDir !== undefined && !testMode) {
+  // Half a test setup: it would run as the user's own satz on a folder of its own. The Mac refuses it too.
+  console.error('satz: --models-dir is for test mode and needs --dev-control')
+  app.exit(2)
+} else if (!app.requestSingleInstanceLock({ argv: args })) {
   app.quit()
 } else {
   app.whenReady().then(start)
@@ -101,11 +107,14 @@ async function start() {
   // The models on this computer, for the provider "Lokal".
   // On Windows not in the roaming profile: a gigabyte synced at every sign-in.
   // A model already downloaded to the old place there is used where it is.
-  // In test mode --models-dir puts them elsewhere: a test never downloads into the user's folder.
+  // In test mode --models-dir puts them elsewhere. Without it a test uses the
+  // user's models but never changes them: no download, no delete (the Mac's
+  // test copy is the same).
   const roaming = path.join(app.getPath('userData'), 'models', 'local')
-  const modelsDir = (testMode && flag('--models-dir')) || (process.platform === 'win32' && process.env.LOCALAPPDATA && !fs.existsSync(roaming)
+  const modelsDir = testModelsDir || (process.platform === 'win32' && process.env.LOCALAPPDATA && !fs.existsSync(roaming)
     ? path.join(process.env.LOCALAPPDATA, 'satz', 'models', 'local') : roaming)
-  const local = new LocalModels(modelsDir, log, () => tellWindow('local:changed'), app.getVersion())
+  const canChangeModels = !testMode || !!testModelsDir
+  const local = new LocalModels(modelsDir, log, () => tellWindow('local:changed'), app.getVersion(), { canChangeFiles: canChangeModels })
   const localModel = () => store.prefs.models.local || providers.local.defaultModel
   /** What this system can run: no sherpa-onnx models on Windows on ARM. */
   const offered = offeredModels(process.platform, process.arch)
@@ -120,6 +129,19 @@ async function start() {
   }
   let keyboard: Keyboard | null = null
 
+  // Test mode runs in the test VMs; the history shows what it heard.
+  const deliverInto = makeDelivery({
+    records: testMode && !realPasteInTest,
+    windows,
+    paste: deliver,
+    keyTap: terminal => keyboard?.paste(terminal),
+    writeClipboard: text => clipboard.writeText(text),
+    keepsOnClipboard: () => store.prefs.keepsOnClipboard,
+    addHistory: (text, pasted) => store.addHistory(text, pasted),
+    delivered: text => { delivered.push(text); historyChanged() },
+    log,
+  })
+
   const session = new Session({
     // In test mode silence once the files run out: a test never records the room.
     makeSource: (): AudioSource => (testMode && flag('--test-audio') !== undefined ? new FileSource(testAudio.shift() ?? null) : new MicRecorder(hub)),
@@ -132,35 +154,9 @@ async function start() {
     endpointMissing: () => store.endpointMissing,
     triggerMode: () => store.prefs.triggerMode,
     log,
-    deliver: async text => {
-      if (testMode && !realPasteInTest) {
-        delivered.push(text)
-        // Test mode runs in the test VMs; the history shows what it heard.
-        store.addHistory(text, true)
-        historyChanged()
-        return { pasted: true }
-      }
-      // A moment for the shortcut's own keys to come up before Ctrl+V.
-      await new Promise(resolve => setTimeout(resolve, 120))
-      // Back to the window the dictation started in, or onto the clipboard:
-      // pasted into whatever was in front, the text went to the wrong app.
-      const window = await target
-      if (window && !(await windows.restore(window))) {
-        await clipboard.writeText(text)
-        log('paste: the window the dictation started in is gone or would not come back')
-        store.addHistory(text, false)
-        delivered.push(text)
-        historyChanged()
-        return { pasted: false, reason: de('Auf der Zwischenablage, das Fenster ist nicht mehr da.', 'On the clipboard, the window is gone.') }
-      }
-      const terminal = window ? await windows.isTerminal(window) : false
-      const outcome = await deliver(text, () => keyboard?.paste(terminal), store.prefs.keepsOnClipboard, log)
-      log(`paste: ${outcome.pasted ? 'sent Ctrl+V' : 'clipboard only'}, ${text.length} characters`)
-      store.addHistory(text, outcome.pasted)
-      delivered.push(text)
-      historyChanged()
-      return outcome
-    },
+    // The window this dictation started in goes along with its text, read
+    // now: the next dictation replaces `target` while this one is pasted.
+    deliver: text => deliverInto(text, target),
   })
 
   // The speed of a local model, measured on this computer with a 10 s public
@@ -230,6 +226,7 @@ async function start() {
       case 'close': session.discard(); break
       case 'undo': session.undoDiscard(); break
       case 'retry': session.retry(); break
+      case 'restore': session.restoreLast(); break
     }
   })
   ipcMain.on('card:caret', (_e, offset: number) => session.userMovedCaret(offset))
@@ -344,6 +341,7 @@ async function start() {
       shown,
       hasKey: store.hasKey(shown),
       keyboard: keyboard?.description,
+      shortcutWorks: keyboard?.shortcutWorks ?? true,
       wayland: isWayland(),
       platform: process.platform,
       history: store.history,
@@ -359,6 +357,8 @@ async function start() {
       },
     }
   })
+  // LocalModels refuses by itself when the folder is not ours to change; the
+  // dev-control commands below go through it too.
   ipcMain.handle('local:download', (_e, id: unknown) => { if (isListed(id)) local.download(id) })
   ipcMain.handle('local:cancel', (_e, id: unknown) => { if (isListed(id)) local.cancel(id) })
   ipcMain.handle('local:measure', (_e, id: unknown) => { if (isListed(id)) speedTests.request(id) })

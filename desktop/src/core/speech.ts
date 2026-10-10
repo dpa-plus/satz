@@ -2,27 +2,76 @@
  * Two checks around local Whisper, ported from SatzKit's WordCheck.swift.
  */
 
-/**
- * Whether a recording has any speech in it at all. Whisper makes something up
- * for silence ("you", "Thank you.", "."), so silence is never sent to it.
- * Speech is a fifth of a second of 30 ms frames above -45 dBFS, or, from a
- * quiet microphone, above -60 dBFS and three times the recording's own quiet
- * level: a fixed -45 dB alone dropped clear speech from a low-gain
- * microphone, and steady quiet noise is not speech.
- */
-export function hasSpeech(samples: Float32Array, rate = 16_000): boolean {
-  const frame = Math.max(1, Math.floor(rate * 0.03))
-  const needed = Math.max(1, Math.floor(0.2 / 0.03))
+/** Frames of 30 ms and the least that makes speech: a fifth of a second of them. */
+const frameSeconds = 0.03
+const neededFrames = Math.max(1, Math.floor(0.2 / frameSeconds))
+
+/** The level (root mean square) of each 30 ms frame. */
+function frameLevels(samples: Float32Array, rate: number): number[] {
+  const frame = Math.max(1, Math.floor(rate * frameSeconds))
   const levels: number[] = []
   for (let start = 0; start + frame <= samples.length; start += frame) {
     let sum = 0
     for (let k = start; k < start + frame; k++) sum += samples[k] * samples[k]
     levels.push(Math.sqrt(sum / frame))
   }
-  if (levels.length < needed) return false
-  const quiet = [...levels].sort((a, b) => a - b)[Math.floor(levels.length * 0.1)]
-  const threshold = Math.min(0.0056, Math.max(0.001, 3 * quiet))
-  return levels.filter(level => level > threshold).length >= needed
+  return levels
+}
+
+/**
+ * The level a frame has to pass to count as speech: -45 dBFS, or, from a
+ * quiet microphone, three times the recording's own quiet level (its
+ * tenth percentile) but at least -60 dBFS. A fixed -45 dB alone dropped
+ * clear speech from a low-gain microphone, and steady quiet noise is not
+ * speech.
+ */
+function levelOfSpeech(levels: number[]): number {
+  const quiet = [...levels].sort((a, b) => a - b)[Math.floor(levels.length * 0.1)] ?? 0
+  return Math.min(0.0056, Math.max(0.001, 3 * quiet))
+}
+
+/** `levelOfSpeech` of a recording: the number to hand `hasSpeech` and `speechEnd` for each piece cut from it. */
+export function speechThreshold(samples: Float32Array, rate = 16_000): number {
+  return levelOfSpeech(frameLevels(samples, rate))
+}
+
+/**
+ * The threshold for a piece cut from a longer recording: the lower of its
+ * own and the whole recording's. The quiet level of the piece alone moves
+ * with what else is in it: 20 s of low-gain speech over hum, alone, is all
+ * "quiet" and counts as no speech, but with 10 s of silence beside it in
+ * the recording the same 20 s are clearly above the floor, and the piece was
+ * dropped the moment more was said after the silence. The lower of the two
+ * keeps whatever either would keep.
+ */
+export const pieceThreshold = (piece: Float32Array, whole: number, rate = 16_000) => Math.min(speechThreshold(piece, rate), whole)
+
+/**
+ * Whether a recording has any speech in it at all. Whisper makes something up
+ * for silence ("you", "Thank you.", "."), so silence is never sent to it.
+ * Speech is a fifth of a second of 30 ms frames above `threshold`, which is
+ * the recording's own (`speechThreshold`) unless a piece of a longer
+ * recording is asked about (`pieceThreshold`).
+ */
+export function hasSpeech(samples: Float32Array, rate = 16_000, threshold?: number): boolean {
+  const levels = frameLevels(samples, rate)
+  if (levels.length < neededFrames) return false
+  const limit = threshold ?? levelOfSpeech(levels)
+  return levels.filter(level => level > limit).length >= neededFrames
+}
+
+/**
+ * Where the last 30 ms above the speech level end; null when nothing is
+ * that loud. Parakeet V3 wrote nothing at all for clear speech cut off
+ * mid-word and followed by quiet (a tenth of a second was enough), and the
+ * same audio up to here came back whole.
+ */
+export function speechEnd(samples: Float32Array, rate = 16_000, threshold?: number): number | null {
+  const levels = frameLevels(samples, rate)
+  if (levels.length === 0) return null
+  const limit = threshold ?? levelOfSpeech(levels)
+  const last = levels.findLastIndex(level => level > limit)
+  return last < 0 ? null : (last + 1) * Math.max(1, Math.floor(rate * frameSeconds))
 }
 
 const words = (text: string) => text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean)

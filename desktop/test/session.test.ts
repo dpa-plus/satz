@@ -64,6 +64,8 @@ function setup(scripts: string[], options: { mode?: 'tap' | 'hold'; transcribe?:
     endpointMissing: () => false,
     triggerMode: () => mode,
     deliver: async text => { delivered.push(text); return { pasted: true } },
+    // The fake audio is letters, a few samples each: anything recorded is speech.
+    hasSpeech: samples => samples.length > 0,
   })
   return { session, sources, delivered, setMode: (m: 'tap' | 'hold') => { mode = m } }
 }

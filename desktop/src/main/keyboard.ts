@@ -14,13 +14,15 @@ import { isWayland } from './paste'
  */
 export interface Keyboard {
   description: string
+  /** False where right Ctrl cannot start a dictation (no hook, no access to the devices): only "satz --toggle" does. */
+  shortcutWorks: boolean
   /** @param shift Ctrl+Shift+V, for terminals. */
   paste(shift?: boolean): void
   /** Lets go of the keyboard devices, so quitting does not wait for a key. */
   stop(): void
 }
 
-interface Handlers {
+export interface Handlers {
   trigger(down: boolean): void
   other(): void
   /** @param withTrigger right Ctrl was down: Escape while holding to talk. */
@@ -37,10 +39,10 @@ export async function startKeyboard(handlers: Handlers): Promise<Keyboard> {
     const devices = keyboardDevices()
     if (devices.length > 0) {
       const readers = new EvdevReaders(handlers)
-      return { description: `right Ctrl twice (keyboard devices: ${devices.length})`, paste: noKeystrokes, stop: () => readers.stop() }
+      return { description: `right Ctrl twice (keyboard devices: ${devices.length})`, shortcutWorks: true, paste: noKeystrokes, stop: () => readers.stop() }
     }
     handlers.log('Wayland without access to /dev/input: the shortcut is "satz --toggle" from a desktop shortcut')
-    return { description: 'Wayland: desktop shortcut running "satz --toggle"', paste: noKeystrokes, stop: () => {} }
+    return { description: 'Wayland: desktop shortcut running "satz --toggle"', shortcutWorks: false, paste: noKeystrokes, stop: () => {} }
   }
 
   let hook: typeof import('uiohook-napi')
@@ -50,28 +52,44 @@ export async function startKeyboard(handlers: Handlers): Promise<Keyboard> {
   } catch (error) {
     // satz still starts: "satz --toggle" works, texts go to the clipboard.
     handlers.log(`keyboard hook unavailable: ${(error as Error).message.split('\n')[0]}`)
-    return { description: 'keyboard hook unavailable: desktop shortcut running "satz --toggle"', paste: noKeystrokes, stop: () => {} }
+    return { description: 'keyboard hook unavailable: desktop shortcut running "satz --toggle"', shortcutWorks: false, paste: noKeystrokes, stop: () => {} }
   }
   const { uIOhook, UiohookKey } = hook
-  uIOhook.on('keydown', event => {
-    if (event.keycode === UiohookKey.CtrlRight) handlers.trigger(true)
-    else if (event.keycode === UiohookKey.Escape) { handlers.other(); handlers.escape(event.ctrlKey) }
-    else handlers.other()
-  })
-  uIOhook.on('keyup', event => {
-    if (event.keycode === UiohookKey.CtrlRight) handlers.trigger(false)
-  })
+  const events = hookEvents(handlers, UiohookKey)
+  uIOhook.on('keydown', events.keydown)
+  uIOhook.on('keyup', events.keyup)
   try {
     uIOhook.start()
   } catch (error) {
     // satz still starts: "satz --toggle" works, texts go to the clipboard.
     handlers.log(`keyboard hook did not start: ${(error as Error).message}`)
-    return { description: 'keyboard hook unavailable: desktop shortcut running "satz --toggle"', paste: noKeystrokes, stop: () => {} }
+    return { description: 'keyboard hook unavailable: desktop shortcut running "satz --toggle"', shortcutWorks: false, paste: noKeystrokes, stop: () => {} }
   }
   return {
     description: 'right Ctrl twice',
+    shortcutWorks: true,
     paste: shift => uIOhook.keyTap(UiohookKey.V, shift ? [UiohookKey.Ctrl, UiohookKey.Shift] : [UiohookKey.Ctrl]),
     stop: () => uIOhook.stop(),
+  }
+}
+
+/**
+ * What the hook's key events mean for satz. The right Ctrl is followed from
+ * its own events: the hook's `ctrlKey` is the left Ctrl or the right, and
+ * Ctrl+Esc (the Start menu) or Ctrl+Shift+Esc (Task Manager) with the left
+ * one threw a running dictation away. The Wayland reader below does the same.
+ */
+export function hookEvents(handlers: Handlers, keys: { CtrlRight: number; Escape: number }) {
+  let rightCtrl = false
+  return {
+    keydown(event: { keycode: number }) {
+      if (event.keycode === keys.CtrlRight) { rightCtrl = true; handlers.trigger(true) }
+      else if (event.keycode === keys.Escape) { handlers.other(); handlers.escape(rightCtrl) }
+      else handlers.other()
+    },
+    keyup(event: { keycode: number }) {
+      if (event.keycode === keys.CtrlRight) { rightCtrl = false; handlers.trigger(false) }
+    },
   }
 }
 

@@ -1,5 +1,5 @@
-import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
-import { createInterface } from 'node:readline'
+import { execFile } from 'node:child_process'
+import { PowerShellHelper } from './powershell'
 
 /**
  * Pauses music and videos while the user dictates and plays them again when
@@ -26,6 +26,8 @@ export class MediaPause {
   private paused: string[] = []
   private pausing: Promise<void> | null = null
   private resuming: ReturnType<typeof setTimeout> | null = null
+  /** Recordings begun so far: a dictation that ends while a pause is still running only plays the music if no other began meanwhile. */
+  private started = 0
 
   constructor(private players: Players | null, private isOn: () => boolean, private log: (message: string) => void) {
     if (isOn()) this.prepare()
@@ -35,6 +37,7 @@ export class MediaPause {
   prepare() { this.players?.prepare?.() }
 
   dictationStarted() {
+    this.started++
     // The next dictation right after the last one: the music stays paused.
     if (this.resuming) { clearTimeout(this.resuming); this.resuming = null }
     if (!this.players || !this.isOn() || this.paused.length > 0 || this.pausing) return
@@ -45,7 +48,13 @@ export class MediaPause {
   }
 
   async dictationEnded() {
+    const mine = this.started
     await this.pausing
+    // Another dictation began while the pause command was still running (the
+    // first one was thrown away at once, say): its start found nothing to
+    // cancel yet, and playing now would put the music into its microphone.
+    // It plays the music when it ends.
+    if (mine !== this.started) return
     if (this.resuming) clearTimeout(this.resuming)
     // A moment's grace: two dictations in a row did play-pause between them.
     this.resuming = setTimeout(() => { this.resuming = null; void this.resume() }, 800)
@@ -153,46 +162,21 @@ while ($null -ne ($line = [Console]::In.ReadLine())) {
 `
 
 class WindowsMedia implements Players {
-  private helper: ChildProcessWithoutNullStreams | null = null
-  private waiting: ((line: string) => void)[] = []
-  private ready: Promise<void> | null = null
+  private helper: PowerShellHelper
 
-  constructor(private log: (message: string) => void) {}
-
-  private start(): Promise<void> {
-    if (this.ready) return this.ready
-    // The script goes in as an argument, so stdin is left for the commands.
-    const encoded = Buffer.from(SCRIPT, 'utf16le').toString('base64')
-    const helper = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded], { windowsHide: true })
-    this.helper = helper
-    this.ready = new Promise((resolve, reject) => {
-      this.waiting.push(line => (line === 'ready' ? resolve() : reject(new Error(line))))
-      helper.on('error', reject)
-    })
-    createInterface({ input: helper.stdout }).on('line', line => this.waiting.shift()?.(line.trim()))
-    helper.stderr.on('data', chunk => {
-      const line = String(chunk).trim().split('\n')[0]
-      // PowerShell reports progress as CLIXML on stderr; not an error.
-      if (!line.startsWith('#< CLIXML')) this.log(`media helper: ${line}`)
-    })
-    helper.on('exit', () => { this.helper = null; this.ready = null; this.waiting.splice(0).forEach(answer => answer('error helper stopped')) })
-    return this.ready
+  constructor(log: (message: string) => void) {
+    this.helper = new PowerShellHelper(SCRIPT, 'media helper', log)
   }
 
   private async ask(command: string): Promise<string[]> {
-    await this.start()
-    const answer = await new Promise<string>((resolve, reject) => {
-      // Generous: an answer thrown away after pausing would never be resumed.
-      const timer = setTimeout(() => reject(new Error('no answer')), 8000)
-      this.waiting.push(line => { clearTimeout(timer); resolve(line) })
-      this.helper?.stdin.write(command + '\r\n')
-    })
+    // Generous: an answer thrown away after pausing would never be resumed.
+    const answer = await this.helper.ask(command, 8000)
     if (answer.startsWith('error')) throw new Error(answer)
     return answer.slice(3).split(' ').filter(Boolean)
   }
 
   /** PowerShell takes seconds to start: started with satz, not with the first dictation. */
-  prepare() { this.start().catch(error => this.log(`media helper: ${(error as Error).message}`)) }
+  prepare() { this.helper.prepare() }
   pause() { return this.ask('pause') }
   play(ids: string[]) { return this.ask(`play ${ids.join(' ')}`) }
 }

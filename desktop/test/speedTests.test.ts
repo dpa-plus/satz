@@ -125,10 +125,13 @@ test('asked for twice while waiting, a model is measured once', async t => {
 })
 
 test('a download beside a model in use that is on the computer: measured, nothing else', t => {
-  const { tests, queue, done } = setup()
+  const used: string[] = []
+  const { tests, queue, done } = setup({ use: id => { used.push(id) } })
   t.after(done)
   tests.arrived('B')
   assert.deepEqual(queue, ['measure B'])
+  // Downloading is not choosing: the model in use stays the model in use.
+  assert.deepEqual(used, [])
 })
 
 test('the model in use arrives: loaded as the one in use before its test, so the test keeps it', t => {

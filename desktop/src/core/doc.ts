@@ -47,11 +47,6 @@ export class Doc {
     for (let i = range.location; i < range.location + range.length; i++) this.seg[i] = 0
   }
 
-  containsMark(range: Range) {
-    for (let i = range.location; i < range.location + range.length; i++) if (this.mark[i]) return true
-    return false
-  }
-
   /** Neighbouring characters with the same marks, for drawing. */
   runs(): Run[] {
     const runs: Run[] = []

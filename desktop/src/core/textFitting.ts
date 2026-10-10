@@ -10,7 +10,6 @@
  *
  * Offsets are UTF-16 code units, like the DOM's.
  */
-const isSpace = (c: string) => /\s/.test(c) && c !== '\n'
 const isLetter = (c: string) => /\p{L}/u.test(c)
 const isLowerLetter = (c: string) => isLetter(c) && c === c.toLowerCase() && c !== c.toUpperCase()
 
@@ -84,18 +83,24 @@ export function looksEnglish(text: string): boolean {
   return english > german
 }
 
-/** Words that are never capitalised mid-sentence in German. */
+/** Words that are never capitalised mid-sentence in English. */
 export const englishFunctionWords = new Set([
   'the', 'a', 'an', 'and', 'but', 'or', 'nor', 'so', 'yet', 'to', 'of', 'in', 'on', 'at', 'for', 'with', 'from', 'by', 'as', 'about', 'into', 'onto', 'over', 'under', 'after', 'before', 'since', 'until', 'than', 'then', 'that', 'this', 'these', 'those', 'there', 'here', 'it', 'its', 'we', 'you', 'he', 'she', 'they', 'me', 'us', 'him', 'them', 'my', 'your', 'our', 'their', 'his', 'her', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'am', 'do', 'does', 'did', 'have', 'has', 'had', 'will', 'would', 'can', 'could', 'should', 'shall', 'may', 'might', 'must', 'not', 'no', 'if', 'when', 'while', 'because', 'although', 'though', 'which', 'who', 'whom', 'whose', 'what', 'where', 'why', 'how', 'all', 'some', 'any', 'each', 'every', 'more', 'most', 'very', 'really', 'just', 'also', 'only', 'even', 'still', 'please', 'maybe', 'perhaps', 'too',
 ])
 
+/**
+ * Words that are never capitalised mid-sentence in German. Left out on
+ * purpose: "sie" and "ihr", which the formal address writes with a capital
+ * ("Vielen Dank für Ihr Anliegen"). A capital left on the "sie" that means
+ * "she" is the smaller slip.
+ */
 export const germanFunctionWords = new Set([
   'der', 'die', 'das', 'den', 'dem', 'des', 'ein', 'eine', 'einen', 'einem', 'einer', 'eines',
   'und', 'oder', 'aber', 'denn', 'sondern', 'doch', 'nur', 'auch', 'noch', 'schon', 'sehr',
   'mit', 'von', 'zu', 'zum', 'zur', 'für', 'auf', 'in', 'im', 'an', 'am', 'bei', 'beim', 'nach',
   'vor', 'über', 'unter', 'ohne', 'um', 'durch', 'gegen', 'aus', 'seit', 'bis', 'wie', 'als',
   'wenn', 'dass', 'weil', 'ob', 'damit', 'also', 'dann', 'nicht', 'kein', 'keine', 'so',
-  'ich', 'du', 'er', 'sie', 'es', 'wir', 'ihr', 'man', 'mir', 'mich', 'dir', 'dich', 'uns',
+  'ich', 'du', 'er', 'es', 'wir', 'man', 'mir', 'mich', 'dir', 'dich', 'uns',
   'bitte', 'vielleicht', 'etwa', 'ganz', 'mal', 'hier', 'dort', 'da', 'jetzt', 'immer',
 ])
 

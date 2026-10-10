@@ -57,3 +57,21 @@ export function useLocalModel<Models extends object>(id: string, models: Models,
   const change = { models: { ...models, local: id } }
   return localInUse ? change : { ...change, provider: 'local' }
 }
+
+/**
+ * The line under the shortcut when right Ctrl cannot start a dictation:
+ * Wayland without access to the keyboard devices, or no keyboard hook (the
+ * prebuilt one is x86-64 only, so ARM Linux under X11 has none). Empty while
+ * the shortcut works. "satz --toggle" is the way out in both.
+ */
+export function shortcutHint(shortcutWorks: boolean, wayland: boolean, language: Language): string {
+  if (shortcutWorks) return ''
+  if (wayland) {
+    return language === 'de'
+      ? 'Wayland lässt Apps die Tastatur nicht mitlesen. Entweder in den System-Einstellungen eine Tastenkombination anlegen, die „satz --toggle“ ausführt, oder einmal „sudo usermod -aG input $USER“ ausführen und neu anmelden.'
+      : 'Wayland does not let apps watch the keyboard. Either add a keyboard shortcut in the system settings that runs "satz --toggle", or run "sudo usermod -aG input $USER" once and sign in again.'
+  }
+  return language === 'de'
+    ? 'Die rechte Strg-Taste startet hier kein Diktat, der Tastatur-Hook ließ sich nicht laden. Stattdessen eine Tastenkombination anlegen, die „satz --toggle“ ausführt: unter Linux in den System-Einstellungen, unter Windows als Verknüpfung mit Tastenkürzel.'
+    : 'Right Ctrl does not start a dictation here, the keyboard hook could not be loaded. Add a keyboard shortcut that runs "satz --toggle" instead: in the system settings on Linux, as a shortcut with a shortcut key on Windows.'
+}
