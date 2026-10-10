@@ -20,10 +20,12 @@ private let m1: Set<String> = [
 
 /// What both get besides their Turbo and Distil builds: sherpa-onnx's
 /// models between them, the small Whisper builds after.
-private let germanToo = [LocalCatalog.largeV3, LocalCatalog.parakeetV3, LocalCatalog.canary]
+private let germanToo = [LocalCatalog.largeV3, LocalCatalog.cohere, LocalCatalog.parakeetV3, LocalCatalog.parakeetGerman,
+                         LocalCatalog.canary1B, LocalCatalog.qwen3, LocalCatalog.canary]
 private let englishAndMore = [LocalCatalog.parakeetV2, LocalCatalog.moonshineBase, LocalCatalog.moonshineTiny, LocalCatalog.senseVoice]
 private let others = [LocalCatalog.small, LocalCatalog.base, LocalCatalog.tiny]
-private let sherpaIDs = [LocalCatalog.parakeetV3, LocalCatalog.canary, LocalCatalog.parakeetV2,
+private let sherpaIDs = [LocalCatalog.cohere, LocalCatalog.parakeetV3, LocalCatalog.parakeetGerman, LocalCatalog.canary1B,
+                         LocalCatalog.qwen3, LocalCatalog.canary, LocalCatalog.parakeetV2,
                          LocalCatalog.moonshineBase, LocalCatalog.moonshineTiny, LocalCatalog.senseVoice]
 
 @Test func aNewerMacIsOfferedTheTurboBuildsAndNotTheCompatibleOne() {
@@ -151,7 +153,8 @@ private let sherpaIDs = [LocalCatalog.parakeetV3, LocalCatalog.canary, LocalCata
         let model = try #require(LocalCatalog.model(id))
         let sherpa = try #require(model.sherpa, "\(id)")
         #expect(model.bytes == sherpa.bytes)
-        #expect(sherpa.files.contains { $0.name == "tokens.txt" })
+        // Qwen3-ASR's tokenizer is a folder.
+        #expect(sherpa.files.contains { $0.name == "tokens.txt" } || sherpa.kind == .qwen3ASR, "\(id)")
         #expect(sherpa.files.allSatisfy { $0.bytes > 0 })
     }
     #expect(LocalCatalog.model(LocalCatalog.parakeetV3)?.bytes.map { LocalFacts.size($0, language: .german) } == "670 MB")
@@ -218,7 +221,7 @@ private let folder = URL(fileURLWithPath: "/m/sherpa/x", isDirectory: true)
 }
 
 @Test func onlyCanaryGetsSilenceAfterIt() {
-    #expect(sherpaIDs.filter { LocalCatalog.model($0)?.sherpa?.padsEnd == true } == [LocalCatalog.canary])
+    #expect(sherpaIDs.filter { LocalCatalog.model($0)?.sherpa?.padsEnd == true } == [LocalCatalog.canary1B, LocalCatalog.canary])
 }
 
 @Test func speechEndsAfterTheLastLoudFrame() {
@@ -233,8 +236,11 @@ private let folder = URL(fileURLWithPath: "/m/sherpa/x", isDirectory: true)
 @Test func onlyParakeetIsHeardInPiecesOfFourMinutes() {
     // Its encoder holds 400 s: longer pieces ended satz. The others lose words past 30 s.
     let long = sherpaIDs.filter { LocalCatalog.model($0)?.sherpa?.windowSeconds == 240 }
-    #expect(long == [LocalCatalog.parakeetV3, LocalCatalog.parakeetV2])
-    #expect(sherpaIDs.filter { !long.contains($0) }.allSatisfy { LocalCatalog.model($0)?.sherpa?.windowSeconds == 30 })
+    #expect(long == [LocalCatalog.parakeetV3, LocalCatalog.parakeetGerman, LocalCatalog.parakeetV2])
+    // Qwen3-ASR's decoder holds audio and words in one fixed length: shorter still.
+    let short = sherpaIDs.filter { !long.contains($0) && $0 != LocalCatalog.qwen3 }
+    #expect(short.allSatisfy { LocalCatalog.model($0)?.sherpa?.windowSeconds == 30 })
+    #expect(LocalCatalog.model(LocalCatalog.qwen3)?.sherpa?.windowSeconds == 15)
 }
 
 // MARK: - The bars
@@ -575,6 +581,10 @@ private final class Calls: @unchecked Sendable {
 
 // MARK: - The language Canary is told
 
+@Test func theModelsThatAreToldTheLanguageAreCanaryAndCohere() throws {
+    #expect(LocalCatalog.all.filter { $0.toldLanguages != nil }.map(\.id) == [LocalCatalog.cohere, LocalCatalog.canary1B, LocalCatalog.canary])
+}
+
 @Test func canaryIsToldItsChosenLanguageElseTheSpokenOne() throws {
     let canary = try #require(LocalCatalog.model(LocalCatalog.canary))
     #expect(canary.toldLanguages == ["en", "de", "es", "fr"])
@@ -582,8 +592,7 @@ private final class Calls: @unchecked Sendable {
     #expect(canary.told(choice: nil, spoken: .english) == "en")
     // A code Canary does not know falls back to the spoken language.
     #expect(canary.told(choice: "it", spoken: .german) == "de")
-    // Only Canary is told; the others find the language or hear one.
-    #expect(LocalCatalog.all.filter { $0.toldLanguages != nil }.map(\.id) == [LocalCatalog.canary])
+    // Only Canary and Cohere are told; the others find the language or hear one.
     #expect(LocalCatalog.model(LocalCatalog.parakeetV3)?.told(choice: "es", spoken: .german) == nil)
 }
 

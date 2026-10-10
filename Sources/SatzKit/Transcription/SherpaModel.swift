@@ -2,8 +2,10 @@ import Foundation
 
 /// A model that runs through sherpa-onnx (k2-fsa, Apache-2.0) instead of
 /// WhisperKit: Parakeet, Canary, Moonshine and SenseVoice, the ones Handy
-/// offers. Each comes as single files from csukuangfj's repositories on
-/// Hugging Face, the same exports sherpa-onnx's own examples use.
+/// offers, and Cohere Transcribe and Qwen3-ASR. Each comes as single files
+/// from a repository on Hugging Face: csukuangfj's, the same exports
+/// sherpa-onnx's own examples use, csukuangfj2's for the newest, or the
+/// author of a community export.
 public struct SherpaModel: Hashable, Sendable {
 
     /// Which of sherpa-onnx's offline recognizers reads the files.
@@ -16,12 +18,19 @@ public struct SherpaModel: Hashable, Sendable {
         case moonshine
         /// FunAudioLLM's SenseVoice: one graph, finds the language itself.
         case senseVoice
+        /// Cohere Transcribe: encoder and decoder, told the language it hears
+        /// (14 of them). Its encoder keeps its weights in a second file.
+        case cohereTranscribe
+        /// Qwen3-ASR: a conv frontend, an encoder and a decoder with a KV
+        /// cache, a tokenizer folder; finds the language itself.
+        case qwen3ASR
     }
 
     public struct File: Hashable, Sendable {
         public let name: String
-        /// From huggingface.co/api/models/csukuangfj/<repo>/tree/<revision>
-        /// (09.10.2026): a download of another size is not this file.
+        /// From huggingface.co/api/models/<owner>/<repo>/tree/<revision>
+        /// (09.10.2026, the newer four 10.10.2026): a download of another size
+        /// is not this file.
         public let bytes: Int64
         /// The file's SHA-256 at that revision (Hugging Face's LFS id; worked
         /// out for the small text files): the same size is not enough, one
@@ -37,15 +46,20 @@ public struct SherpaModel: Hashable, Sendable {
     }
 
     public let kind: Kind
-    /// The repository under huggingface.co/csukuangfj.
+    /// Who the repository belongs to on Hugging Face: csukuangfj for the
+    /// first exports, csukuangfj2 for the newest, a user's own for a
+    /// community export.
+    public let owner: String
+    /// The repository under huggingface.co/<owner>.
     public let repo: String
     /// The commit the files are fetched from: on `main` they could change
     /// under their checksums, and every download would fail with them.
     public let revision: String
     public let files: [File]
 
-    public init(kind: Kind, repo: String, revision: String, files: [File]) {
+    public init(kind: Kind, owner: String = "csukuangfj", repo: String, revision: String, files: [File]) {
         self.kind = kind
+        self.owner = owner
         self.repo = repo
         self.revision = revision
         self.files = files
@@ -54,7 +68,7 @@ public struct SherpaModel: Hashable, Sendable {
     public var bytes: Int64 { files.map(\.bytes).reduce(0, +) }
 
     public func url(of file: File) -> URL {
-        URL(string: "https://huggingface.co/csukuangfj/\(repo)/resolve/\(revision)/\(file.name)")!
+        URL(string: "https://huggingface.co/\(owner)/\(repo)/resolve/\(revision)/\(file.name)")!
     }
 
     /// The longest piece one recognizer call is given, cut at quiet moments
@@ -62,15 +76,52 @@ public struct SherpaModel: Hashable, Sendable {
     /// short clips and lose words past 30 s. Parakeet takes minutes, but its
     /// encoder holds 5000 frames, 400 s of audio: past that ONNX Runtime
     /// throws a C++ exception, which ends satz and the recording with it. A
-    /// dictation under four minutes is still one piece.
-    public var windowSeconds: Int { kind == .nemoTransducer ? 240 : 30 }
+    /// dictation under four minutes is still one piece. Cohere Transcribe
+    /// takes 35 s a call; Qwen3-ASR's decoder holds the audio and the words
+    /// together in a fixed length, so a longer piece loses its end
+    /// (`qwen3WindowSeconds`).
+    public var windowSeconds: Int {
+        switch kind {
+        case .nemoTransducer: 240
+        case .qwen3ASR: Self.qwen3WindowSeconds
+        default: 30
+        }
+    }
 
     /// No call is ever given more, whatever a window says: Parakeet's 400 s,
     /// less a margin.
     public static let longestCall = 380 * 16_000
 
     /// Listens for one language, the one satz is spoken to in.
-    public var isToldTheLanguage: Bool { kind == .canary }
+    public var isToldTheLanguage: Bool { kind == .canary || kind == .cohereTranscribe }
+
+    /// Writes text for steady noise (a fan, hiss), where Parakeet and Canary
+    /// write nothing: Cohere Transcribe wrote whole German sentences for 12 s
+    /// of hiss, Qwen3-ASR a line of Chinese for a steady rumble. Their pieces
+    /// get one more check before they are heard (`SpeechGate.isSteady`).
+    public var makesUpTextForNoise: Bool { kind == .cohereTranscribe || kind == .qwen3ASR }
+
+    /// Takes the word list as a hint in its prompt (Qwen3-ASR's hotwords).
+    public var takesHotwords: Bool { kind == .qwen3ASR }
+
+    /// The word list as hotwords: one comma-separated string, which goes into
+    /// the prompt in front of the audio, so a long list costs room and speed
+    /// (sherpa-onnx warns past 48 tokens). A comma inside a word would split
+    /// it; the first words are the ones the user added first. The same rule
+    /// as desktop/src/main/sherpaEngine.ts.
+    public static func hotwordList(_ vocabulary: [String]) -> String {
+        var kept: [String] = []
+        var length = 0
+        for word in vocabulary {
+            let clean = word.replacingOccurrences(of: #"[,\n]+"#, with: " ", options: .regularExpression)
+                .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+            guard !clean.isEmpty else { continue }
+            if kept.count >= 24 || length + clean.count > 240 { break }
+            kept.append(clean)
+            length += clean.count + 1
+        }
+        return kept.joined(separator: ",")
+    }
 
     /// Canary is given a second of silence after each piece of audio: cut
     /// off right after the last word, it dropped it ("ohne Gutschriften"
@@ -121,6 +172,16 @@ public struct SherpaModel: Hashable, Sendable {
     /// and the lost words would never be asked for again. Cancelled (the
     /// dictation was thrown away or replaced), it stops before the next call.
     public func transcribe(_ samples: [Float], decode: (ArraySlice<Float>) throws -> String) throws -> String {
+        try transcribe(samples, hotwords: [], decode: { piece, _ in try decode(piece) })
+    }
+
+    /// The same, for models that take the word list: `decode` is given the
+    /// hotwords (`hotwordList`, "" for none). The piece is heard plainly
+    /// first; with a word list it is heard once more with it, and the hinted
+    /// text is kept only if it lost no words (`WordCheck.keepEveryWord`):
+    /// the same safeguard Whisper's prompt has.
+    public func transcribe(_ samples: [Float], hotwords: [String],
+                           decode: (ArraySlice<Float>, String) throws -> String) throws -> String {
         // Silence is never sent: these models make something up for it too.
         // And what counts as speech is worked out once, on the whole
         // recording, not again for each piece: a piece cut out with no
@@ -128,17 +189,24 @@ public struct SherpaModel: Hashable, Sendable {
         // more talking) read its own words as noise and was skipped.
         guard let level = SpeechGate.threshold(for: samples) else { return "" }
         let pieces = QuietWindows.split(samples, longest: min(windowSeconds * 16_000, Self.longestCall))
+        let list = takesHotwords ? Self.hotwordList(hotwords) : ""
         var said: [String] = []
         for piece in pieces {
             // The recording as a whole has speech; a quiet piece of it is skipped.
             guard pieces.count == 1 || SpeechGate.hasSpeech(piece, above: level) else { continue }
+            // A steady hum over the speech level: Cohere and Qwen3 write text for it.
+            if makesUpTextForNoise, SpeechGate.isSteady(piece) { continue }
             try Task.checkCancellation()
-            var heard = try decode(padsEnd ? Self.padded(piece)[...] : piece)
+            var heard = try decode(padsEnd ? Self.padded(piece)[...] : piece, "")
             if heard.isEmpty, let end = SpeechGate.speechEnd(piece, above: level), end < piece.count {
                 try Task.checkCancellation()
-                heard = try decode(piece.prefix(end))
+                heard = try decode(piece.prefix(end), "")
             }
             guard !heard.isEmpty else { throw Failure.pieceNotHeard }
+            if !list.isEmpty {
+                try Task.checkCancellation()
+                heard = WordCheck.keepEveryWord(prompted: try decode(piece, list), plain: heard).text
+            }
             said.append(heard)
         }
         return Self.tidy(said.joined(separator: " "))
@@ -165,9 +233,32 @@ public struct SherpaModel: Hashable, Sendable {
                                        uncachedDecoder: path(file("uncached_decode")), cachedDecoder: path(file("cached_decode")))
         case .senseVoice:
             settings.senseVoice = .init(model: path(file("model")), language: "auto", inverseNormalization: true)
+        case .cohereTranscribe:
+            // Told before each transcription, like Canary; `spoken` is where it starts.
+            settings.cohere = .init(encoder: path(file("encoder")), decoder: path(file("decoder")),
+                                    language: spoken.rawValue, punctuation: true, inverseNormalization: true)
+        case .qwen3ASR:
+            // Its tokenizer is a folder and it has no tokens.txt.
+            settings.tokens = ""
+            settings.qwen3 = .init(convFrontend: path("conv_frontend.onnx"), encoder: path(file("encoder")), decoder: path(file("decoder")),
+                                   tokenizer: path("tokenizer"), maxTotalLength: Self.qwen3MaxTotalLength,
+                                   maxNewTokens: Self.qwen3MaxNewTokens)
         }
         return settings
     }
+
+    /// What Qwen3-ASR is given to generate with. sherpa-onnx's C API leaves
+    /// both at zero unless set, which it reads as "the model's own". Window
+    /// and limits belong together: audio is 12.5 tokens a second, and the
+    /// prompt, the audio and the new words all have to fit in the total.
+    ///
+    /// The decoder of this export holds 512 tokens in all (a longer total is
+    /// cut to that): 40 s of audio is 500 tokens before a word is written,
+    /// and came back as the single word "language". 15 s is 190 and leaves
+    /// room for the words and a word list.
+    public static let qwen3WindowSeconds = 15
+    public static let qwen3MaxTotalLength = 512
+    public static let qwen3MaxNewTokens = 160
 
     /// The files of this model that `folder` lacks or has changed: at another
     /// size, or with `checkingBytes` with another SHA-256. That reads every
@@ -202,8 +293,10 @@ public struct SherpaModel: Hashable, Sendable {
     }
 
     /// The file whose name starts with `stem` and a dot ("encoder.int8.onnx").
+    /// Not the `.data` file beside an encoder that keeps its weights apart:
+    /// that one is found by the encoder itself, under its own name.
     private func file(_ stem: String) -> String {
-        files.first { $0.name.hasPrefix(stem + ".") }?.name ?? stem + ".onnx"
+        files.first { $0.name.hasPrefix(stem + ".") && !$0.name.hasSuffix(".data") }?.name ?? stem + ".onnx"
     }
 }
 
@@ -254,6 +347,22 @@ public struct SherpaSettings: Equatable, Sendable {
         /// Numbers as digits and punctuation, like the other models write.
         public var inverseNormalization: Bool
     }
+    public struct Cohere: Equatable, Sendable {
+        public var encoder, decoder: String
+        /// The one language it hears and writes; it cannot find it itself.
+        public var language: String
+        /// Punctuation and capitals.
+        public var punctuation: Bool
+        /// Numbers as digits, like the other models write.
+        public var inverseNormalization: Bool
+    }
+    public struct Qwen3: Equatable, Sendable {
+        public var convFrontend, encoder, decoder: String
+        /// The folder with vocab.json, merges.txt and tokenizer_config.json.
+        public var tokenizer: String
+        public var maxTotalLength: Int
+        public var maxNewTokens: Int
+    }
 
     public var tokens: String
     public var threads: Int
@@ -263,6 +372,8 @@ public struct SherpaSettings: Equatable, Sendable {
     public var canary: Canary?
     public var moonshine: Moonshine?
     public var senseVoice: SenseVoice?
+    public var cohere: Cohere?
+    public var qwen3: Qwen3?
     /// satz records 16 kHz mono. Parakeet and Canary read their feature size
     /// from the model itself; 80 is SenseVoice's.
     public var sampleRate = 16_000

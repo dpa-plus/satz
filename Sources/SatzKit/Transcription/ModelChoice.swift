@@ -36,6 +36,8 @@ extension Provider {
         ]
         case .openAI: ["gpt-transcribe", "gpt-4o-transcribe", "gpt-4o-mini-transcribe", "whisper-1"]
         case .groq: ["whisper-large-v3-turbo", "whisper-large-v3"]
+        case .microsoft: [MicrosoftSpeech.mai2, MicrosoftSpeech.plain]
+        case .google: [GeminiTranscribe.model]
         case .custom: []
         case .local: ModelCatalog.localModels
         }
@@ -104,7 +106,40 @@ public enum ModelCatalog {
         // Groq directly.
         "whisper-large-v3-turbo": Known(name: "Whisper Large v3 Turbo", maker: "OpenAI", errorRate: 4.6),
         "whisper-large-v3": Known(name: "Whisper Large v3", maker: "OpenAI"),
+        // Microsoft directly, at the prices on its pages (10.10.2026), not
+        // billed ones. MAI-Transcribe 2's is `maiPrice`.
+        MicrosoftSpeech.mai2: Known(name: "MAI-Transcribe 2", maker: "Microsoft", measured: nil, errorRate: 2.0),
+        MicrosoftSpeech.plain: Known(name: "Azure Speech", maker: "Microsoft", measured: 0.36),
+        // Google directly: $2 per million audio tokens and $12 per million
+        // text tokens, about $0.005 a minute by Google's own estimate. AA-WER
+        // as on artificialanalysis.ai/speech-to-text.
+        GeminiTranscribe.model: Known(name: "Gemini 3.5 Transcribe", maker: "Google", measured: 0.30, errorRate: 2.6),
     ]
+
+    /// MAI-Transcribe 2 costs $0.10 an hour at Microsoft until the end of
+    /// 2026 (an introductory price) and $0.36 after.
+    static let maiPromotionEnds = Date(timeIntervalSince1970: 1_798_761_600)   // 2027-01-01 00:00 UTC
+
+    static func maiPrice(on date: Date = Date()) -> Double {
+        date < maiPromotionEnds ? 0.10 : 0.36
+    }
+
+    /// What is worth knowing about a model beyond its numbers, for the line
+    /// under the model menu. `price` words a dollar amount the way the caller
+    /// shows prices.
+    public static func note(for id: String, provider: Provider, price: (Double) -> String, language: Language = .current) -> String? {
+        let english = language == .english
+        switch (provider, id) {
+        case (.microsoft, MicrosoftSpeech.mai2):
+            return english ? "Introductory price until 31 Dec 2026, then \(price(0.36)) an hour. Public preview."
+                           : "Einführungspreis bis 31.12.2026, danach \(price(0.36)) pro Stunde. Öffentliche Vorschau."
+        case (.microsoft, MicrosoftSpeech.plain):
+            return english ? "Azure's own recognition, no MAI model. Finds German and English by itself."
+                           : "Azures eigene Erkennung, ohne MAI-Modell. Findet Deutsch und Englisch selbst."
+        default:
+            return nil
+        }
+    }
 
     // MARK: - On this computer
 
@@ -144,8 +179,14 @@ public enum ModelCatalog {
         case .openRouter: URL(string: "https://openrouter.ai/api/v1/models?output_modalities=transcription")
         case .openAI: URL(string: "https://api.openai.com/v1/models")
         case .groq: URL(string: "https://api.groq.com/openai/v1/models")
-        case .custom, .local: nil
+        // Neither lists its speech models in a form satz can use.
+        case .microsoft, .google, .custom, .local: nil
         }
+    }
+
+    /// Whether satz can ask the provider for its models.
+    public static func hasLiveList(_ provider: Provider) -> Bool {
+        listURL(for: provider) != nil
     }
 
     /// The provider's models now, best first. Throws when it cannot be asked;
@@ -208,7 +249,8 @@ public enum ModelCatalog {
         let parts = listedName?.components(separatedBy: ": ")
         let maker = entry?.maker ?? (parts.flatMap { $0.count > 1 ? $0[0] : nil }) ?? id.components(separatedBy: "/").first ?? provider.name
         let name = entry?.name ?? parts?.last ?? id
-        return ModelChoice(id, name, maker, entry?.measured ?? listedPrice(pricing), errorRate: entry?.errorRate)
+        let price = provider == .microsoft && id == MicrosoftSpeech.mai2 ? maiPrice() : entry?.measured ?? listedPrice(pricing)
+        return ModelChoice(id, name, maker, price, errorRate: entry?.errorRate)
     }
 
     /// OpenRouter's list gives a price without a unit. For speech models priced

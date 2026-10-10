@@ -17,18 +17,23 @@ struct MultipartBody {
     /// - Parameters:
     ///   - fields: plain text form fields, written in the given order.
     ///   - file: the upload, or nil for a body with no file part.
+    ///   - fileFirst: the file before the fields. Azure's documented sample
+    ///     sends its audio part ahead of the definition.
     func encode(fields: [(name: String, value: String)],
-                file: (name: String, filename: String, mimeType: String, data: Data)?) -> Data {
+                file: (name: String, filename: String, mimeType: String, data: Data)?,
+                fileFirst: Bool = false) -> Data {
         var body = Data()
 
-        for field in fields {
-            body.append(line: "--\(boundary)")
-            body.append(line: "Content-Disposition: form-data; name=\"\(field.name)\"")
-            body.append(line: "")
-            body.append(line: field.value)
+        func appendFields() {
+            for field in fields {
+                body.append(line: "--\(boundary)")
+                body.append(line: "Content-Disposition: form-data; name=\"\(field.name)\"")
+                body.append(line: "")
+                body.append(line: field.value)
+            }
         }
-
-        if let file {
+        func appendFile() {
+            guard let file else { return }
             body.append(line: "--\(boundary)")
             body.append(
                 line: "Content-Disposition: form-data; name=\"\(file.name)\"; filename=\"\(file.filename)\""
@@ -39,6 +44,13 @@ struct MultipartBody {
             body.append(line: "")
         }
 
+        if fileFirst {
+            appendFile()
+            appendFields()
+        } else {
+            appendFields()
+            appendFile()
+        }
         body.append(line: "--\(boundary)--")
         return body
     }

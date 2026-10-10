@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { setLanguage, systemLanguage, type Language } from '../core/language'
 import { standardReplacements, swapPredefined, type Replacement } from '../core/replacements'
-import type { Provider, TranscriberSettings } from '../core/transcriber'
+import { defaultMicrosoftRegion, microsoftHost, type Provider, type TranscriberSettings } from '../core/transcriber'
 
 /**
  * What the user can adjust, the API keys, and the last few transcripts. Plain
@@ -15,6 +15,9 @@ export interface Preferences {
   provider: Provider
   models: Partial<Record<Provider, string>>
   customBaseURL: string
+  /** Microsoft: the region of the Speech resource, and optionally its own address, which wins (core/transcriber.ts, microsoftHost). */
+  microsoftRegion: string
+  microsoftEndpoint: string
   words: string[]
   triggerMode: 'tap' | 'hold'
   language: Language
@@ -79,6 +82,8 @@ export class Store {
       provider: 'openrouter',
       models: {},
       customBaseURL: '',
+      microsoftRegion: defaultMicrosoftRegion,
+      microsoftEndpoint: '',
       words: [],
       triggerMode: 'tap',
       language,
@@ -124,6 +129,8 @@ export class Store {
       provider: this.prefs.provider,
       model: this.prefs.models[this.prefs.provider] ?? '',
       customBaseURL: this.prefs.customBaseURL,
+      microsoftRegion: this.prefs.microsoftRegion,
+      microsoftEndpoint: this.prefs.microsoftEndpoint,
       // Trigger words go in too: a made-up one only survives transcription
       // if the model was told to expect it.
       vocabulary: [...this.prefs.words, ...rules.filter(r => r.isOn).map(r => r.spoken)],
@@ -133,7 +140,9 @@ export class Store {
 
   get activeReplacements(): Replacement[] { return this.prefs.usesReplacements ? this.prefs.replacements : [] }
 
+  /** Custom without an address, or Microsoft with an own address that is none (or no region to fall back on). */
   get endpointMissing() {
+    if (this.prefs.provider === 'microsoft') return microsoftHost(this.prefs.microsoftRegion, this.prefs.microsoftEndpoint) === null
     if (this.prefs.provider !== 'custom') return false
     try { return !new URL(this.prefs.customBaseURL.trim()).host } catch { return true }
   }

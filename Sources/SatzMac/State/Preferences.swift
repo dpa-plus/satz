@@ -41,6 +41,18 @@ final class Preferences {
         didSet { defaults?.set(customBaseURL, forKey: Key.customBaseURL) }
     }
 
+    /// The region of the user's Azure Speech resource, for Microsoft: its host
+    /// is built from it. A key only works in its own region.
+    var microsoftRegion: String {
+        didSet { defaults?.set(microsoftRegion, forKey: Key.microsoftRegion) }
+    }
+
+    /// The address of the user's own Speech resource, as typed, for
+    /// Microsoft. Empty uses the region; an address wins over it.
+    var microsoftEndpoint: String {
+        didSet { defaults?.set(microsoftEndpoint, forKey: Key.microsoftEndpoint) }
+    }
+
     /// Names, jargon and spellings sent with every transcription to bias
     /// recognition. Not a second model and not a rewrite: the endpoint's own
     /// `prompt` parameter.
@@ -167,7 +179,8 @@ final class Preferences {
         didSet { defaults?.set(keepsOnClipboard, forKey: Key.keepsOnClipboard) }
     }
 
-    /// MAI-Transcribe's clean mode: no "ähm", no stutters, no false starts.
+    /// MAI-Transcribe's clean mode and Gemini's smart mode: no "ähm", no
+    /// stutters, no false starts.
     var removesFillers: Bool {
         didSet { defaults?.set(removesFillers, forKey: Key.removesFillers) }
     }
@@ -178,7 +191,9 @@ final class Preferences {
         var settings = Transcriber.Settings(
             provider: provider,
             model: model,
-            customBaseURL: URL(string: customBaseURL.trimmingCharacters(in: .whitespaces))
+            customBaseURL: URL(string: customBaseURL.trimmingCharacters(in: .whitespaces)),
+            microsoftRegion: microsoftRegion,
+            microsoftEndpoint: microsoftEndpoint
         )
         // Trigger words go in too: a made-up one only survives transcription
         // if the model was told to expect it.
@@ -187,9 +202,14 @@ final class Preferences {
         return settings
     }
 
-    /// A custom provider without a usable URL has nowhere to send the audio.
+    /// A custom provider without a usable URL has nowhere to send the audio,
+    /// and neither has Microsoft with an own address typed that cannot work.
     var isEndpointMissing: Bool {
-        provider == .custom && !ProviderReadiness.hasUsableAddress(customBaseURL)
+        switch provider {
+        case .custom: !ProviderReadiness.hasUsableAddress(customBaseURL)
+        case .microsoft: missing(.microsoft, hasKey: true).contains(.address)
+        default: false
+        }
     }
 
     /// A custom endpoint has no default model; without one every request fails.
@@ -201,7 +221,8 @@ final class Preferences {
     /// not. `hasKey` is its key being saved, or for Lokal its model being on
     /// this Mac (`Setup` knows).
     func missing(_ provider: Provider, hasKey: Bool) -> [ProviderReadiness.Need] {
-        ProviderReadiness.missing(provider, hasKey: hasKey, customBaseURL: customBaseURL, model: model(for: provider))
+        ProviderReadiness.missing(provider, hasKey: hasKey, customBaseURL: customBaseURL, model: model(for: provider),
+                                  microsoftEndpoint: microsoftEndpoint)
     }
 
     func addWord(_ word: String) {
@@ -243,6 +264,8 @@ final class Preferences {
         static let provider = "provider"
         static let models = "models"
         static let customBaseURL = "customBaseURL"
+        static let microsoftRegion = "microsoftRegion"
+        static let microsoftEndpoint = "microsoftEndpoint"
         static let words = "words"
         /// The free-text field vocabulary used to be. Read once, then left alone.
         static let vocabulary = "vocabulary"
@@ -273,6 +296,8 @@ final class Preferences {
             ?? (defaults != nil && Secrets.exists(for: .openAI) && !Secrets.exists(for: .openRouter) ? .openAI : .openRouter)
         models = defaults?.dictionary(forKey: Key.models) as? [String: String] ?? [:]
         customBaseURL = defaults?.string(forKey: Key.customBaseURL) ?? ""
+        microsoftRegion = defaults?.string(forKey: Key.microsoftRegion) ?? MicrosoftSpeech.defaultRegion
+        microsoftEndpoint = defaults?.string(forKey: Key.microsoftEndpoint) ?? ""
         words = defaults?.stringArray(forKey: Key.words)
             ?? Self.migratedWords(defaults?.string(forKey: Key.vocabulary))
         trigger = defaults?.data(forKey: Key.trigger).flatMap { try? JSONDecoder().decode(Trigger.self, from: $0) }

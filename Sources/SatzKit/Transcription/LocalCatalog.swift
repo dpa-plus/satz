@@ -3,9 +3,10 @@ import Foundation
 /// The models "Lokal" offers on a Mac, each with its real download size:
 /// one build per Whisper size, from tiny and rough to large and slow, and
 /// one for English only, through WhisperKit; Handy's models (Parakeet,
-/// Canary, Moonshine, SenseVoice) through sherpa-onnx; and Apple's own.
-/// WhisperKit knows dozens more; the others are the same models built
-/// differently, or English-only twins of these.
+/// Canary, Moonshine, SenseVoice) through sherpa-onnx, with Cohere
+/// Transcribe, Qwen3-ASR, Canary 1B v2 and a German Parakeet beside them;
+/// and Apple's own. WhisperKit knows dozens more; the others are the same
+/// models built differently, or English-only twins of these.
 public enum LocalCatalog {
 
     /// Today's default: Whisper Large v3 Turbo, compressed for the Neural
@@ -34,6 +35,10 @@ public enum LocalCatalog {
     public static let parakeetV3 = "parakeet-v3"
     public static let parakeetV2 = "parakeet-v2"
     public static let canary = "canary-180m"
+    public static let cohere = "cohere-transcribe"
+    public static let qwen3 = "qwen3-asr-0.6b"
+    public static let canary1B = "canary-1b-v2"
+    public static let parakeetGerman = "parakeet-primeline-de"
     public static let moonshineBase = "moonshine-base"
     public static let moonshineTiny = "moonshine-tiny"
     public static let senseVoice = "sense-voice"
@@ -91,6 +96,10 @@ public enum LocalCatalog {
             case LocalCatalog.parakeetV3: "Parakeet V3"
             case LocalCatalog.parakeetV2: "Parakeet V2"
             case LocalCatalog.canary: "Canary 180M Flash"
+            case LocalCatalog.cohere: "Cohere Transcribe"
+            case LocalCatalog.qwen3: "Qwen3-ASR 0.6B"
+            case LocalCatalog.canary1B: "Canary 1B v2"
+            case LocalCatalog.parakeetGerman: de("Parakeet Deutsch (primeLine)", en: "Parakeet German (primeLine)")
             case LocalCatalog.moonshineBase: "Moonshine Base"
             case LocalCatalog.moonshineTiny: "Moonshine Tiny"
             case LocalCatalog.senseVoice: "SenseVoice"
@@ -112,6 +121,14 @@ public enum LocalCatalog {
             case LocalCatalog.parakeetV3: de("Schnell und genau. 25 europäische Sprachen.", en: "Fast and accurate. 25 European languages.")
             case LocalCatalog.parakeetV2: de("Nur Englisch, das beste für Englisch.", en: "English only. The best for English.")
             case LocalCatalog.canary: de("Sehr schnell. Englisch, Deutsch, Spanisch, Französisch.", en: "Very fast. English, German, Spanish, French.")
+            case LocalCatalog.cohere: de("Am genauesten auf Deutsch, aber groß. Hört die Sprache, die du einstellst.",
+                                         en: "The most accurate in German, but big. Hears the language you set.")
+            case LocalCatalog.qwen3: de("Klein, findet die Sprache selbst und nimmt den Wortschatz als Hinweis. Auf Deutsch ungenauer als Parakeet.",
+                                        en: "Small, finds the language itself and takes the word list as a hint. Less accurate in German than Parakeet.")
+            case LocalCatalog.canary1B: de("Genau, aber groß. Englisch, Deutsch, Spanisch, Französisch.",
+                                           en: "Accurate, but big. English, German, Spanish, French.")
+            case LocalCatalog.parakeetGerman: de("Parakeet V3, auf Deutsch nachtrainiert. Schreibt „ss“ statt „ß“.",
+                                                 en: "Parakeet V3, retrained for German. Writes “ss” for “ß”.")
             case LocalCatalog.moonshineBase: de("Sehr schnell, nur Englisch. Kommt gut mit Akzenten klar.", en: "Very fast, English only. Handles accents well.")
             case LocalCatalog.moonshineTiny: de("Extrem schnell, nur Englisch.", en: "Extremely fast, English only.")
             case LocalCatalog.senseVoice: de("Sehr schnell. Chinesisch, Englisch, Japanisch, Koreanisch, Kantonesisch.",
@@ -124,10 +141,29 @@ public enum LocalCatalog {
         public var maker: String {
             switch id {
             case LocalCatalog.apple: "Apple"
-            case LocalCatalog.parakeetV3, LocalCatalog.parakeetV2, LocalCatalog.canary: "NVIDIA"
+            case LocalCatalog.parakeetV3, LocalCatalog.parakeetV2, LocalCatalog.canary, LocalCatalog.canary1B: "NVIDIA"
+            case LocalCatalog.cohere: "Cohere"
+            case LocalCatalog.qwen3: "Qwen"
+            case LocalCatalog.parakeetGerman: "primeLine"
             case LocalCatalog.moonshineBase, LocalCatalog.moonshineTiny: "Useful Sensors"
             case LocalCatalog.senseVoice: "FunAudioLLM"
             default: "OpenAI"
+            }
+        }
+
+        /// Word errors someone else published for this model, never satz's
+        /// own measurements: the Open ASR Leaderboard (Hugging Face, fetched
+        /// 10.10.2026) for the first five, the model card's for primeLine.
+        public var published: PublishedErrors? {
+            switch id {
+            case LocalCatalog.cohere: PublishedErrors(germanFleurs: 3.33, germanCommonVoice: 2.87, english: 6.26)
+            case LocalCatalog.canary1B: PublishedErrors(germanFleurs: 3.43, germanCommonVoice: 4.69, english: 7.91)
+            case LocalCatalog.qwen3: PublishedErrors(germanFleurs: 5.41, germanCommonVoice: 7.97, english: 6.60)
+            case LocalCatalog.parakeetV3: PublishedErrors(germanFleurs: 4.16, germanCommonVoice: 4.07, english: 6.51)
+            case LocalCatalog.parakeetV2: PublishedErrors(english: 6.43)
+            // German average over its own tests, against V3's on the same.
+            case LocalCatalog.parakeetGerman: PublishedErrors(makerGerman: 2.95, makerBaseline: 3.64)
+            default: nil
             }
         }
 
@@ -137,7 +173,8 @@ public enum LocalCatalog {
 
         /// The languages one can tell this model it hears, nil for a model
         /// that finds the language itself or hears one only. Canary hears
-        /// and writes the one it is told: English, German, Spanish, French.
+        /// and writes the one it is told: English, German, Spanish, French;
+        /// Cohere Transcribe one of its 14.
         public var toldLanguages: [String]? { sherpa?.isToldTheLanguage == true ? languages.codes : nil }
 
         /// The language this model is told: the user's choice among its own,
@@ -150,8 +187,9 @@ public enum LocalCatalog {
         }
     }
 
-    private static func sherpa(_ kind: SherpaModel.Kind, _ repo: String, revision: String, _ files: [SherpaModel.File]) -> Engine {
-        .sherpa(SherpaModel(kind: kind, repo: repo, revision: revision, files: files))
+    private static func sherpa(_ kind: SherpaModel.Kind, owner: String = "csukuangfj", _ repo: String, revision: String,
+                               _ files: [SherpaModel.File]) -> Engine {
+        .sherpa(SherpaModel(kind: kind, owner: owner, repo: repo, revision: revision, files: files))
     }
 
     /// Whisper's 99, of which satz names the two it is spoken to in.
@@ -160,6 +198,10 @@ public enum LocalCatalog {
     private static let european = LocalLanguages(["bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it",
                                                   "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk"])
 
+    /// Cohere Transcribe's 14, German and English first: the order of the list
+    /// under "Gesprochen auf".
+    private static let cohereLanguages = LocalLanguages(["de", "en", "fr", "es", "it", "pt", "nl", "pl", "el", "zh", "ja", "ko", "vi", "ar"])
+
     /// In the order shown: the default first, then the others that hear
     /// German, then English only, Apple's last.
     public static let all: [Model] = [
@@ -167,12 +209,53 @@ public enum LocalCatalog {
         Model(turboFull, bytes: 1_638_464_446, languages: whisperLanguages, accuracy: 0.82, speed: 0.50),
         Model(turboCompatible, bytes: 626_718_238, languages: whisperLanguages, accuracy: 0.80, speed: 0.55),
         Model(largeV3, bytes: 3_090_319_899, languages: whisperLanguages, accuracy: 0.85, speed: 0.30),
+        // Official sherpa-onnx export of Cohere's model (Apache-2.0). Its
+        // encoder keeps its weights in the .data file beside it, which must
+        // keep that name. Handy rates it 92; on the Open ASR Leaderboard it is
+        // the best in German.
+        Model(cohere, engine: sherpa(.cohereTranscribe, owner: "csukuangfj2", "sherpa-onnx-cohere-transcribe-14-lang-int8-2026-04-01",
+                                     revision: "156a470cf08eefe706a0004f3c52d9ee567ca7a0", [
+            .init("encoder.int8.onnx", 3_090_822, sha256: "cf704f8cfa90e3f0a76f9ffc05998bdf00ba9ae983192c14a85a3a5eb008b367"),
+            .init("encoder.int8.onnx.data", 2_731_503_072, sha256: "bcf1b7148c8518ae52df1ad2d2fc2b4e89261ea23e6c874eef1d9f55bcbaa4a3"),
+            .init("decoder.int8.onnx", 153_250_705, sha256: "8372ca6c8ff4db8b916ca3592f5c757a715e691b9edec751ba19b29fc854baf9"),
+            .init("tokens.txt", 207_437, sha256: "013ede043ae2480e3a9205cc34550d9686100cc682bacc90f702facdfbb93035"),
+        ]), bytes: 2_888_052_036, languages: cohereLanguages, accuracy: 0.92, speed: 0.80),
         Model(parakeetV3, engine: sherpa(.nemoTransducer, "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8", revision: "2bda32ec70b097a55adaa07d9a7173915b43cc78", [
             .init("encoder.int8.onnx", 652_184_281, sha256: "acfc2b4456377e15d04f0243af540b7fe7c992f8d898d751cf134c3a55fd2247"),
             .init("decoder.int8.onnx", 11_845_275, sha256: "179e50c43d1a9de79c8a24149a2f9bac6eb5981823f2a2ed88d655b24248db4e"),
             .init("joiner.int8.onnx", 6_355_277, sha256: "3164c13fc2821009440d20fcb5fdc78bff28b4db2f8d0f0b329101719c0948b3"),
             .init("tokens.txt", 93_939, sha256: "d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d"),
         ]), bytes: 670_478_772, languages: european, accuracy: 0.80, speed: 0.85),
+        // x-ian's export of primeLine's German fine-tune of Parakeet V3
+        // (CC-BY-4.0, upstream primeline/parakeet-primeline): its tokens file
+        // is byte for byte V3's. A community upload, so pinned like the rest.
+        Model(parakeetGerman, engine: sherpa(.nemoTransducer, owner: "x-ian", "sherpa-onnx-parakeet-primeline-de-int8",
+                                             revision: "2a97df7e501bc25c6106a150a3379c5272088c53", [
+            .init("encoder.int8.onnx", 652_282_298, sha256: "ecb67ffb98a12bf46eaf7657cb2f714f6569511817a831296325dd32bc4daa30"),
+            .init("decoder.int8.onnx", 11_845_275, sha256: "fb4ddefe200706cabb27ee3fc1c81efa50555a4c8a8e00b663cc795216fb9369"),
+            .init("joiner.int8.onnx", 6_355_277, sha256: "8220c0d117d81bdd0d8c770881932ac340f1ce4b36932941d561d11ad1aaffce"),
+            .init("tokens.txt", 93_939, sha256: "d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d"),
+        ]), bytes: 670_576_789, languages: .german, accuracy: 0.84, speed: 0.90),
+        // Sarphix's export of NVIDIA's Canary 1B v2 (CC-BY-4.0). sherpa-onnx
+        // 1.13.8 knows four of its 25 languages.
+        Model(canary1B, engine: sherpa(.canary, owner: "Sarphix", "canary-1b-v2-sherpa-onnx-int8",
+                                       revision: "7d513cd4f39f6c7dc75c13a284b5e345b37f6198", [
+            .init("encoder.int8.onnx", 857_602_351, sha256: "0d8f349aaa015d47c81d88c4ba3a5461c19bc09ebb72bf4c61698eec9f09e968"),
+            .init("decoder.int8.onnx", 558_682_707, sha256: "e68d839a8939a0c1d55d03fd5c6e6d3f113cfc97038027ffe566b8e3a4be2cd8"),
+            .init("tokens.txt", 224_406, sha256: "399db68418b655f50275779cfe425c55a5ef6dda12cf38375d709566927ef513"),
+        ]), bytes: 1_416_509_464, languages: LocalLanguages(["en", "de", "es", "fr"]), accuracy: 0.88, speed: 0.70),
+        // Qwen's official sherpa-onnx export. Its value is size and finding
+        // the language itself; the leaderboard has it behind Parakeet V3 in
+        // German and level in English.
+        Model(qwen3, engine: sherpa(.qwen3ASR, owner: "csukuangfj2", "sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25",
+                                    revision: "68818b2313fe77bd06f6a7c5068ff3ef59d02b8a", [
+            .init("conv_frontend.onnx", 44_148_281, sha256: "d22dc4423e0940e49884e903d2ea2f7e5567c14fc1aed97e4e26d6b8f208ef9e"),
+            .init("encoder.int8.onnx", 182_491_662, sha256: "60748d3e6744a57c9c91e1b17424a6c2990567e8adceb0783940c03ed98fa9d9"),
+            .init("decoder.int8.onnx", 755_914_231, sha256: "4f6885be5959ae26af3089d38ee7972c5fafbeeb1cf8d5e76eab6d8b61ca5771"),
+            .init("tokenizer/vocab.json", 2_776_833, sha256: "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"),
+            .init("tokenizer/merges.txt", 1_671_853, sha256: "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"),
+            .init("tokenizer/tokenizer_config.json", 12_487, sha256: "4942d005604266809309cabc9f4e9cb89ce855d59b14681fdc0e1cc62ea26c4c"),
+        ]), bytes: 987_015_347, languages: LocalLanguages(["en", "de", "fr", "es", "it", "pt", "ru", "zh", "ja", "ko", "ar"], count: 30), accuracy: 0.76, speed: 0.62),
         Model(canary, engine: sherpa(.canary, "sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8", revision: "9077164e0d3dd1d5353743e89ceaa1d3a770838c", [
             .init("encoder.int8.onnx", 132_678_643, sha256: "7a75b4e2a5857a6dcc0819503bbe3fad66943db4a3ccf21d3f27c633667d303f"),
             .init("decoder.int8.onnx", 74_437_848, sha256: "e41a2ab9c0c2fe81a1e8ade5a45fb02a74bc4db7d1f91b89a54a25e2cf79cba2"),
@@ -281,6 +364,27 @@ public enum LocalCatalog {
     }
 }
 
+/// What the Open ASR Leaderboard (or a model's maker) lists for a model, in
+/// percent of wrong words: German on FLEURS and on Common Voice, English as
+/// the average over its nine datasets.
+public struct PublishedErrors: Hashable, Sendable {
+    public var germanFleurs: Double?
+    public var germanCommonVoice: Double?
+    public var english: Double?
+    /// A maker's own German average, and the base model's on the same test.
+    public var makerGerman: Double?
+    public var makerBaseline: Double?
+
+    public init(germanFleurs: Double? = nil, germanCommonVoice: Double? = nil, english: Double? = nil,
+                makerGerman: Double? = nil, makerBaseline: Double? = nil) {
+        self.germanFleurs = germanFleurs
+        self.germanCommonVoice = germanCommonVoice
+        self.english = english
+        self.makerGerman = makerGerman
+        self.makerBaseline = makerBaseline
+    }
+}
+
 /// The languages a model hears: the ones satz names, and how many in all.
 public struct LocalLanguages: Hashable, Sendable {
     /// Language codes ("de"), in the order they are named.
@@ -293,6 +397,7 @@ public struct LocalLanguages: Hashable, Sendable {
     }
 
     public static let english = LocalLanguages(["en"])
+    public static let german = LocalLanguages(["de"])
 
     public var hearsGerman: Bool { codes.contains("de") }
     public var isEnglishOnly: Bool { codes == ["en"] && count == 1 }
@@ -408,9 +513,42 @@ public enum LocalFacts {
         }
     }
 
+    /// "3,3 % wrong words in German on FLEURS, 2,9 % on Common Voice; 6,3 %
+    /// in English on average. Open ASR Leaderboard, not measured by satz."
+    /// For the accuracy bar's help.
+    public static func published(_ errors: PublishedErrors, language: Language = .current) -> String {
+        let english = language == .english
+        var parts: [String] = []
+        switch (errors.germanFleurs, errors.germanCommonVoice) {
+        case let (fleurs?, voice?):
+            let (f, v) = (number(fleurs, language: language), number(voice, language: language))
+            parts.append(english ? "\(f) % wrong words in German on FLEURS, \(v) % on Common Voice"
+                                 : "\(f) % falsche Wörter auf Deutsch (FLEURS), \(v) % (Common Voice)")
+        case let (fleurs?, nil):
+            let f = number(fleurs, language: language)
+            parts.append(english ? "\(f) % wrong words in German on FLEURS" : "\(f) % falsche Wörter auf Deutsch (FLEURS)")
+        default: break
+        }
+        if let value = errors.english {
+            let e = number(value, language: language)
+            parts.append(english ? "\(e) % in English on average" : "\(e) % auf Englisch im Schnitt")
+        }
+        if let value = errors.makerGerman {
+            let m = number(value, language: language, decimals: 2)
+            let base = errors.makerBaseline.map { number($0, language: language, decimals: 2) }
+            parts.append(english ? "\(m) % wrong words in German on average" + (base.map { " (Parakeet V3: \($0) %)" } ?? "")
+                                 : "\(m) % falsche Wörter auf Deutsch im Schnitt" + (base.map { " (Parakeet V3: \($0) %)" } ?? ""))
+        }
+        let source = errors.makerGerman != nil
+            ? (english ? "The maker's own figures" : "Angaben des Herstellers")
+            : "Open ASR Leaderboard"
+        let tail = english ? "\(source), not measured by satz." : "\(source), nicht von satz gemessen."
+        return parts.joined(separator: "; ") + ". " + tail
+    }
+
     /// One decimal, never "0,0": a speed that small is still not nothing.
-    public static func number(_ value: Double, language: Language = .current) -> String {
-        let text = String(format: "%.1f", max(value, 0.1))
+    public static func number(_ value: Double, language: Language = .current, decimals: Int = 1) -> String {
+        let text = String(format: "%.\(decimals)f", max(value, pow(10, -Double(decimals))))
         return language == .english ? text : text.replacingOccurrences(of: ".", with: ",")
     }
 

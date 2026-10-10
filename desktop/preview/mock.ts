@@ -9,7 +9,10 @@
 // others none): pick another provider in the menu to see it without
 // switching to it, or open with `?show=local` to start there.
 // `&language=de` shows the German words, `&failed=1` a download that failed,
-// `&model=sherpa/canary-180m` Canary as Local's model (with its "Spoken in"),
+// `&model=sherpa/canary-180m` Canary as Local's model (with its "Spoken in"; also
+// `sherpa/cohere-transcribe`, with its fourteen languages),
+// `?show=microsoft` or `?show=google` start on the new providers (neither has a key),
+// `&key=microsoft` gives one provider a key already,
 // `&fresh=1` nothing downloaded yet, `&slow=1` holds every state still for a picture,
 // `&noshortcut=1` right Ctrl cannot start a dictation (the hint under "Shortcut").
 import { germanErrors, localModelIds, type Speed } from '../src/core/localModels'
@@ -22,7 +25,7 @@ const query = new URLSearchParams(location.search)
 const asked = query.get('provider') as Provider | null
 const language: 'de' | 'en' = query.get('language') === 'de' ? 'de' : 'en'
 const prefs = {
-  provider: (asked && asked in shipped ? asked : 'openrouter') as Provider, models: {} as Record<string, string>, customBaseURL: '', words: ['Kubernetes', 'Lena'], triggerMode: 'tap',
+  provider: (asked && asked in shipped ? asked : 'openrouter') as Provider, models: {} as Record<string, string>, customBaseURL: '', microsoftRegion: 'northeurope', microsoftEndpoint: '', words: ['Kubernetes', 'Lena'], triggerMode: 'tap',
   language, spokenLanguage: null as 'de' | 'en' | null, toldLanguage: null as string | null, replacements: standardReplacements(language), usesReplacements: true,
   removesFillers: true, keepsOnClipboard: false, historyLimit: 50, pausesMedia: true,
 }
@@ -32,7 +35,8 @@ let history = [
   { id: 'c', text: 'Bitte schick mir die Unterlagen bis Freitag.', date: new Date(Date.now() - 3 * hour).toISOString(), pasted: false },
   { id: 'd', text: "The test is red, please don't merge yet.", date: new Date(Date.now() - 26 * hour).toISOString(), pasted: true },
 ]
-const keys: Record<Provider, boolean> = { openrouter: true, openai: false, groq: false, custom: false, local: false }
+const keys: Record<Provider, boolean> = { openrouter: true, openai: false, groq: false, microsoft: false, google: false, custom: false, local: false }
+for (const name of (query.get('key') ?? '').split(',')) if (name in keys) keys[name as Provider] = true
 const isProvider = (value: unknown): value is Provider => typeof value === 'string' && value in shipped
 
 // The local models, as main.ts reports them.
@@ -46,13 +50,14 @@ const local: Record<string, { state: LocalState; measuring: boolean; speed: Spee
   'onnx-community/whisper-small': { state: { kind: 'ready' }, measuring: false, speed: null },
   'sherpa/moonshine-base': { state: { kind: 'ready' }, measuring: true, speed: null },
   'sherpa/canary-180m': { state: { kind: query.get('model') === 'sherpa/canary-180m' ? 'ready' : 'missing' }, measuring: false, speed: measured(0.3) },
+  'sherpa/cohere-transcribe': { state: { kind: query.get('model') === 'sherpa/cohere-transcribe' ? 'ready' : 'missing' }, measuring: false, speed: measured(2.4) },
   'onnx-community/whisper-large-v3-ONNX': { state: { kind: 'downloading', fraction: 0.42 }, measuring: false, speed: null },
   'onnx-community/whisper-base': { state: query.has('failed') ? { kind: 'failed', message: 'fetch failed' } : { kind: 'missing' }, measuring: false, speed: null },
 }
 if (query.get('model')) prefs.models.local = query.get('model')!
 if (query.has('fresh')) for (const key of Object.keys(local)) delete local[key]
 /** Seconds per 10 s, about as an Intel laptop would measure them. */
-const fakeSpeeds: [string, number][] = [['large-v3-ONNX', 5.4], ['medium', 2.3], ['base', 0.5], ['tiny', 0.3], ['distil', 2], ['moonshine', 0.2], ['parakeet', 0.4], ['sense', 0.15]]
+const fakeSpeeds: [string, number][] = [['cohere', 2.4], ['qwen3', 0.9], ['canary-1b', 1.3], ['german', 0.35], ['large-v3-ONNX', 5.4], ['medium', 2.3], ['base', 0.5], ['tiny', 0.3], ['distil', 2], ['moonshine', 0.2], ['parakeet', 0.4], ['sense', 0.15]]
 const localModel = () => prefs.models.local || 'onnx-community/whisper-large-v3-turbo'
 const entry = (id: string) => (local[id] ??= { state: { kind: 'missing' }, measuring: false, speed: null })
 const timers = new Map<string, ReturnType<typeof setInterval>>()
@@ -107,6 +112,7 @@ window.confirm = (message?: string) => { calls.push(['confirm', message]); retur
       case 'local:measure': fakeMeasure(args[0] as string); return
       case 'local:remove': entry(args[0] as string).state = { kind: 'missing' }; return
       case 'settings:update': Object.assign(prefs, args[0]); return prefs
+      case 'settings:open-key-page': return isProvider(args[0]) && (args[0] === 'microsoft' || args[0] === 'google')
       case 'settings:store-key': { const provider = args[1] === undefined ? prefs.provider : args[1]; if (!isProvider(provider) || provider === 'local') return false; keys[provider] = true; return true }
       case 'settings:clear-history': history = []; emit('history:changed'); return
       case 'settings:start-at-login': return args[0]

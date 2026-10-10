@@ -1,5 +1,5 @@
 import type { Language } from './language'
-import type { Provider } from './transcriber'
+import { microsoftHost, needsKey, type Provider } from './transcriber'
 
 /**
  * Looking is not switching. The provider menu in Settings shows a provider's
@@ -9,12 +9,14 @@ import type { Provider } from './transcriber'
  */
 
 /** The menu's order. */
-export const providerOrder: Provider[] = ['openrouter', 'openai', 'groq', 'custom', 'local']
+export const providerOrder: Provider[] = ['openrouter', 'openai', 'groq', 'microsoft', 'google', 'custom', 'local']
 
 const names: Record<Provider, Record<Language, string>> = {
   openrouter: { de: 'OpenRouter', en: 'OpenRouter' },
   openai: { de: 'OpenAI', en: 'OpenAI' },
   groq: { de: 'Groq', en: 'Groq' },
+  microsoft: { de: 'Microsoft', en: 'Microsoft' },
+  google: { de: 'Google', en: 'Google' },
   custom: { de: 'Eigener', en: 'Custom' },
   local: { de: 'Lokal', en: 'Local' },
 }
@@ -25,19 +27,67 @@ export function providerLabel(provider: Provider, inUse: Provider, language: Lan
   return provider === inUse ? `${name} ${language === 'de' ? '(in Benutzung)' : '(in use)'}` : name
 }
 
+/** What a provider still lacks before it can take a dictation. */
+export type Need = 'key' | 'address' | 'model' | 'region' | 'localModel'
+
+/**
+ * What a provider needs, ported from the Mac's ProviderReadiness: a key for
+ * every one but Local; Custom also an address and a model; Microsoft a region
+ * (or its own address, which wins, and which must be one if it is typed);
+ * Local the chosen model on this computer. `hasKey` is the shown provider's
+ * key, or for Local that its model is downloaded. In the order they are filled in.
+ */
+export function providerNeeds(provider: Provider, facts: { hasKey: boolean; customBaseURL: string; model: string; microsoftRegion?: string; microsoftEndpoint?: string }): Need[] {
+  const needs: Need[] = []
+  if (provider === 'local') return facts.hasKey ? [] : ['localModel']
+  if (needsKey(provider) && !facts.hasKey) needs.push('key')
+  if (provider === 'custom') {
+    let host = ''
+    try { host = new URL(facts.customBaseURL.trim()).host } catch { /* none */ }
+    if (!host) needs.push('address')
+    if (!facts.model.trim()) needs.push('model')
+  }
+  if (provider === 'microsoft' && microsoftHost(facts.microsoftRegion, facts.microsoftEndpoint) === null) {
+    needs.push(facts.microsoftEndpoint?.trim() ? 'address' : 'region')
+  }
+  return needs
+}
+
+/** "Erst den Schlüssel eintragen", naming everything missing at once; null when nothing is. */
+export function needsMessage(needs: Need[], language: Language): string | null {
+  if (needs.length === 1 && needs[0] === 'localModel') return language === 'de' ? 'Erst ein Modell laden.' : 'Download a model first.'
+  const words = {
+    key: { de: 'Schlüssel', en: 'key', deWhole: 'den Schlüssel', enWhole: 'the key' },
+    address: { de: 'Adresse', en: 'address', deWhole: 'die Adresse', enWhole: 'the address' },
+    model: { de: 'Modell', en: 'model', deWhole: 'das Modell', enWhole: 'the model' },
+    region: { de: 'Region', en: 'region', deWhole: 'die Region', enWhole: 'the region' },
+  }
+  const named = needs.filter((need): need is keyof typeof words => need !== 'localModel')
+  if (named.length === 0) return null
+  // A region is picked from a menu, the rest is typed.
+  const picked = named.every(need => need === 'region')
+  const list = (items: string[], and: string) => (items.length > 1 ? `${items.slice(0, -1).join(', ')} ${and} ${items[items.length - 1]}` : items[0])
+  if (language === 'de') {
+    return named.length === 1 ? `Erst ${words[named[0]].deWhole} ${picked ? 'wählen' : 'eintragen'}.` : `Erst ${list(named.map(need => words[need].de), 'und')} eintragen.`
+  }
+  return named.length === 1 ? `${picked ? 'Choose' : 'Enter'} ${words[named[0]].enWhole} first.` : `Enter the ${list(named.map(need => words[need].en), 'and')} first.`
+}
+
 /**
  * The row under the menu while it shows a provider dictations do not go to:
- * where they go, and the one button that switches. None while it shows the
- * provider in use.
+ * where they go, and the one button that switches, which is offered only once
+ * the provider has what it needs (`needs`, from providerNeeds): then the row
+ * says what is missing instead. None while it shows the provider in use.
  */
-export function switchRow(shown: Provider, inUse: Provider, language: Language): { text: string; button: string } | null {
+export function switchRow(shown: Provider, inUse: Provider, language: Language, needs: Need[] = []): { text: string; button: string | null } | null {
   if (shown === inUse) return null
   // "Eigener" and "Lokal" are the menu's words, not names: quoted, they read as such in a sentence.
   const generic = inUse === 'custom' || inUse === 'local'
   const where = generic ? (language === 'de' ? `„${names[inUse].de}“` : `"${names[inUse].en}"`) : names[inUse][language]
-  return language === 'de'
-    ? { text: `Diktate gehen an ${where}.`, button: `${shown === 'custom' ? 'Eigenen' : names[shown].de} benutzen` }
-    : { text: `Dictation goes to ${where}.`, button: `Use ${names[shown].en}` }
+  const goesTo = language === 'de' ? `Diktate gehen an ${where}.` : `Dictation goes to ${where}.`
+  const missing = needsMessage(needs, language)
+  if (missing) return { text: `${goesTo} ${missing}`, button: null }
+  return { text: goesTo, button: language === 'de' ? `${shown === 'custom' ? 'Eigenen' : names[shown].de} benutzen` : `Use ${names[shown].en}` }
 }
 
 /**

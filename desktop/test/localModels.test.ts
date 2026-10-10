@@ -25,20 +25,27 @@ const whisperIds = [
   'onnx-community/whisper-small', 'onnx-community/whisper-base', 'onnx-community/whisper-tiny',
   'onnx-community/whisper-large-v3-turbo-german-ONNX', 'onnx-community/distil-large-v3.5-ONNX']
 const sherpaIds = ['sherpa/parakeet-v3', 'sherpa/canary-180m', 'sherpa/parakeet-v2', 'sherpa/moonshine-base', 'sherpa/sense-voice', 'sherpa/moonshine-tiny']
+/** Added on 10.10.2026: not Handy's, from other owners' repos. */
+const newerIds = ['sherpa/cohere-transcribe', 'sherpa/qwen3-asr-0.6b', 'sherpa/canary-1b-v2', 'sherpa/parakeet-german']
 
-test("the catalog: the eight Whisper builds and Handy's six models, Turbo first as the default, real sizes", () => {
+test("the catalog: the eight Whisper builds, Handy's six models and four newer ones, Turbo first as the default, real sizes", () => {
   assert.deepEqual(localModels.filter(model => model.engine === 'whisper').map(model => model.id).sort(), [...whisperIds].sort())
-  assert.deepEqual(localModels.filter(model => model.engine === 'sherpa').map(model => model.id).sort(), [...sherpaIds].sort())
+  assert.deepEqual(localModels.filter(model => model.engine === 'sherpa').map(model => model.id).sort(), [...sherpaIds, ...newerIds].sort())
   assert.equal(localModels[0].id, providers.local.defaultModel)
   // Whisper: the sum of the three files satz loads; sherpa: every file, from each repo's file list (09.10.2026).
   const size = (id: string) => formatSize(localModel(id)!.bytes, 'en')
   assert.deepEqual(whisperIds.map(size), ['981 MB', '1.4 GB', '786 MB', '328 MB', '149 MB', '99 MB', '983 MB', '950 MB'])
   assert.deepEqual(sherpaIds.map(size), ['670 MB', '207 MB', '661 MB', '287 MB', '240 MB', '124 MB'])
+  // Cohere with its 2.7 GB of encoder weights; the sums are the repos' file lists at the pinned commits.
+  assert.deepEqual(newerIds.map(size), ['2.9 GB', '987 MB', '1.4 GB', '671 MB'])
+  assert.deepEqual(newerIds.map(id => localModel(id)!.bytes), [2_888_052_036, 987_015_347, 1_416_509_464, 670_576_789])
   assert.equal(localModel('sherpa/parakeet-v3')!.bytes, 670_478_772)
   // The cloud menus and the local list name the same models, with their makers.
   assert.deepEqual(models.local.map(model => model.id).sort(), localModels.map(model => model.id).sort())
   assert.equal(models.local.find(model => model.id === 'onnx-community/whisper-large-v3-turbo-german-ONNX')?.maker, 'primeLine')
   assert.equal(models.local.find(model => model.id === 'sherpa/parakeet-v3')?.maker, 'NVIDIA')
+  assert.deepEqual(['sherpa/cohere-transcribe', 'sherpa/qwen3-asr-0.6b', 'sherpa/canary-1b-v2', 'sherpa/parakeet-german'].map(id => models.local.find(model => model.id === id)?.maker),
+    ['Cohere', 'Alibaba', 'NVIDIA', 'primeLine'])
 })
 
 test("Handy's scores, and one plain sentence each in German and English without em dashes", () => {
@@ -49,6 +56,11 @@ test("Handy's scores, and one plain sentence each in German and English without 
   assert.deepEqual(score('sherpa/moonshine-base'), [0.70, 0.90])
   assert.deepEqual(score('sherpa/moonshine-tiny'), [0.55, 0.95])
   assert.deepEqual(score('sherpa/sense-voice'), [0.65, 0.95])
+  // The newer ones: Cohere the most accurate in German on the leaderboard, Canary 1B v2 next to Large v3; the rest estimated.
+  assert.deepEqual(score('sherpa/cohere-transcribe').map(value => value > 0), [true, true])
+  assert.equal(localModel('sherpa/cohere-transcribe')!.accuracy, 0.90)
+  assert.equal(localModel('sherpa/canary-1b-v2')!.accuracy, 0.85)
+  assert.deepEqual(localModel('sherpa/cohere-transcribe')!.description, { de: 'Am genauesten auf Deutsch, groß.', en: 'The most accurate in German, but big.' })
   assert.equal(localModel('onnx-community/whisper-large-v3-ONNX')!.accuracy, 0.85)
   assert.equal(localModel('onnx-community/whisper-tiny')!.accuracy, 0.35)
   assert.deepEqual(localModel('sherpa/parakeet-v3')!.description, { de: 'Schnell und genau. 25 europäische Sprachen.', en: 'Fast and accurate. 25 European languages.' })
@@ -59,7 +71,7 @@ test("Handy's scores, and one plain sentence each in German and English without 
   }
 })
 
-test('the order: the default, then those that write German by accuracy, the German-only one, then the rest by accuracy', () => {
+test('the order: the default, then those that write German by accuracy, the German-only ones, then the rest by accuracy', () => {
   const rest = localModels.slice(1)
   const german = rest.filter(model => model.languages.includes('de') && model.languages.length > 1)
   const germanOnly = rest.filter(model => model.languages.length === 1 && model.languages[0] === 'de')
@@ -70,6 +82,9 @@ test('the order: the default, then those that write German by accuracy, the Germ
     assert.deepEqual(scores, [...scores].sort((a, b) => b - a))
   }
   assert.equal(localModels.at(-1)!.id, 'sherpa/moonshine-tiny')
+  // Cohere is the most accurate that writes German, so right after the default.
+  assert.equal(localModels[1].id, 'sherpa/cohere-transcribe')
+  assert.deepEqual(germanOnly.map(model => model.id), ['sherpa/parakeet-german', 'onnx-community/whisper-large-v3-turbo-german-ONNX'])
 })
 
 test('Windows on ARM gets no sherpa-onnx models, without a word; everywhere satz ships, it gets all', () => {
@@ -92,7 +107,9 @@ test('a single-language model always decodes in its language; the others find ou
   assert.equal(onlyLanguage('onnx-community/whisper-large-v3-turbo-german-ONNX'), 'de')
   assert.equal(onlyLanguage('onnx-community/distil-large-v3.5-ONNX'), 'en')
   assert.equal(onlyLanguage('sherpa/parakeet-v2'), 'en')
-  for (const id of ['onnx-community/whisper-large-v3-turbo', 'onnx-community/whisper-tiny', 'onnx-community/whisper-medium-ONNX', 'sherpa/parakeet-v3', 'sherpa/canary-180m', 'sherpa/sense-voice']) {
+  assert.equal(onlyLanguage('sherpa/parakeet-german'), 'de')
+  for (const id of ['onnx-community/whisper-large-v3-turbo', 'onnx-community/whisper-tiny', 'onnx-community/whisper-medium-ONNX', 'sherpa/parakeet-v3', 'sherpa/canary-180m', 'sherpa/sense-voice',
+    'sherpa/cohere-transcribe', 'sherpa/qwen3-asr-0.6b', 'sherpa/canary-1b-v2']) {
     assert.equal(onlyLanguage(id), undefined, id)
   }
   assert.equal(localModel('sherpa/canary-180m')!.language, 'spoken')
@@ -108,7 +125,26 @@ test("Canary is told the language chosen for it among its four, else the app's s
   assert.equal(toldLanguage(canary, 'fr', 'en'), 'fr')
   // Something it does not write (an old or broken setting): the spoken language.
   assert.equal(toldLanguage(canary, 'it', 'en'), 'en')
-  for (const id of ['onnx-community/whisper-large-v3-turbo', 'sherpa/parakeet-v3', 'sherpa/sense-voice', 'someone/whisper-de']) assert.equal(toldLanguage(id, 'es', 'de'), undefined, id)
+  for (const id of ['onnx-community/whisper-large-v3-turbo', 'sherpa/parakeet-v3', 'sherpa/sense-voice', 'someone/whisper-de', 'sherpa/qwen3-asr-0.6b', 'sherpa/parakeet-german']) assert.equal(toldLanguage(id, 'es', 'de'), undefined, id)
+})
+
+test('Cohere Transcribe and Canary 1B v2 are told the language like Canary: Cohere one of its fourteen, Canary 1B v2 one of its four', () => {
+  const cohere = 'sherpa/cohere-transcribe'
+  assert.equal(localModel(cohere)!.languages.length, 14)
+  assert.deepEqual(localModel(cohere)!.languages.slice(0, 2), ['de', 'en'])
+  assert.equal(new Set(localModel(cohere)!.languages).size, 14)
+  assert.equal(toldLanguage(cohere, null, 'de'), 'de')
+  assert.equal(toldLanguage(cohere, undefined, 'en'), 'en')
+  assert.equal(toldLanguage(cohere, 'ja', 'de'), 'ja')
+  assert.equal(toldLanguage(cohere, 'it', 'en'), 'it')
+  // Something it does not write: the spoken language.
+  assert.equal(toldLanguage(cohere, 'ru', 'en'), 'en')
+  assert.equal(localModel(cohere)!.language, 'spoken')
+  const canary = 'sherpa/canary-1b-v2'
+  assert.equal(toldLanguage(canary, 'es', 'de'), 'es')
+  assert.equal(toldLanguage(canary, 'it', 'en'), 'en')
+  // Qwen3-ASR finds out itself.
+  assert.equal(localModel('sherpa/qwen3-asr-0.6b')!.language, 'auto')
 })
 
 test("the card's languages: one, two, a few named, many counted with the names in the help", () => {
@@ -123,6 +159,13 @@ test("the card's languages: one, two, a few named, many counted with the names i
   assert.equal(line('sherpa/canary-180m', 'de').help, 'Hört auf die Sprache unter „Gesprochen auf“.')
   assert.equal(line('sherpa/sense-voice', 'de').text, 'Chinesisch, Englisch, Japanisch, Koreanisch, Kantonesisch')
   assert.equal(line('sherpa/sense-voice', 'en').text, 'Chinese, English, Japanese, Korean, Cantonese')
+  assert.equal(line('sherpa/parakeet-german', 'de').text, 'Nur Deutsch')
+  assert.equal(line('sherpa/canary-1b-v2', 'en').text, 'English, German, Spanish, French')
+  const cohere = line('sherpa/cohere-transcribe', 'de')
+  assert.equal(cohere.text, '14 Sprachen')
+  assert.match(cohere.help, /^Hört auf die Sprache unter „Gesprochen auf“\. Deutsch, Englisch, Spanisch, Französisch, .*Chinesisch\.$/)
+  assert.equal(line('sherpa/qwen3-asr-0.6b', 'en').text, '30 languages')
+  assert.match(line('sherpa/qwen3-asr-0.6b', 'en').help, /^Tells the language by itself\. English, German, .*Filipino.*Cantonese.*Korean\.$/)
   const parakeet = line('sherpa/parakeet-v3', 'de')
   assert.equal(parakeet.text, '25 Sprachen')
   assert.match(parakeet.help, /^Erkennt die Sprache selbst\. Bulgarisch, Kroatisch, .*Deutsch.*, Ukrainisch\.$/)
@@ -147,6 +190,18 @@ test('the German leaderboard is read by column name, and only for the models sat
   // Columns moved, a quoted field, Windows line ends.
   const moved = 'MCV WER,"FLEURS WER",model,RTFx\r\n4.79,3.1,"openai/whisper-large-v3",327.55\r\n'
   assert.deepEqual(parseGermanErrors(moved), { 'openai/whisper-large-v3': 3.1 })
+})
+
+test('the leaderboard rows of the newer models are read under the names the leaderboard gives them', () => {
+  const rows = `${leaderboard}CohereLabs/cohere-transcribe-03-2026,606.88,3.33,2.87\nnvidia/canary-1b-v2,1307.83,3.43,4.69\nQwen/Qwen3-ASR-0.6B-hf,384.27,5.41,7.97\nQwen/Qwen3-ASR-1.7B-hf,368.59,3.35,4.6\n`
+  assert.deepEqual(parseGermanErrors(rows), {
+    'openai/whisper-large-v3': 3.2, 'openai/whisper-large-v3-turbo': 3.67, 'CohereLabs/cohere-transcribe-03-2026': 3.33, 'nvidia/canary-1b-v2': 3.43, 'Qwen/Qwen3-ASR-0.6B-hf': 5.41,
+  })
+  // The shipped numbers are those rows, so they show before the first fetch.
+  for (const [original, rate] of Object.entries(parseGermanErrors(rows))) assert.equal(shippedGermanErrors[original], rate, original)
+  // None for the German fine-tune: its vendor's numbers are on other test sets.
+  assert.equal(shippedGermanErrors['primeline/parakeet-primeline'], undefined)
+  assert.equal(modelBars('sherpa/parakeet-german', 'de').accuracy!.help, 'Geschätzt')
 })
 
 test('a leaderboard without its columns, or with nonsense in them, gives nothing', () => {
@@ -205,7 +260,7 @@ test("a card's bars: Handy's accuracy with the German error rate behind it, spee
   const turbo = 'onnx-community/whisper-large-v3-turbo'
   const plain = modelBars(turbo, 'de')
   assert.equal(plain.accuracy!.value, 0.80)
-  assert.equal(plain.accuracy!.help, '3,7 % Fehler auf Deutsch (FLEURS, Originalmodell, nicht die geladene Fassung)')
+  assert.equal(plain.accuracy!.help, '3,7 % Fehler auf Deutsch (FLEURS, Open ASR Leaderboard, Originalmodell, nicht die geladene Fassung)')
   assert.equal(plain.speed!.value, 0.40)
   assert.equal(plain.speed!.help, 'Geschätzt. satz misst das Tempo nach dem Laden.')
   assert.equal(modelBars(turbo, 'en', { downloaded: true }).speed!.help, 'Estimated, not measured on this computer yet')
@@ -214,7 +269,12 @@ test("a card's bars: Handy's accuracy with the German error rate behind it, spee
   assert.equal(here.speed!.help, '0,7 s für 10 s Sprechen, gemessen auf diesem Computer')
   assert.match(modelBars(turbo, 'en', { speed, here: false }).speed!.help, /^0\.7 s per 10 s of speech, measured on 10\/8\/2026 with satz 0\.4\.1 on Apple M5 Pro, 18 cores$/)
   assert.match(modelBars(turbo, 'en', { errors: { 'openai/whisper-large-v3-turbo': 2.5 } }).accuracy!.help, /^2\.5 % errors in German/)
-  assert.equal(modelBars('sherpa/parakeet-v3', 'en').accuracy!.help, '4.2 % errors in German (FLEURS, full model, not the downloaded build)')
+  assert.equal(modelBars('sherpa/parakeet-v3', 'en').accuracy!.help, '4.2 % errors in German (FLEURS, Open ASR Leaderboard, full model, not the downloaded build)')
+  // The Whisper paper for the four it alone has numbers for, the leaderboard for the newer models.
+  assert.equal(modelBars('onnx-community/whisper-medium-ONNX', 'en').accuracy!.help, '6.5 % errors in German (FLEURS, Whisper paper, full model, not the downloaded build)')
+  assert.equal(modelBars('sherpa/cohere-transcribe', 'de').accuracy!.help, '3,3 % Fehler auf Deutsch (FLEURS, Open ASR Leaderboard, Originalmodell, nicht die geladene Fassung)')
+  assert.equal(modelBars('sherpa/canary-1b-v2', 'en').accuracy!.help, '3.4 % errors in German (FLEURS, Open ASR Leaderboard, full model, not the downloaded build)')
+  assert.equal(modelBars('sherpa/qwen3-asr-0.6b', 'en').accuracy!.help, '5.4 % errors in German (FLEURS, Open ASR Leaderboard, full model, not the downloaded build)')
   // No German number where there is none, or where the model writes no German.
   assert.equal(modelBars('onnx-community/whisper-large-v3-turbo-german-ONNX', 'de').accuracy!.help, 'Geschätzt')
   assert.equal(modelBars('onnx-community/distil-large-v3.5-ONNX', 'en', { errors: { 'distil-whisper/distil-large-v3.5': 40 } }).accuracy!.help, 'Estimated')

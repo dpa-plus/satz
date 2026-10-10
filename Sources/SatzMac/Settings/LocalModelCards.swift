@@ -40,7 +40,7 @@ struct LocalModelCards: View {
                 ModelCard(id: id, preferences: preferences, benchmarks: store.benchmarks, yours: true,
                           recommended: false, narrow: narrow)
             }
-            // Canary and Apple's listen for one language: chosen here, where it matters.
+            // Canary, Cohere and Apple's listen for one language: chosen here, where it matters.
             if Self.listensForOneLanguage(current) {
                 SpokenRow(preferences: preferences, model: current)
             }
@@ -83,10 +83,11 @@ struct LocalModelCards: View {
     }
 }
 
-/// "Gesprochen auf": the one language Canary and Apple's listen for.
+/// "Gesprochen auf": the one language Canary, Cohere and Apple's listen for.
 /// Apple's: German or English, the spoken language everything else goes
 /// by. Canary: its own four, kept apart, so Spanish for Canary leaves
-/// Whisper, the replacements and Apple's on German or English.
+/// Whisper, the replacements and Apple's on German or English. Cohere's
+/// fourteen are a menu rather than fourteen buttons.
 private struct SpokenRow: View {
     @Bindable var preferences: Preferences
     let model: String
@@ -119,14 +120,59 @@ private struct SpokenRow: View {
     @ViewBuilder
     private var choice: some View {
         if let entry = LocalCatalog.model(model), let codes = entry.toldLanguages {
-            Segmented(options: codes.map { (value: $0, label: LocalLanguages.name($0)) },
-                      selection: Binding(get: { entry.told(choice: preferences.toldLanguage, spoken: preferences.spokenLanguage) ?? "" },
-                                         set: { preferences.toldLanguage = $0 }))
-                .fixedSize()
+            let told = Binding(get: { entry.told(choice: preferences.toldLanguage, spoken: preferences.spokenLanguage) ?? "" },
+                               set: { preferences.toldLanguage = $0 })
+            if codes.count > 5 {
+                LanguageMenu(codes: codes, selection: told)
+            } else {
+                Segmented(options: codes.map { (value: $0, label: LocalLanguages.name($0)) }, selection: told)
+                    .fixedSize()
+            }
         } else {
             Segmented(options: Language.allCases.map { (value: $0, label: $0.name) }, selection: $preferences.spokenLanguage)
                 .fixedSize()
         }
+    }
+}
+
+/// The language to listen for among many, as a menu.
+private struct LanguageMenu: View {
+    let codes: [String]
+    @Binding var selection: String
+    @Environment(\.theme) private var theme
+    @Environment(\.isSnapshot) private var isSnapshot
+
+    var body: some View {
+        if isSnapshot {
+            label
+        } else {
+            Menu {
+                Picker("", selection: $selection) {
+                    ForEach(codes, id: \.self) { code in
+                        Text(LocalLanguages.name(code)).tag(code)
+                    }
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
+            } label: { label }
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .accessibilityLabel(de("Gesprochen auf", en: "Spoken in"))
+        }
+    }
+
+    private var label: some View {
+        HStack(spacing: 6) {
+            Text(LocalLanguages.name(selection)).font(Typography.text(14, .semibold))
+            Image(systemName: "chevron.up.chevron.down").font(.system(size: 10, weight: .semibold))
+        }
+        .foregroundStyle(theme.ink)
+        .padding(.horizontal, 10)
+        .frame(height: 28)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.hairline))
+        .contentShape(Rectangle())
     }
 }
 
@@ -288,6 +334,11 @@ private struct ModelCard: View {
             let noGerman = benchmarks.german[id] == nil
                 ? " " + de("Auf Deutsch hat Argmax diese Fassung nicht gemessen.", en: "Argmax did not test this build in German.") : ""
             return "\(errors). \(source)\(noGerman)"
+        }
+        // What the Open ASR Leaderboard (or the maker) lists, where there is
+        // a row for the model: the bar is still a rating, the numbers are not.
+        if let published = model?.published {
+            return LocalFacts.published(published) + " " + de("Der Balken ist eine grobe Einschätzung.", en: "The bar is a rough rating.")
         }
         return de("Grobe Einschätzung nach dem, was über das Modell veröffentlicht ist. satz misst die Genauigkeit nicht selbst.",
                   en: "A rough rating from what is published about the model. satz does not measure accuracy itself.")

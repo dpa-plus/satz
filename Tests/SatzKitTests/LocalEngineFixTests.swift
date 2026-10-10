@@ -111,8 +111,7 @@ private final class Pieces: @unchecked Sendable {
 }
 
 @Test func noCallToARecognizerIsEverGivenMoreThanItsEncoderTakes() throws {
-    for id in [LocalCatalog.parakeetV3, LocalCatalog.parakeetV2, LocalCatalog.canary, LocalCatalog.moonshineBase,
-               LocalCatalog.moonshineTiny, LocalCatalog.senseVoice] {
+    for id in LocalCatalog.all.filter({ $0.sherpa != nil }).map(\.id) {
         let sherpa = try #require(LocalCatalog.model(id)?.sherpa)
         #expect(sherpa.windowSeconds * rate <= SherpaModel.longestCall, "\(id)")
     }
@@ -167,13 +166,13 @@ private final class Pieces: @unchecked Sendable {
 // MARK: - LE-03: pinned commits and checksums
 
 @Test func everySherpaFileHasAChecksumAndEveryModelACommit() throws {
-    for id in [LocalCatalog.parakeetV3, LocalCatalog.parakeetV2, LocalCatalog.canary, LocalCatalog.moonshineBase,
-               LocalCatalog.moonshineTiny, LocalCatalog.senseVoice] {
+    for id in LocalCatalog.all.filter({ $0.sherpa != nil }).map(\.id) {
         let sherpa = try #require(LocalCatalog.model(id)?.sherpa)
         #expect(sherpa.revision.count == 40 && sherpa.revision.allSatisfy(\.isHexDigit), "\(id) revision")
+        #expect(!sherpa.owner.isEmpty && !sherpa.owner.contains("/"), "\(id) owner")
         for file in sherpa.files {
             #expect(file.sha256.count == 64 && file.sha256.allSatisfy { $0.isHexDigit && !$0.isUppercase }, "\(id) \(file.name)")
-            #expect(sherpa.url(of: file).path.contains("/resolve/\(sherpa.revision)/"), "\(id) \(file.name)")
+            #expect(sherpa.url(of: file).path.contains("/\(sherpa.owner)/\(sherpa.repo)/resolve/\(sherpa.revision)/"), "\(id) \(file.name)")
         }
     }
 }
@@ -184,15 +183,21 @@ private final class Pieces: @unchecked Sendable {
 @Test func theMacPinsTheCommitsAndChecksumsTheDesktopPins() throws {
     let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     let text = try String(contentsOf: root.appendingPathComponent("desktop/src/core/localModels.ts"), encoding: .utf8)
-    let repos = text.matches(of: /repo: '([^']+)', revision: '([0-9a-f]{40})'/)
-    #expect(repos.count == 6, "localModels.ts changed shape: the pins are no longer found")
+    let repos = text.matches(of: /owner: '([^']+)', repo: '([^']+)', revision: '([0-9a-f]{40})'/)
+    let macModels = LocalCatalog.all.compactMap(\.sherpa)
+    #expect(repos.count == macModels.count, "localModels.ts and the Mac catalog do not offer the same sherpa-onnx models (\(repos.count) and \(macModels.count)), or localModels.ts changed shape")
     for (index, repo) in repos.enumerated() {
         let end = index + 1 < repos.count ? repos[index + 1].range.lowerBound : text.endIndex
         let block = text[repo.range.upperBound ..< end]
         let desktop = block.matches(of: /name: '([^']+)', role: '[^']+', bytes: ([0-9_]+), sha256: '([0-9a-f]{64})'/)
             .map { ($0.output.1, Int64($0.output.2.replacingOccurrences(of: "_", with: ""))!, $0.output.3) }
-        let mac = try #require(LocalCatalog.all.compactMap(\.sherpa).first { $0.repo == repo.output.1 }, "\(repo.output.1) is not in the Mac catalog")
-        #expect(mac.revision == String(repo.output.2), "\(mac.repo) revision")
+        let mac = try #require(macModels.first { $0.repo == repo.output.2 }, "\(repo.output.2) is not in the Mac catalog")
+        #expect(mac.owner == String(repo.output.1), "\(mac.repo) owner")
+        #expect(mac.revision == String(repo.output.3), "\(mac.repo) revision")
+        // The window the models are heard in, where localModels.ts names it.
+        if let window = block.firstMatch(of: /window: ([0-9]+)/) {
+            #expect(mac.windowSeconds == Int(window.output.1), "\(mac.repo) window")
+        }
         #expect(mac.files.count == desktop.count, "\(mac.repo) files")
         for (file, other) in zip(mac.files, desktop) {
             #expect(file.name == other.0 && file.bytes == other.1 && file.sha256 == String(other.2), "\(mac.repo) \(file.name)")

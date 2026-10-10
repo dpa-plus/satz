@@ -67,7 +67,7 @@ test('WAV round trip, resampling and level', () => {
 })
 
 test('each model menu starts with the provider default and has no doubles', () => {
-  for (const provider of ['openai', 'openrouter', 'groq'] as const) {
+  for (const provider of ['openai', 'openrouter', 'groq', 'microsoft', 'google'] as const) {
     assert.equal(models[provider][0].id, providers[provider].defaultModel)
     assert.equal(new Set(models[provider].map(m => m.id)).size, models[provider].length)
   }

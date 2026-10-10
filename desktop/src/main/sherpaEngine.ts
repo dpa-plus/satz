@@ -7,8 +7,8 @@ import v8 from 'node:v8'
 import vm from 'node:vm'
 import type { Language } from '../core/language'
 import { localModel } from '../core/localModels'
-import { padsEnd, sherpaConfig, sherpaPackage, sherpaURL, tidySherpaText, type SherpaConfig, type SherpaSource } from '../core/sherpa'
-import { hasSpeech, pieceThreshold, speechEnd, speechThreshold } from '../core/speech'
+import { makesUpTextForNoise, padsEnd, sherpaConfig, sherpaPackage, sherpaURL, tidySherpaText, type SherpaConfig, type SherpaSource } from '../core/sherpa'
+import { hasSpeech, isSteady, keepEveryWord, pieceThreshold, speechEnd, speechThreshold } from '../core/speech'
 import { windows } from '../core/windows'
 import { LocalEngine } from './localEngine'
 import type { LocalState } from './localFiles'
@@ -27,6 +27,8 @@ export interface SherpaAddon {
   createOfflineRecognizerAsync(config: SherpaConfig): Promise<unknown>
   offlineRecognizerSetConfig(recognizer: unknown, config: SherpaConfig): void
   createOfflineStream(recognizer: unknown): unknown
+  /** A string option for one stream: Cohere Transcribe's `language`, Qwen3-ASR's `hotwords`. */
+  offlineStreamSetOption(stream: unknown, key: string, value: string): void
   acceptWaveformOffline(stream: unknown, wave: { samples: Float32Array; sampleRate: number }): void
   decodeOfflineStreamAsync(recognizer: unknown, stream: unknown): Promise<string>
   /** "1.13.8", and the ONNX Runtime it brings ("1.28.2"). */
@@ -38,6 +40,24 @@ export interface SherpaAddon {
 export interface SherpaLoaded { id: string; recognizer: unknown; config: SherpaConfig; language: string }
 
 const rate = 16_000
+
+/**
+ * The word list as Qwen3-ASR's hotwords: one comma-separated string, which
+ * goes into the prompt in front of the audio, so a long list costs room and
+ * speed (sherpa-onnx warns past 48 tokens). A comma inside a word would split
+ * it; the first words are the ones the user added first.
+ */
+export function hotwordList(vocabulary: string[]): string {
+  const words = vocabulary.map(word => word.replace(/[,\n]+/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean)
+  const kept: string[] = []
+  let length = 0
+  for (const word of words) {
+    if (kept.length >= 24 || length + word.length > 240) break
+    kept.push(word)
+    length += word.length + 1
+  }
+  return kept.join(',')
+}
 
 /**
  * Why a dictation fails: a piece of a longer recording with speech in it came
@@ -97,6 +117,8 @@ export async function fetchFiles(source: SherpaSource, folder: string, progress:
   let done = 0
   for (const file of source.files) {
     const target = path.join(folder, file.name)
+    // Qwen3-ASR's tokenizer is a folder of its own.
+    fs.mkdirSync(path.dirname(target), { recursive: true })
     if (fs.existsSync(target)) {
       if (fs.statSync(target).size === file.bytes && await sha256(target, signal) === file.sha256) {
         done += file.bytes
@@ -175,17 +197,23 @@ export class SherpaEngine extends LocalEngine<SherpaLoaded> {
   }
 
   /**
-   * The word list is not passed: these models take no prompt (the
-   * replacements still apply). A language goes to Canary only, which cannot
-   * tell by itself: the one chosen for it, else the one set in Settings.
-   * A long recording goes through in pieces cut at quiet moments, one text
-   * in the end. Silence is never sent. A piece that comes back empty is
-   * tried once more up to its last sound (Parakeet wrote nothing for speech
-   * cut off mid-word and followed by quiet). One that stays empty fails the
-   * dictation: the other pieces' text would stand for the whole recording,
-   * and the lost words would never be asked for again.
+   * The word list is not a prompt for these models (the replacements still
+   * apply), except for Qwen3-ASR, which takes it as hotwords: decoded with
+   * and without, and the hinted text kept only if it lost no words, as
+   * Whisper's prompt is. A language goes to Canary and Cohere Transcribe
+   * only, which cannot tell by itself: the one chosen for them, else the
+   * one set in Settings. A long recording goes through in pieces cut at
+   * quiet moments, one text in the end. Silence is never sent, and neither
+   * is a piece without speech in it by its own level. Cohere and Qwen3 make
+   * text up for noise as well, even a steady one louder than -45 dBFS, which
+   * counts as speech: their pieces must also not be one steady level. A piece that
+   * comes back empty is tried once more up to its last sound (Parakeet
+   * wrote nothing for speech cut off mid-word and followed by quiet). One
+   * that stays empty fails the dictation: the other pieces' text would
+   * stand for the whole recording, and the lost words would never be asked
+   * for again.
    */
-  protected async run(samples: Float32Array, loaded: SherpaLoaded, _vocabulary: string[], spoken: Language, told?: string): Promise<string> {
+  protected async run(samples: Float32Array, loaded: SherpaLoaded, vocabulary: string[], spoken: Language, told?: string): Promise<string> {
     const source = this.source(loaded.id)
     const language = told ?? spoken
     if (source.kind === 'canary' && loaded.language !== language) {
@@ -193,6 +221,11 @@ export class SherpaEngine extends LocalEngine<SherpaLoaded> {
       this.native().offlineRecognizerSetConfig(loaded.recognizer, loaded.config)
       loaded.language = language
     }
+    // Cohere takes the language per piece. One it does not write is replaced, not refused: the whole dictation would fail on it.
+    const written = localModel(loaded.id)?.languages ?? []
+    const perPiece = source.kind === 'cohere-transcribe' ? (written.includes(language) ? language : written[0]) : undefined
+    const hotwords = source.kind === 'qwen3-asr' ? hotwordList(vocabulary) : ''
+    const invents = makesUpTextForNoise(source.kind)
     const pieces = windows(samples, rate, source.window * rate)
     // One decision about what is quiet for the whole recording: a piece judged
     // alone lost its low-gain speech once more was said after a silence.
@@ -202,9 +235,16 @@ export class SherpaEngine extends LocalEngine<SherpaLoaded> {
       const threshold = pieceThreshold(piece, whole, rate)
       // The recording as a whole has speech (transcribe checked); a quiet piece of it is skipped.
       if (!hasSpeech(piece, rate, threshold)) continue
-      let heard = await this.hear(loaded, source, piece)
+      if (invents && isSteady(piece, rate)) continue
+      let heard = await this.hear(loaded, source, piece, { language: perPiece })
       const end = heard ? null : speechEnd(piece, rate, threshold)
-      if (end !== null && end < piece.length) heard = await this.hear(loaded, source, piece.subarray(0, end))
+      if (end !== null && end < piece.length) heard = await this.hear(loaded, source, piece.subarray(0, end), { language: perPiece })
+      if (heard && hotwords) {
+        const hinted = await this.hear(loaded, source, piece, { hotwords })
+        const kept = keepEveryWord(hinted, heard)
+        if (kept.chosen === 'plain') this.log('local: the word list cost words here, kept the text without it')
+        heard = kept.text
+      }
       if (heard) said.push(heard)
       // Only a piece that is speech by its own level fails the dictation. One
       // that only the recording's lower level lets through (steady noise louder
@@ -217,13 +257,15 @@ export class SherpaEngine extends LocalEngine<SherpaLoaded> {
   }
 
   /** One call to the recognizer, with the second of silence after the audio that Canary needs. */
-  private async hear(loaded: SherpaLoaded, source: SherpaSource, audio: Float32Array): Promise<string> {
+  private async hear(loaded: SherpaLoaded, source: SherpaSource, audio: Float32Array, options: { language?: string; hotwords?: string } = {}): Promise<string> {
     let samples = audio
     if (padsEnd(source.kind)) {
       samples = new Float32Array(audio.length + rate)
       samples.set(audio)
     }
     const stream = this.native().createOfflineStream(loaded.recognizer)
+    if (options.language) this.native().offlineStreamSetOption(stream, 'language', options.language)
+    if (options.hotwords) this.native().offlineStreamSetOption(stream, 'hotwords', options.hotwords)
     this.native().acceptWaveformOffline(stream, { samples, sampleRate: rate })
     const { text } = JSON.parse(await this.native().decodeOfflineStreamAsync(loaded.recognizer, stream)) as { text?: string }
     return tidySherpaText(text ?? '')

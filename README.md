@@ -103,6 +103,8 @@ Talk, tap twice again, and the text is pasted. satz starts by itself when you lo
 | **OpenRouter** (recommended) | Microsoft MAI-Transcribe 2 | One key, every speech model OpenRouter has |
 | OpenAI | GPT Transcribe | Also GPT-4o (mini) Transcribe, Whisper |
 | Groq | Whisper Large v3 Turbo | Very fast |
+| Microsoft | MAI-Transcribe 2 | Straight from Azure AI Speech: your Speech resource's key and its region (North Europe, in the EU, by default), or your own resource address. Also plain Azure Speech |
+| Google | Gemini 3.5 Transcribe | Straight from the Gemini API: a key from [Google AI Studio](https://aistudio.google.com/apikey). With a free key Google may use your audio to improve its products; switch billing on to prevent that. A recording over about 7 minutes is refused before it is sent |
 | Custom | your URL and model | Any OpenAI-compatible endpoint |
 | Local | Whisper Large v3 Turbo | On your own computer, no key, see below |
 
@@ -111,6 +113,9 @@ The model menu is the provider's **live list**, so new models show up without a 
 | Model | Wrong words | per hour |
 |---|---|---|
 | Microsoft MAI-Transcribe 2 (default, clean mode, uses your vocabulary) | 2.0 % | $0.10 |
+| Microsoft MAI-Transcribe 2, straight from Microsoft | 2.0 % | $0.10 until 31 Dec 2026, then $0.36 |
+| Google Gemini 3.5 Transcribe, straight from Google (smart mode, uses your vocabulary) | 2.6 % | $0.30 |
+| Microsoft Azure Speech, straight from Microsoft | not measured | $0.36 |
 | Microsoft MAI-Transcribe 1.5 | 2.4 % | $0.36 |
 | Mistral Voxtral Small | 2.8 % | $0.18 |
 | OpenAI GPT Transcribe | 3.3 % | $0.28 |
@@ -137,7 +142,11 @@ A few models OpenRouter lists are left out because they fail with dictation (no 
 | Whisper Base | 147 MB, rough. | 149 MB, fast, rough. |
 | Whisper Tiny | 77 MB, very rough. | 99 MB, very rough. |
 | Distil-Whisper Large v3 | 607 MB, English only, fast. | 950 MB (v3.5), English only. |
+| Cohere Transcribe | 2.9 GB, via sherpa-onnx. The most accurate in German on the Open ASR Leaderboard, 14 languages: hears the language set in *Spoken in*. | 2.9 GB, the same. |
 | Parakeet V3 | 670 MB, via sherpa-onnx. Fast and accurate, 25 European languages, German among them. | 670 MB, the same. |
+| Parakeet German (primeLine) | 671 MB, Parakeet V3 retrained for German by primeLine (a community export), German only. | 671 MB, the same. |
+| Canary 1B v2 | 1.4 GB (a community export), accurate. English, German, Spanish, French: hears the language set in *Spoken in*. | 1.4 GB, the same. |
+| Qwen3-ASR 0.6B | 987 MB, small, 30 languages, finds the language itself, a bit behind Parakeet V3 in German. | 987 MB, the same. |
 | Canary 180M Flash | 207 MB, very fast. English, German, Spanish, French: hears the language set in *Spoken in*. | 207 MB, the same. |
 | Parakeet V2 | 661 MB, English only, the best for English. | 661 MB |
 | Moonshine Base | 287 MB, English only, very fast. | 287 MB |
@@ -146,11 +155,11 @@ A few models OpenRouter lists are left out because they fail with dictation (no 
 | Whisper Large v3 Turbo German | | 983 MB, German only. |
 | Apple's speech recognition | Built into macOS 26; macOS may fetch its language pack once. Instant, but hears only the language set in *Spoken in* and barely uses your vocabulary. | |
 
-Parakeet, Canary, Moonshine and SenseVoice run through [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx); Windows on ARM has the Whisper models only, since sherpa-onnx has no build for it.
+Parakeet, Canary, Moonshine, SenseVoice, Cohere Transcribe and Qwen3-ASR run through [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx); Windows on ARM has the Whisper models only, since sherpa-onnx has no build for it. The four newest are offered like the rest and download nothing until you click them.
 
 On the Mac the error rates are Argmax's, for the exact builds satz downloads (English, and German where they measured it); on Windows and Linux, German on FLEURS for the original models. Both are fetched once a day, with the numbers satz ships as a fallback. For the other models the accuracy bar is a rough rating (Handy's). Click the speed bar of a model on your computer to measure it again.
 
-Parakeet, Canary, Moonshine and SenseVoice run through [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (Apache-2.0) on ONNX Runtime, which the Mac app carries inside (about 19 MB more in the download). Their files come one by one from [csukuangfj's exports](https://huggingface.co/csukuangfj) on Hugging Face. Licences: [Parakeet V3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), [Parakeet V2](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) and [Canary 180M Flash](https://huggingface.co/nvidia/canary-180m-flash) by NVIDIA, CC-BY-4.0; [Moonshine](https://huggingface.co/UsefulSensors/moonshine-base) by Useful Sensors, MIT; [SenseVoice](https://github.com/FunAudioLLM/SenseVoice) by FunAudioLLM, [FunASR's model licence](https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE). Your vocabulary is not given to these models (your replacements still apply). Moonshine, SenseVoice and Canary hear about 30 seconds well, so a longer recording goes through them in pieces cut at its quietest moments, never mid-word; it is still one recording and one text.
+Parakeet, Canary, Moonshine, SenseVoice, Cohere Transcribe and Qwen3-ASR run through [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (Apache-2.0) on ONNX Runtime, which the Mac app carries inside (about 19 MB more in the download). Their files come one by one, each from a pinned commit and checked against its SHA-256, from [csukuangfj's exports](https://huggingface.co/csukuangfj) and [csukuangfj2's](https://huggingface.co/csukuangfj2) (the newest) on Hugging Face; Parakeet German and Canary 1B v2 are community exports, [x-ian's](https://huggingface.co/x-ian/sherpa-onnx-parakeet-primeline-de-int8) and [Sarphix's](https://huggingface.co/Sarphix/canary-1b-v2-sherpa-onnx-int8). Licences: [Parakeet V3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), [Parakeet V2](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2), [Canary 180M Flash](https://huggingface.co/nvidia/canary-180m-flash) and [Canary 1B v2](https://huggingface.co/nvidia/canary-1b-v2) by NVIDIA, CC-BY-4.0; [Parakeet German](https://huggingface.co/primeline/parakeet-primeline) by primeLine, CC-BY-4.0; [Cohere Transcribe](https://huggingface.co/CohereLabs/cohere-transcribe-03-2026) by Cohere, Apache-2.0; [Qwen3-ASR](https://huggingface.co/Qwen/Qwen3-ASR-0.6B) by Alibaba's Qwen team, Apache-2.0; [Moonshine](https://huggingface.co/UsefulSensors/moonshine-base) by Useful Sensors, MIT; [SenseVoice](https://github.com/FunAudioLLM/SenseVoice) by FunAudioLLM, [FunASR's model licence](https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE). Your vocabulary is not given to these models (your replacements still apply), except to Qwen3-ASR, which takes it as hotwords and is checked like Whisper: the text with the word list is kept only if it lost no words. Moonshine, SenseVoice, Canary and Cohere Transcribe hear about 30 seconds well, and Qwen3-ASR's decoder holds only about 15 seconds of speech, so a longer recording goes through them in pieces cut at its quietest moments, never mid-word; it is still one recording and one text. Cohere Transcribe and Canary have to be told the language (*Spoken in*): told the wrong one, Cohere translates or loops. Cohere also writes sentences for steady noise such as a fan, so a piece that is one steady level is not sent to it. Parakeet German writes "ss" for "ß".
 
 Whisper tells German from English by itself. The first time after the download, the Mac prepares the model for its chip, which takes a few minutes, once. Your vocabulary is given to Whisper as a hint, but only when that changes no more than a word here and there: with a hint, Whisper sometimes left out a sentence in another language or repeated an earlier one, so satz compares the text word by word with one made without the hint and keeps that one if words went missing or appeared. Silence is never sent to Whisper, which makes something up for it. A sentence in another language in the middle of a long recording can still get lost locally; the cloud models handle that better. *Delete* puts the model in the Trash.
 

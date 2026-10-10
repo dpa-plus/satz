@@ -177,16 +177,28 @@ private struct ProviderBlock: View {
     var body: some View {
         Block(title: de("Anbieter", en: "Provider")) {
             VStack(spacing: 0) {
-                Segmented(options: Provider.allCases.map { (value: $0, label: $0.name) },
-                          selection: Binding(get: { shown }, set: { looking = $0 == preferences.provider ? nil : $0 }),
-                          marked: preferences.provider)
-                    .padding(10)
+                HStack {
+                    ProviderMenu(selection: Binding(get: { shown }, set: { looking = $0 == preferences.provider ? nil : $0 }),
+                                 inUse: preferences.provider)
+                    Spacer(minLength: 8)
+                    if shown == preferences.provider {
+                        Text(de("In Benutzung", en: "In use"))
+                            .font(Typography.text(13))
+                            .foregroundStyle(theme.inkSecondary)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .frame(height: 52)
                 if shown != preferences.provider {
                     SwitchRow(preferences: preferences, setup: setup, shown: shown) { looking = nil }
                 }
                 Rule()
                 if shown.needsKey {
                     KeyRow(setup: setup, provider: shown)
+                    Rule()
+                }
+                if shown == .microsoft {
+                    MicrosoftRegionChoice(preferences: preferences)
                     Rule()
                 }
                 switch shown {
@@ -200,9 +212,10 @@ private struct ProviderBlock: View {
                 default:
                     ModelRow(preferences: preferences, provider: shown, store: models)
                 }
-                // Only MAI-Transcribe has a clean mode; elsewhere the switch would do nothing.
-                // Only MAI-Transcribe 2 takes it: 1.5 refused the whole request with it.
-                if preferences.model(for: shown).contains("mai-transcribe-2") {
+                // Only MAI-Transcribe 2 has a clean mode (1.5 refused the whole
+                // request with it) and Gemini's transcribe models a smart one;
+                // elsewhere the switch would do nothing.
+                if shown.hasFillerSwitch(model: preferences.model(for: shown)) {
                     Rule()
                     Toggle(isOn: $preferences.removesFillers) { Text(de("Füllwörter weglassen", en: "Remove filler words")) }
                         .toggleStyle(AccentToggleStyle())
@@ -317,7 +330,7 @@ private struct ModelRow: View {
             }
             .padding(.horizontal, 16)
             .frame(height: 48)
-            Text(Self.facts(current))
+            Text(Self.facts(current, provider: provider))
                 .font(Typography.text(12))
                 .foregroundStyle(theme.inkSecondary)
                 .padding(.horizontal, 16)
@@ -428,13 +441,16 @@ private struct ModelRow: View {
         return parts.joined(separator: " · ")
     }
 
-    /// Under the row: what the chosen model's numbers mean.
-    static func facts(_ model: ModelChoice?) -> String {
+    /// Under the row: what the chosen model's numbers mean, and for
+    /// Microsoft and Google what to know about the price or the data.
+    static func facts(_ model: ModelChoice?, provider: Provider) -> String {
         guard let model else { return de("Ein Modell, das nicht in der Liste steht.", en: "A model that is not in the list.") }
         let errors = model.errorRate.map { de("\(number($0)) % falsche Wörter laut Artificial Analysis", en: "\(number($0)) % wrong words per Artificial Analysis") }
             ?? de("Noch ohne Fehlerquote von Artificial Analysis", en: "No error rate from Artificial Analysis yet")
         let cost = model.dollarsPerHour.map { de("\(price($0)) pro Stunde Sprechen", en: "\(price($0)) per hour of talking") }
-        return [errors, cost].compactMap { $0 }.joined(separator: ", ")
+        let numbers = [errors, cost].compactMap { $0 }.joined(separator: ", ")
+        guard let note = ModelCatalog.note(for: model.id, provider: provider, price: price) else { return numbers }
+        return numbers + ". " + note
     }
 }
 
@@ -452,6 +468,15 @@ private struct KeyRow: View {
         VStack(alignment: .leading, spacing: 0) {
             row
                 .frame(height: 48)
+            // What is not obvious about this provider's key.
+            if let note = provider.keyNote {
+                Text(note)
+                    .font(Typography.text(12))
+                    .foregroundStyle(theme.inkSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, -6)
+                    .padding(.bottom, 10)
+            }
             // Said where it happened, not in a tooltip nobody hovers.
             if let problem {
                 Text(problem)

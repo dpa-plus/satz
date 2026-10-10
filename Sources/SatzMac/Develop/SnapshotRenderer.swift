@@ -26,15 +26,28 @@ enum SnapshotRenderer {
             ("settings-light", .german, { AnyView(settingsSheet.environment(\.theme, .light)) }),
             ("settings-dark", .german, { AnyView(settingsSheet.environment(\.theme, .dark)) }),
             ("settings-en", .english, { AnyView(settingsSheet.environment(\.theme, .dark)) }),
+            ("settings-microsoft", .german, { AnyView(settingsSheet(.microsoft).environment(\.theme, .light)) }),
+            ("settings-microsoft-en", .english, { AnyView(settingsSheet(.microsoft).environment(\.theme, .dark)) }),
+            ("settings-microsoft-address", .german, { AnyView(settingsSheet(.microsoft, endpoint: "https://satz-speech.cognitiveservices.azure.com").environment(\.theme, .light)) }),
+            ("settings-microsoft-nokey", .german, { AnyView(settingsSheet(.microsoft, hasKey: false).environment(\.theme, .dark)) }),
+            ("settings-google", .german, { AnyView(settingsSheet(.google).environment(\.theme, .light)) }),
+            ("settings-google-en", .english, { AnyView(settingsSheet(.google).environment(\.theme, .dark)) }),
+            ("settings-browse-microsoft", .german, { AnyView(settingsSheet(.openRouter).environment(\.showsProvider, .microsoft).environment(\.theme, .light)) }),
             ("setup-key", .german, { AnyView(setupSheet(.key).environment(\.theme, .light)) }),
             ("settings-local", .german, { AnyView(localSettingsSheet.environment(\.theme, .dark)) }),
             ("settings-local-en", .english, { AnyView(localSettingsSheet.environment(\.theme, .light)) }),
             ("settings-local-browse", .german, { AnyView(localBrowseSheet.environment(\.theme, .dark)) }),
             ("settings-local-canary", .german, { AnyView(localCanarySheet.environment(\.theme, .light)) }),
             ("settings-local-canary-en", .english, { AnyView(localCanarySheet.environment(\.theme, .dark)) }),
+            ("settings-local-cohere", .german, { AnyView(localCohereSheet.environment(\.theme, .light)) }),
+            ("settings-local-cohere-en", .english, { AnyView(localCohereSheet.environment(\.theme, .dark)) }),
             ("setup-local", .german, { AnyView(localSetupSheet.environment(\.theme, .light)) }),
             ("setup-local-en", .english, { AnyView(localSetupSheet.environment(\.theme, .dark)) }),
             ("setup-custom", .german, { AnyView(setupSheet(.key, provider: .custom).environment(\.theme, .light)) }),
+            ("setup-microsoft", .german, { AnyView(setupSheet(.key, provider: .microsoft).environment(\.theme, .light)) }),
+            ("setup-microsoft-en", .english, { AnyView(setupSheet(.key, provider: .microsoft).environment(\.theme, .dark)) }),
+            ("setup-microsoft-address", .english, { AnyView(setupSheet(.key, provider: .microsoft, endpoint: "https://satz-speech.cognitiveservices.azure.com").environment(\.theme, .light)) }),
+            ("setup-google", .german, { AnyView(setupSheet(.key, provider: .google).environment(\.theme, .light)) }),
             ("history", .german, { AnyView(historySheet.environment(\.theme, .light)) }),
             ("history-en", .english, { AnyView(historySheet.environment(\.theme, .dark)) }),
             ("setup-probe", .german, { AnyView(setupSheet(.probe).environment(\.theme, .light)) }),
@@ -212,14 +225,15 @@ enum SnapshotRenderer {
     private static var settingsSheet: some View { settingsSheet(.openRouter) }
 
     private static func settingsSheet(_ provider: Provider, localModel: String = LocalCatalog.parakeetV3,
-                                      toldLanguage: String? = nil) -> some View {
+                                      toldLanguage: String? = nil, endpoint: String = "", hasKey: Bool = true) -> some View {
         let preferences = preferences
         preferences.provider = provider
         preferences.localModel = localModel
         preferences.toldLanguage = toldLanguage
+        preferences.microsoftEndpoint = endpoint
         return SettingsView(
             preferences: preferences,
-            setup: Setup(hasKey: true, microphone: .allowed, canPaste: true),
+            setup: Setup(hasKey: hasKey, microphone: .allowed, canPaste: true),
             shortcut: shortcut,
             launchAtLogin: LaunchAtLogin(),
             history: history,
@@ -227,9 +241,11 @@ enum SnapshotRenderer {
         )
     }
 
-    private static func setupSheet(_ step: SetupView.Step, provider: Provider = .openRouter, localModel: String? = nil) -> some View {
+    private static func setupSheet(_ step: SetupView.Step, provider: Provider = .openRouter, localModel: String? = nil,
+                                   endpoint: String = "") -> some View {
         let preferences = preferences
         preferences.provider = provider
+        preferences.microsoftEndpoint = endpoint
         if let localModel { preferences.localModel = localModel }
         return SetupView(
             preferences: preferences,
@@ -279,6 +295,15 @@ enum SnapshotRenderer {
         local.stage(states: [:], speeds: [:], supported: supported, onMac: [LocalCatalog.canary, LocalCatalog.turbo])
         LocalModels.shared = local
         return settingsSheet(.local, localModel: LocalCatalog.canary, toldLanguage: "es")
+    }
+
+    /// Cohere Transcribe in use, told Korean: its fourteen languages are a menu.
+    private static var localCohereSheet: some View {
+        let local = LocalModels(defaults: nil)
+        local.stage(states: [LocalCatalog.qwen3: .downloading(0.31)], speeds: [:], supported: supported,
+                    onMac: [LocalCatalog.cohere, LocalCatalog.parakeetV3])
+        LocalModels.shared = local
+        return settingsSheet(.local, localModel: LocalCatalog.cohere, toldLanguage: "ko")
     }
 
     /// Lokal looked at while OpenRouter takes the dictations: no card is

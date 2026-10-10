@@ -690,11 +690,12 @@ final class LocalModels {
                                                englishOnly: LocalCatalog.model(model)?.isEnglishOnly ?? false)
         case .sherpa(let recognizer):
             guard let sherpa = LocalCatalog.model(model)?.sherpa else { throw Failure.notDownloaded }
-            // The word list is not given to these models (replacements still
-            // apply): none of them takes a prompt the way Whisper does.
+            // The word list goes only to Qwen3-ASR, as hotwords, and is checked
+            // like Whisper's prompt (SherpaModel.transcribe); the others take
+            // none (replacements still apply).
             if let told { recognizer.listen(for: told) }
             do {
-                return try sherpa.transcribe(samples) { recognizer.transcribe($0) }
+                return try sherpa.transcribe(samples, hotwords: vocabulary) { recognizer.transcribe($0, hotwords: $1) }
             } catch SherpaModel.Failure.pieceNotHeard {
                 Log.note(String(format: "local: part of %.1f s of speech came back empty from \(model), kept for another try",
                                 Double(samples.count) / 16_000))

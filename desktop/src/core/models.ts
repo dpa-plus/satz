@@ -16,9 +16,11 @@ export interface ModelChoice {
   dollarsPerHour?: number
   /** Artificial Analysis' word error rate in percent (AA-WER), lower is better. */
   errorRate?: number
+  /** One sentence the model's facts line adds: a promotional price, a privacy catch. */
+  note?: { de: string; en: string }
 }
 
-interface Known { name?: string; maker?: string; measured?: number; errorRate?: number; hidden?: string }
+interface Known { name?: string; maker?: string; measured?: number; errorRate?: number; hidden?: string; note?: { de: string; en: string } }
 
 export const known: Record<string, Known> = {
   'microsoft/mai-transcribe-2': { name: 'MAI-Transcribe 2', maker: 'Microsoft', measured: 0.10, errorRate: 2.0 },
@@ -45,6 +47,15 @@ export const known: Record<string, Known> = {
   'fish-audio/transcribe-1-pro': { hidden: 'puts speaker tags into the text' },
   'nvidia/parakeet-tdt-0.6b-v3': { hidden: 'split German compounds wrongly in the test' },
   'nvidia/nemotron-3.5-asr-streaming-multilingual-0.6b': { hidden: 'split German compounds wrongly in the test' },
+  // Straight from Microsoft (Azure AI Speech). MAI-Transcribe 2 is the same
+  // model as through OpenRouter, so the same error rate; the promotion ends with the year.
+  'mai-transcribe-2': { name: 'MAI-Transcribe 2', maker: 'Microsoft', measured: 0.10, errorRate: 2.0,
+    note: { de: 'Aktionspreis bis 31.12.2026, danach 0,36 $ pro Stunde.', en: 'Promotional price until 31 Dec 2026, then $0.36 per hour.' } },
+  'azure-speech': { name: 'Azure Speech', maker: 'Microsoft', measured: 0.36 },
+  // 2.6 % on Artificial Analysis, $2 per million audio tokens and $12 per million text tokens (about 0.30 $ an hour).
+  'gemini-3.5-transcribe': { name: 'Gemini 3.5 Transcribe', maker: 'Google', measured: 0.30, errorRate: 2.6,
+    note: { de: 'Mit einem kostenlosen Schlüssel darf Google die Aufnahmen zur Verbesserung seiner Produkte nutzen, mit eingeschalteter Abrechnung nicht.',
+      en: 'With a free-tier key Google may use the audio to improve its products; with billing switched on it may not.' } },
   'gpt-transcribe': { name: 'GPT Transcribe', maker: 'OpenAI', errorRate: 3.3 },
   'gpt-4o-transcribe': { name: 'GPT-4o Transcribe', maker: 'OpenAI', errorRate: 4.0 },
   'gpt-4o-mini-transcribe': { name: 'GPT-4o mini Transcribe', maker: 'OpenAI', errorRate: 4.5 },
@@ -65,6 +76,8 @@ const shipped: Record<Provider, string[]> = {
   ],
   openai: ['gpt-transcribe', 'gpt-4o-transcribe', 'gpt-4o-mini-transcribe', 'whisper-1'],
   groq: ['whisper-large-v3-turbo', 'whisper-large-v3'],
+  microsoft: ['mai-transcribe-2', 'azure-speech'],
+  google: ['gemini-3.5-transcribe'],
   custom: [],
   local: localModels.map(model => model.id),
 }
@@ -79,6 +92,9 @@ export const listURL: Record<Provider, string | null> = {
   openrouter: 'https://openrouter.ai/api/v1/models?output_modalities=transcription',
   openai: 'https://api.openai.com/v1/models',
   groq: 'https://api.groq.com/openai/v1/models',
+  // Two Microsoft models and one Google model: nothing a list would add.
+  microsoft: null,
+  google: null,
   custom: null,
   local: null,
 }
@@ -105,7 +121,7 @@ export function describe(id: string, provider: Provider, listedName?: string, pr
   // An id without a slash ("gpt-5-transcribe" at OpenAI or Groq) names no maker: the provider is the one.
   const maker = entry?.maker ?? (parts && parts.length > 1 ? parts[0] : undefined) ?? (id.includes('/') ? id.split('/')[0] : providers[provider].name())
   const name = entry?.name ?? parts?.[parts.length - 1] ?? id
-  return { id, name, maker, dollarsPerHour: entry?.measured ?? listedPrice(pricing), errorRate: entry?.errorRate }
+  return { id, name, maker, dollarsPerHour: entry?.measured ?? listedPrice(pricing), errorRate: entry?.errorRate, ...(entry?.note ? { note: entry.note } : {}) }
 }
 
 /**

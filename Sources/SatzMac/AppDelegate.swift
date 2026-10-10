@@ -375,7 +375,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard arguments.count == 2, let provider = Provider(rawValue: arguments[0]),
               let contents = try? String(contentsOfFile: arguments[1], encoding: .utf8)
         else {
-            Log.note("usage: satz --import-key openai|openrouter|groq|custom <file>")
+            Log.note("usage: satz --import-key openai|openrouter|groq|microsoft|google|custom <file>")
             return
         }
         let key = contents.trimmingCharacters(in: .whitespacesAndNewlines)

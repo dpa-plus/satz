@@ -33,6 +33,16 @@ struct SecretsTests {
         #expect(folderPermissions == 0o700)
     }
 
+    @Test func microsoftAndGoogleEachKeepAKeyOfTheirOwn() throws {
+        try Secrets.store("azure-key-1", for: .microsoft)
+        try Secrets.store("AIza-key-2", for: .google)
+        #expect(Secrets.read(for: .microsoft) == "azure-key-1" && Secrets.read(for: .google) == "AIza-key-2")
+        #expect(FileManager.default.fileExists(atPath: folder.appendingPathComponent("microsoft").path))
+        #expect(FileManager.default.fileExists(atPath: folder.appendingPathComponent("google").path))
+        let mode = try FileManager.default.attributesOfItem(atPath: folder.appendingPathComponent("google").path)[.posixPermissions] as? Int
+        #expect(mode == 0o600)
+    }
+
     @Test func removingForgetsIt() throws {
         try Secrets.store("sk-test", for: .custom)
         Secrets.remove(for: .custom)

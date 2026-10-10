@@ -32,11 +32,20 @@ public enum ProviderReadiness {
     }
 
     /// In the order they are filled in. `hasKey` is the key being saved, or
-    /// for Lokal the chosen model being on this Mac.
-    public static func missing(_ provider: Provider, hasKey: Bool, customBaseURL: String, model: String) -> [Need] {
+    /// for Lokal the chosen model being on this Mac. `microsoftEndpoint` is
+    /// Microsoft's optional own address: empty means the region is used, and
+    /// one that is typed has to be usable.
+    public static func missing(_ provider: Provider, hasKey: Bool, customBaseURL: String, model: String,
+                               microsoftEndpoint: String = "") -> [Need] {
         switch provider {
         case .local:
             return hasKey ? [] : [.localModel]
+        case .microsoft:
+            var needs: [Need] = []
+            if !hasKey { needs.append(.key) }
+            let typed = microsoftEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !typed.isEmpty, MicrosoftSpeech.endpointURL(typed) == nil { needs.append(.address) }
+            return needs
         case .custom:
             var needs: [Need] = []
             if !hasKey { needs.append(.key) }

@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { hasSpeech, keepEveryWord } from '../src/core/speech'
+import fs from 'node:fs'
+import path from 'node:path'
+import { hasSpeech, isSteady, keepEveryWord } from '../src/core/speech'
+import { decodeWAV, resample } from '../src/core/wav'
 import { windows } from '../src/core/windows'
 
 test('the word list is kept only when it costs no words', () => {
@@ -58,4 +61,30 @@ test('a passage the prompt brought in is not kept', () => {
   const plain = 'Schreib mir eine Funktion. Danach summieren.'
   const prompted = 'Schreib mir eine Funktion. Danach summieren. Schreib mir eine Funktion, die alle Rechnungen liest.'
   assert.equal(keepEveryWord(prompted, plain).chosen, 'plain')
+})
+
+test('a steady level (a fan, hiss, hum) is told from speech by how little it rises and falls; speech is not steady, silence is no judgment', () => {
+  const rate = 16_000
+  let seed = 3
+  const noise = (seconds: number, amplitude: number) => new Float32Array(seconds * rate).map(() => { seed = (seed * 16807) % 2147483647; return (seed / 2147483647 - 0.5) * amplitude })
+  // Loud enough to count as speech by level, which is why hasSpeech lets it through.
+  const fan = noise(12, 0.08)
+  assert.equal(hasSpeech(fan, rate), true)
+  assert.equal(isSteady(fan, rate), true)
+  const hum = new Float32Array(12 * rate).map((_, i) => 0.05 * Math.sin((2 * Math.PI * 50 * i) / rate))
+  assert.equal(isSteady(hum, rate), true)
+  // The real clip bundled with satz: 10 s of a book read aloud, with its pauses.
+  const { samples, sampleRate } = decodeWAV(fs.readFileSync(path.join(__dirname, '..', 'assets', 'speedtest.wav')))
+  const speech = resample(samples, sampleRate)
+  assert.equal(isSteady(speech, rate), false)
+  // Speech over the same fan.
+  const mixed = Float32Array.from(speech, (value, i) => value + fan[i])
+  assert.equal(isSteady(mixed, rate), false)
+  // Nothing to judge: too short, or digital silence (hasSpeech says no to that already).
+  assert.equal(isSteady(noise(0.5, 0.08), rate), false)
+  assert.equal(isSteady(new Float32Array(5 * rate), rate), false)
+  // A pause in the middle makes it not steady.
+  const paused = Float32Array.from(fan)
+  paused.fill(0, 4 * rate, 6 * rate)
+  assert.equal(isSteady(paused, rate), false)
 })

@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { de, setLanguage } from '../core/language'
 import { Session, type AudioSource } from '../core/session'
-import { needsKey, providers, transcribe, TranscriptionFailure, type Provider } from '../core/transcriber'
+import { keyPages, needsKey, providers, transcribe, TranscriptionFailure, type Provider } from '../core/transcriber'
 import { localModelIds, offeredModels, toldLanguage } from '../core/localModels'
 import { DoubleTap } from '../core/trigger'
 import { decodeWAV, encodeWAV, resample } from '../core/wav'
@@ -389,6 +389,15 @@ async function start() {
     if (!isProvider(provider) || !needsKey(provider)) return false
     store.storeKey(key, provider)
     return store.hasKey(provider)
+  })
+  // Only the addresses in keyPages, never one the page names: the page asks for a provider.
+  ipcMain.handle('settings:open-key-page', (_e, asked: unknown) => {
+    const page = isProvider(asked) ? keyPages[asked] : undefined
+    if (!page) return false
+    // A test must not open the user's browser.
+    if (testMode) { log(`dev: would open ${page}`); return true }
+    void shell.openExternal(page)
+    return true
   })
   ipcMain.handle('settings:clear-history', () => { store.clearHistory(); historyChanged() })
   ipcMain.handle('settings:start-at-login', (_e, on: boolean) => { startAtLogin.set(on); store.update({ startsAtLogin: on }); return startAtLogin.get() })

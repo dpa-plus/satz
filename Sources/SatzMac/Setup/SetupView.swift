@@ -203,11 +203,20 @@ private struct KeyStep: View {
     var body: some View {
         StepTitle(text: shown.needsKey ? de("Anbieter und Schlüssel", en: "Provider and key")
                                                       : de("Anbieter und Modell", en: "Provider and model"))
-        Segmented(options: Provider.allCases.map { (value: $0, label: $0.name) },
-                  selection: Binding(get: { shown }, set: { looking = $0 == preferences.provider ? nil : $0 }))
+        ProviderMenu(selection: Binding(get: { shown }, set: { looking = $0 == preferences.provider ? nil : $0 }),
+                     inUse: nil, boxed: true)
 
         if shown.needsKey {
             keyField
+            if let note = shown.keyNote {
+                Text(note)
+                    .font(Typography.text(12))
+                    .foregroundStyle(theme.inkSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if shown == .microsoft {
+                MicrosoftRegionChoice(preferences: preferences, boxed: true)
+            }
         } else {
             // Nothing to paste here: a model is downloaded instead, the
             // same cards as in Settings, scrolled so the step fits a screen
@@ -479,17 +488,5 @@ private struct ProbeStep: View {
     private var keys: [(glyph: String, name: String?)] {
         let shown = trigger.display.keys
         return trigger == .doubleRightCommand ? shown + shown : shown
-    }
-}
-
-extension Provider {
-    /// Where to create a key, for the setup's "Schlüssel holen".
-    var keyPage: URL? {
-        switch self {
-        case .openAI: URL(string: "https://platform.openai.com/api-keys")
-        case .openRouter: URL(string: "https://openrouter.ai/settings/keys")
-        case .groq: URL(string: "https://console.groq.com/keys")
-        case .custom, .local: nil
-        }
     }
 }

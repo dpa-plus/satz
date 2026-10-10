@@ -1030,6 +1030,7 @@ extension Transcriber.Failure {
         switch self {
         case .noKey: de("Kein Schlüssel", en: "No key")
         case .unauthorized: de("Schlüssel abgelehnt", en: "Key rejected")
+        case .keyOrRegionWrong: de("Schlüssel oder Region falsch", en: "Key or region wrong")
         case .rateLimited: de("Anbieter drosselt", en: "Provider busy")
         case .offline: de("Keine Verbindung", en: "No connection")
         case .timedOut: de("Zeitüberschreitung", en: "Timed out")

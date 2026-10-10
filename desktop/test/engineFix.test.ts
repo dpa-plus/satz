@@ -95,10 +95,10 @@ test('a window as short as a few seconds is cut in its quietest moment, nothing 
 
 // MARK: - The catalog
 
-test('Parakeet is cut before its encoder\'s limit of 400 s; the models made for short clips at 30 s; only Canary is padded', () => {
+test('Parakeet is cut before its encoder\'s limit of 400 s; the models made for short clips at 30 s, Qwen3-ASR at 15 s (its decoder holds 512 tokens); only Canary is padded', () => {
   for (const model of localModels.filter(entry => entry.sherpa)) {
     const { kind, window } = model.sherpa!
-    assert.equal(window, kind === 'nemo-transducer' ? 240 : 30, model.id)
+    assert.equal(window, kind === 'nemo-transducer' ? 240 : kind === 'qwen3-asr' ? 15 : 30, model.id)
     assert.equal(padsEnd(kind), kind === 'canary', model.id)
   }
 })
@@ -126,6 +126,7 @@ function listening(answer: (samples: Float32Array, call: number) => string) {
     async createOfflineRecognizerAsync(config) { return { config: structuredClone(config) } },
     offlineRecognizerSetConfig() {},
     createOfflineStream() { return { samples: new Float32Array(0) } },
+    offlineStreamSetOption() {},
     acceptWaveformOffline(stream, wave) { (stream as { samples: Float32Array }).samples = wave.samples },
     async decodeOfflineStreamAsync(_recognizer, stream) {
       const samples = (stream as { samples: Float32Array }).samples

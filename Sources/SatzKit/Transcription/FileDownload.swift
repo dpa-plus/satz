@@ -72,6 +72,8 @@ public final class FileDownload: NSObject, URLSessionDownloadDelegate, @unchecke
                 // Cut short, or damaged, or of another version: not kept.
                 try? FileManager.default.removeItem(at: destination)
             }
+            // Qwen3's tokenizer files sit in a folder of their own.
+            try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
             try await fetch(model.url(of: file), file: file, to: destination, session: session)
             lock.withLock { finished += file.bytes }
             progress(Double(lock.withLock { finished }) / Double(total))

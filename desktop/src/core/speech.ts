@@ -61,6 +61,25 @@ export function hasSpeech(samples: Float32Array, rate = 16_000, threshold?: numb
 }
 
 /**
+ * Whether a piece is one steady level, like a fan, hiss or hum, rather than
+ * speech. Speech rises and falls with every syllable and pause: its louder
+ * frames (30 ms, the 90th percentile) are 18 to 1500 times the quieter ones
+ * (the 10th) in clips of every kind tried; steady noise is 1.1 times. Twice
+ * splits them with room on both sides: speech only 6 dB above the fan it is
+ * recorded over still passes. `hasSpeech` cannot tell: it
+ * takes anything louder than -45 dBFS for speech, which a low-gain
+ * microphone needs, and Cohere Transcribe wrote whole sentences for a fan.
+ * Under a second there is too little to judge, and a piece with a silent
+ * stretch in it is not steady.
+ */
+export function isSteady(samples: Float32Array, rate = 16_000): boolean {
+  const levels = frameLevels(samples, rate).sort((a, b) => a - b)
+  if (levels.length < 30) return false
+  const quiet = levels[Math.floor(levels.length * 0.1)]
+  return quiet > 0 && levels[Math.floor(levels.length * 0.9)] < 2 * quiet
+}
+
+/**
  * Where the last 30 ms above the speech level end; null when nothing is
  * that loud. Parakeet V3 wrote nothing at all for clear speech cut off
  * mid-word and followed by quiet (a tenth of a second was enough), and the

@@ -2,8 +2,9 @@ import CSherpaOnnx
 import Foundation
 import SatzKit
 
-/// One loaded sherpa-onnx model: Parakeet, Canary, Moonshine or SenseVoice,
-/// through sherpa-onnx's C API on ONNX Runtime (Contents/Frameworks).
+/// One loaded sherpa-onnx model: Parakeet, Canary, Moonshine, SenseVoice,
+/// Cohere Transcribe or Qwen3-ASR, through sherpa-onnx's C API on ONNX
+/// Runtime (Contents/Frameworks).
 /// Used from one transcription at a time (LocalModels' queue), like WhisperKit.
 final class SherpaRecognizer: @unchecked Sendable {
 
@@ -17,6 +18,9 @@ final class SherpaRecognizer: @unchecked Sendable {
 
     private let recognizer: OpaquePointer
     private var settings: SherpaSettings
+    /// Cohere Transcribe hears the language it is told with each call, as a
+    /// stream option: that needs no reload either.
+    private var cohereLanguage: String?
 
     /// Loads the model: a few seconds, so never on the main thread.
     init(_ settings: SherpaSettings) throws {
@@ -25,36 +29,43 @@ final class SherpaRecognizer: @unchecked Sendable {
         // nil when sherpa-onnx finds the settings wrong, a file missing among them.
         guard let made else { throw Failure.notLoaded }
         recognizer = made
+        cohereLanguage = settings.cohere?.language
     }
 
     deinit {
         SherpaOnnxDestroyOfflineRecognizer(recognizer)
     }
 
-    /// Canary is told the language it hears, and changing it needs no reload.
+    /// Canary and Cohere Transcribe are told the language they hear, and
+    /// changing it needs no reload.
     func listen(for language: String) {
+        if settings.cohere != nil { cohereLanguage = language }
         guard var canary = settings.canary, canary.language != language else { return }
         canary.language = language
         settings.canary = canary
         Self.withConfig(settings) { SherpaOnnxOfflineRecognizerSetConfig(recognizer, $0) }
     }
 
-    /// - Parameter samples: 16 kHz mono.
-    func transcribe(_ samples: ArraySlice<Float>) -> String {
+    /// - Parameters:
+    ///   - samples: 16 kHz mono.
+    ///   - hotwords: Qwen3-ASR's word list, comma-separated; "" for none.
+    func transcribe(_ samples: ArraySlice<Float>, hotwords: String = "") -> String {
         // Parakeet's encoder holds 400 s: one second more and ONNX Runtime
         // throws a C++ exception inside sherpa-onnx, which Swift cannot catch
         // and which ends satz with the whole recording in it. SherpaModel
         // hands over pieces of 240 s at most; this is the last line, for
         // anything longer that gets here whole. It is heard in pieces.
-        guard samples.count > SherpaModel.longestCall else { return decode(samples) }
+        guard samples.count > SherpaModel.longestCall else { return decode(samples, hotwords: hotwords) }
         Log.note(String(format: "local: %.0f s in one call, heard in pieces instead", Double(samples.count) / 16_000))
-        return QuietWindows.split(Array(samples), longest: SherpaModel.longestCall).map(decode)
+        return QuietWindows.split(Array(samples), longest: SherpaModel.longestCall).map { decode($0, hotwords: hotwords) }
             .filter { !$0.isEmpty }.joined(separator: " ")
     }
 
-    private func decode(_ samples: ArraySlice<Float>) -> String {
+    private func decode(_ samples: ArraySlice<Float>, hotwords: String) -> String {
         guard let stream = SherpaOnnxCreateOfflineStream(recognizer) else { return "" }
         defer { SherpaOnnxDestroyOfflineStream(stream) }
+        if let cohereLanguage { SherpaOnnxOfflineStreamSetOption(stream, "language", cohereLanguage) }
+        if !hotwords.isEmpty { SherpaOnnxOfflineStreamSetOption(stream, "hotwords", hotwords) }
         samples.withUnsafeBufferPointer { buffer in
             SherpaOnnxAcceptWaveformOffline(stream, Int32(settings.sampleRate), buffer.baseAddress, Int32(buffer.count))
         }
@@ -81,7 +92,8 @@ final class SherpaRecognizer: @unchecked Sendable {
         config.feat_config.sample_rate = Int32(settings.sampleRate)
         config.feat_config.feature_dim = Int32(settings.featureDimension)
         config.decoding_method = c(settings.decoding)
-        config.model_config.tokens = c(settings.tokens)
+        // Qwen3-ASR has a tokenizer folder instead.
+        if !settings.tokens.isEmpty { config.model_config.tokens = c(settings.tokens) }
         config.model_config.num_threads = Int32(settings.threads)
         config.model_config.provider = c(settings.provider)
         config.model_config.debug = 0
@@ -108,6 +120,26 @@ final class SherpaRecognizer: @unchecked Sendable {
             config.model_config.sense_voice.model = c(senseVoice.model)
             config.model_config.sense_voice.language = c(senseVoice.language)
             config.model_config.sense_voice.use_itn = senseVoice.inverseNormalization ? 1 : 0
+        }
+        if let cohere = settings.cohere {
+            config.model_config.cohere_transcribe.encoder = c(cohere.encoder)
+            config.model_config.cohere_transcribe.decoder = c(cohere.decoder)
+            config.model_config.cohere_transcribe.language = c(cohere.language)
+            config.model_config.cohere_transcribe.use_punct = cohere.punctuation ? 1 : 0
+            config.model_config.cohere_transcribe.use_itn = cohere.inverseNormalization ? 1 : 0
+        }
+        if let qwen3 = settings.qwen3 {
+            config.model_config.qwen3_asr.conv_frontend = c(qwen3.convFrontend)
+            config.model_config.qwen3_asr.encoder = c(qwen3.encoder)
+            config.model_config.qwen3_asr.decoder = c(qwen3.decoder)
+            config.model_config.qwen3_asr.tokenizer = c(qwen3.tokenizer)
+            // The C struct starts at zero, which is not sherpa-onnx's own
+            // defaults: set all of them (its C++ ones are 1e-6, 0.8 and 42).
+            config.model_config.qwen3_asr.max_total_len = Int32(qwen3.maxTotalLength)
+            config.model_config.qwen3_asr.max_new_tokens = Int32(qwen3.maxNewTokens)
+            config.model_config.qwen3_asr.temperature = 1e-6
+            config.model_config.qwen3_asr.top_p = 0.8
+            config.model_config.qwen3_asr.seed = 42
         }
         return withUnsafePointer(to: &config) { body($0) }
     }

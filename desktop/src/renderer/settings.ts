@@ -1,7 +1,8 @@
 import { satz } from './bridge'
 import { formatSize, languageLine, languageName, localModel, measuredHere, modelBars, toldLanguage, type Speed } from '../core/localModels'
 import { choiceFor, type ModelChoice } from '../core/models'
-import { localRowAction, providerLabel, providerOrder, shortcutHint, switchRow, useLocalModel } from '../core/browse'
+import { localRowAction, providerLabel, providerNeeds, providerOrder, shortcutHint, switchRow, useLocalModel } from '../core/browse'
+import { hasCleanMode, keyPages, microsoftHost, microsoftRegions, providers, type Provider } from '../core/transcriber'
 import { HISTORY_LIMITS, KEEP_ALL } from '../core/historyLimits'
 import { LoadAfterBlur } from './deferredLoad'
 
@@ -10,12 +11,11 @@ import { LoadAfterBlur } from './deferredLoad'
  * their spoken language, the shortcut mode, language and start at login.
  * Rebuilt from scratch on every change: it is a short page.
  */
-type Provider = 'openai' | 'openrouter' | 'groq' | 'custom' | 'local'
 type LocalState = { kind: 'missing' | 'preparing' | 'ready' } | { kind: 'downloading'; fraction: number } | { kind: 'failed'; message: string }
 interface Replacement { id: string; spoken: string; written: string; isOn: boolean }
 interface Info {
   prefs: {
-    provider: Provider; models: Record<string, string>; customBaseURL: string; words: string[]; triggerMode: 'tap' | 'hold'
+    provider: Provider; models: Record<string, string>; customBaseURL: string; microsoftRegion: string; microsoftEndpoint: string; words: string[]; triggerMode: 'tap' | 'hold'
     language: 'de' | 'en'; spokenLanguage: 'de' | 'en' | null; toldLanguage?: string | null; replacements: Replacement[]; usesReplacements: boolean; removesFillers: boolean
     keepsOnClipboard: boolean; historyLimit: number; pausesMedia: boolean
   }
@@ -57,7 +57,10 @@ let selectModelId = false
 let focusNext: string | null = null
 
 const t = (de: string, en: string) => (info.prefs.language === 'de' ? de : en)
-const defaults: Record<Provider, string> = { openai: 'gpt-transcribe', openrouter: 'microsoft/mai-transcribe-2', groq: 'whisper-large-v3-turbo', custom: '', local: 'onnx-community/whisper-large-v3-turbo' }
+const defaults = Object.fromEntries(Object.entries(providers).map(([provider, { defaultModel }]) => [provider, defaultModel])) as Record<Provider, string>
+/** The empty key field's hint. */
+const keyHint = (provider: Provider) => provider === 'openrouter' ? 'sk-or-…' : provider === 'groq' ? 'gsk_…' : provider === 'google' ? 'AIza…'
+  : provider === 'microsoft' ? t('Schlüssel 1 oder 2', 'Key 1 or 2') : 'sk-…'
 const shown = (written: string) => (written === '\n' ? '↵' : written === '\n\n' ? '¶' : written)
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Record<string, unknown> = {}, ...children: (Node | string)[]): HTMLElementTagNameMap[K] {
@@ -107,7 +110,7 @@ function render() {
   // Provider and key
   const keyRow = el('div', { className: 'row' })
   if (editingKey || !info.hasKey) {
-    const input = el('input', { type: 'password', id: 'key', className: 'grow', placeholder: provider === 'openrouter' ? 'sk-or-…' : provider === 'groq' ? 'gsk_…' : 'sk-…' })
+    const input = el('input', { type: 'password', id: 'key', className: 'grow', placeholder: keyHint(provider) })
     const save = el('button', { className: 'accent', textContent: t('Sichern', 'Save') })
     const commit = async () => {
       if (!input.value.trim()) return
@@ -127,6 +130,30 @@ function render() {
     const change = el('button', { textContent: t('Ändern', 'Change') })
     change.onclick = () => { editingKey = true; wantsKeyFocus = true; render() }
     keyRow.append(el('span', { className: 'grow', textContent: t('Schlüssel gesichert', 'Key saved') }), change)
+  }
+  // Where to get the key, while it is being typed, for the two providers whose key is not obvious to find.
+  const keyPage = keyPages[provider]
+  const keyHelp: HTMLElement[] = []
+  if (keyPage && (editingKey || !info.hasKey)) {
+    const open = el('button', { className: 'quiet', id: 'key-page', textContent: provider === 'microsoft' ? t('Speech-Ressource im Azure-Portal anlegen', 'Create a Speech resource in the Azure portal') : t('Schlüssel in Google AI Studio holen', 'Get a key in Google AI Studio') })
+    open.onclick = () => satz.invoke('settings:open-key-page', provider)
+    keyHelp.push(el('div', { className: 'hint' }, open, ...(provider === 'microsoft'
+      ? ['. ', t('Der Schlüssel gilt nur in der Region seiner Ressource (Standard S0).', 'The key only works in the region of its resource (Standard tier, S0).')] : [])))
+  }
+  // Microsoft: the region of the resource, and an own address that wins over it.
+  const microsoftRows: HTMLElement[] = []
+  if (provider === 'microsoft') {
+    microsoftRows.push(el('div', { className: 'row' }, el('span', { className: 'grow', textContent: t('Region', 'Region') }),
+      select(p.microsoftRegion, [...microsoftRegions.map((region): [string, string] => [region.id, region.name]),
+        // A region typed into the preferences by hand stays visible, not swapped for the first.
+        ...(microsoftRegions.some(region => region.id === p.microsoftRegion) ? [] : [[p.microsoftRegion, p.microsoftRegion] as [string, string]])],
+        v => update({ microsoftRegion: v }), t('Region', 'Region'), 'microsoft-region')))
+    const own = el('input', { type: 'text', id: 'microsoft-endpoint', className: 'grow', value: p.microsoftEndpoint, placeholder: 'https://….cognitiveservices.azure.com' })
+    own.onchange = () => update({ microsoftEndpoint: own.value.trim() })
+    microsoftRows.push(el('div', { className: 'row' }, el('span', { textContent: t('Eigene Adresse', 'Own address') }), own))
+    microsoftRows.push(el('div', { className: p.microsoftEndpoint.trim() && !microsoftHost(p.microsoftRegion, p.microsoftEndpoint) ? 'error' : 'hint',
+      textContent: p.microsoftEndpoint.trim() && !microsoftHost(p.microsoftRegion, p.microsoftEndpoint) ? t('Das ist keine gültige Adresse (https://…).', 'That is not a valid address (https://…).')
+        : t('Optional. Wenn gesetzt, gilt sie statt der Region.', 'Optional. If set, it is used instead of the region.') }))
   }
   // A menu of what the provider offers now, best first, with how many words
   // each gets wrong and what an hour costs, and "Other" for one typed in by
@@ -168,7 +195,7 @@ function render() {
     chosen.errorRate === undefined ? t('Noch ohne Fehlerquote von Artificial Analysis', 'No error rate from Artificial Analysis yet')
       : t(`${number(chosen.errorRate, 1)} % falsche Wörter laut Artificial Analysis`, `${number(chosen.errorRate, 1)} % wrong words per Artificial Analysis`),
     ...(chosen.dollarsPerHour === undefined ? [] : [t(`${number(chosen.dollarsPerHour, 2)} $ pro Stunde Sprechen`, `$${number(chosen.dollarsPerHour, 2)} per hour of talking`)]),
-  ].join(', ') })
+  ].join(', ') + (chosen.note ? `. ${chosen.note[p.language]}` : '') })
   modelMenu.value = known && !typingModel ? currentModel : ''
   modelMenu.onchange = () => {
     if (!modelMenu.value) { typingModel = true; selectModelId = true; focusNext = 'model'; render(); return }
@@ -182,18 +209,29 @@ function render() {
   const providerMenu = select(provider, providerOrder.map((option): [Provider, string] => [option, providerLabel(option, p.provider, p.language)]),
     v => { editingKey = false; typingModel = false; keyProblem = ''; wantsKeyFocus = false; shownProvider = v; load() }, t('Anbieter', 'Provider'), 'provider')
   // Where dictations go while another provider is shown, and the one way to change that.
-  const switching = switchRow(provider, p.provider, p.language)
+  // The button only once the provider has what it needs (a key, for Microsoft a region, for Local a model on this computer).
+  const needs = providerNeeds(provider, {
+    hasKey: isLocal ? info.local.models.some(model => model.id === info.local.inUse && model.state.kind === 'ready') : info.hasKey,
+    customBaseURL: p.customBaseURL, model: p.models[provider] ?? '', microsoftRegion: p.microsoftRegion, microsoftEndpoint: p.microsoftEndpoint,
+  })
+  const switching = switchRow(provider, p.provider, p.language, needs)
   const switchRows: HTMLElement[] = []
   if (switching) {
-    const use = el('button', { id: 'use-provider', className: 'accent', textContent: switching.button })
-    use.onclick = () => { editingKey = false; update({ provider }) }
-    switchRows.push(el('div', { className: 'row switch-provider' }, el('span', { className: 'grow', textContent: switching.text }), use))
+    const parts: HTMLElement[] = [el('span', { className: 'grow', textContent: switching.text })]
+    if (switching.button) {
+      const use = el('button', { id: 'use-provider', className: 'accent', textContent: switching.button })
+      use.onclick = () => { editingKey = false; update({ provider }) }
+      parts.push(use)
+    }
+    switchRows.push(el('div', { className: 'row switch-provider' }, ...parts))
   }
   const providerBox = el('div', { className: 'box' },
     el('div', { className: 'row' }, el('span', { className: 'grow', textContent: t('Anbieter', 'Provider') }), providerMenu),
     ...switchRows,
     ...(isLocal ? [] : [
       keyRow,
+      ...keyHelp,
+      ...microsoftRows,
       ...(provider === 'custom' ? [] : [el('div', { className: 'row' }, el('span', { textContent: t('Modell', 'Model') }), modelMenu), facts]),
       ...(showsModelField ? [el('div', { className: 'row' }, el('span', { textContent: provider === 'custom' ? t('Modell', 'Model') : t('Modell-ID', 'Model ID') }), modelField)] : []),
     ]))
@@ -203,9 +241,8 @@ function render() {
     url.onchange = () => update({ customBaseURL: url.value.trim() })
     providerBox.append(el('div', { className: 'row' }, el('span', { textContent: t('Adresse', 'Address') }), url))
   }
-  // Only MAI-Transcribe has a clean mode; elsewhere the switch would do nothing.
-  // Only MAI-Transcribe 2 takes it: 1.5 refused the whole request with it.
-  if (currentModel.includes('mai-transcribe-2')) {
+  // Only MAI-Transcribe 2 (1.5 refused the whole request with it) and Gemini have a clean mode; elsewhere the switch would do nothing.
+  if (hasCleanMode(provider, currentModel)) {
     const box = el('input', { type: 'checkbox', id: 'removes-fillers', checked: p.removesFillers })
     box.onchange = () => update({ removesFillers: box.checked })
     providerBox.append(el('div', { className: 'row' }, el('label', { className: 'switch' }, t('Füllwörter weglassen', 'Remove filler words'), box)))

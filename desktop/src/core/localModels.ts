@@ -19,7 +19,10 @@ import { runsSherpa, type SherpaFile, type SherpaSource } from './sherpa'
  * whisper-small-ONNX and whisper-large-v3-turbo-ONNX (their 4-bit decoders
  * want `cache_position`) and Xenova/whisper-large* (no 4-bit decoder).
  * Handy's models run through sherpa-onnx (sherpaEngine.ts), from single
- * files in csukuangfj's repos (core/sherpa.ts).
+ * files in csukuangfj's repos (core/sherpa.ts); the newer ones (Cohere
+ * Transcribe, Qwen3-ASR) from csukuangfj2's, and two community exports
+ * (Canary 1B v2, the German Parakeet) from their makers'. Each repo is
+ * named with its owner and the commit it was run at.
  */
 export interface LocalModel {
   id: string
@@ -100,19 +103,39 @@ const european = ['bg', 'hr', 'cs', 'da', 'nl', 'en', 'et', 'fi', 'fr', 'de', 'e
 
 /**
  * The default first. Then those that write German, most accurate first;
- * the German-only one; then those that write no German, most accurate
- * first. Sizes and checksums from each repo's file list (09.10.2026).
+ * the German-only ones; then those that write no German, most accurate
+ * first. Sizes and checksums from each repo's file list (09.10.2026; the
+ * four added on 10.10.2026 from theirs at the commits named).
  */
 export const localModels: LocalModel[] = [
   { ...whisperModel, id: 'onnx-community/whisper-large-v3-turbo', name: 'Whisper Large v3 Turbo', bytes: 981_450_034, original: 'openai/whisper-large-v3-turbo',
     whisper: pinned('360ebcde2559d60bb474678be3c1de9ef347d01a', [644822195, 'd2f853dc3254fdc0079f55dd4433ea716ac98ec5574d3b475f288f2a77cebba9'], [334147222, '8b933ac24074a24a1635084d06a4ed37e387ef22d980f184a5fc27418e9ceeb8'], [2480617, '3a5e2ba63acdcac9a19ba56cf9bd27f185bfff61']),
     description: { de: 'Ausgewogen: genau und schnell.', en: 'Balanced: accurate and fast.' }, accuracy: 0.80, speed: 0.40 },
+  sherpaModel({ id: 'sherpa/cohere-transcribe', name: 'Cohere Transcribe', original: 'CohereLabs/cohere-transcribe-03-2026', maker: 'Cohere', language: 'spoken',
+    languages: ['de', 'en', 'es', 'fr', 'it', 'nl', 'pl', 'pt', 'el', 'ar', 'ja', 'ko', 'vi', 'zh'],
+    description: { de: 'Am genauesten auf Deutsch, groß.', en: 'The most accurate in German, but big.' }, accuracy: 0.90, speed: 0.35 }, {
+    // Cannot tell the language (it is told, like Canary) and makes something up for noise, which the speech check in front of every piece keeps from it.
+    // At most 35 s per piece: 30 s, cut at a quiet moment. Its encoder's weights are a second file that must lie beside it under exactly that name.
+    kind: 'cohere-transcribe', owner: 'csukuangfj2', repo: 'sherpa-onnx-cohere-transcribe-14-lang-int8-2026-04-01', revision: '156a470cf08eefe706a0004f3c52d9ee567ca7a0', window: 30, files: [
+      { name: 'encoder.int8.onnx', role: 'encoder', bytes: 3_090_822, sha256: 'cf704f8cfa90e3f0a76f9ffc05998bdf00ba9ae983192c14a85a3a5eb008b367' },
+      { name: 'encoder.int8.onnx.data', role: 'data', bytes: 2_731_503_072, sha256: 'bcf1b7148c8518ae52df1ad2d2fc2b4e89261ea23e6c874eef1d9f55bcbaa4a3' },
+      { name: 'decoder.int8.onnx', role: 'decoder', bytes: 153_250_705, sha256: '8372ca6c8ff4db8b916ca3592f5c757a715e691b9edec751ba19b29fc854baf9' },
+      { name: 'tokens.txt', role: 'tokens', bytes: 207_437, sha256: '013ede043ae2480e3a9205cc34550d9686100cc682bacc90f702facdfbb93035' },
+    ] }),
   { ...whisperModel, id: 'onnx-community/whisper-large-v3-ONNX', name: 'Whisper Large v3', bytes: 1_445_984_744, original: 'openai/whisper-large-v3',
     whisper: pinned('3b6257ad5e67aa523c7c07f4fea04d445eecc4a6', [644795348, 'f438cff17ce55089f5046c7392421ec646cdf3081098a6510558578321a15c3f'], [797258751, 'd02d5453f8dd09f7c5d34cb0c7432131c4e151f4797387282a59ad82db388655'], [3930645, '33c8354828689f5daef89956ad477df739eccd16']),
     description: { de: 'Sehr genau, aber langsam.', en: 'Very accurate, but slow.' }, accuracy: 0.85, speed: 0.30 },
+  sherpaModel({ id: 'sherpa/canary-1b-v2', name: 'Canary 1B v2', original: 'nvidia/canary-1b-v2', maker: 'NVIDIA', language: 'spoken', languages: ['en', 'de', 'es', 'fr'],
+    description: { de: 'Genauer als der kleine Canary, aber größer und langsamer.', en: 'More accurate than the small Canary, but bigger and slower.' }, accuracy: 0.85, speed: 0.55 }, {
+    // A community export (Sarphix, CC-BY-4.0). The model writes 25 languages; sherpa-onnx 1.13.8 knows four of them by name.
+    kind: 'canary', owner: 'Sarphix', repo: 'canary-1b-v2-sherpa-onnx-int8', revision: '7d513cd4f39f6c7dc75c13a284b5e345b37f6198', window: 30, files: [
+      { name: 'encoder.int8.onnx', role: 'encoder', bytes: 857_602_351, sha256: '0d8f349aaa015d47c81d88c4ba3a5461c19bc09ebb72bf4c61698eec9f09e968' },
+      { name: 'decoder.int8.onnx', role: 'decoder', bytes: 558_682_707, sha256: 'e68d839a8939a0c1d55d03fd5c6e6d3f113cfc97038027ffe566b8e3a4be2cd8' },
+      { name: 'tokens.txt', role: 'tokens', bytes: 224_406, sha256: '399db68418b655f50275779cfe425c55a5ef6dda12cf38375d709566927ef513' },
+    ] }),
   sherpaModel({ id: 'sherpa/parakeet-v3', name: 'Parakeet V3', original: 'nvidia/parakeet-tdt-0.6b-v3', maker: 'NVIDIA', language: 'auto', languages: european,
     description: { de: 'Schnell und genau. 25 europäische Sprachen.', en: 'Fast and accurate. 25 European languages.' }, accuracy: 0.80, speed: 0.85 }, {
-    kind: 'nemo-transducer', repo: 'sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8', revision: '2bda32ec70b097a55adaa07d9a7173915b43cc78', window: 240, files: [
+    kind: 'nemo-transducer', owner: 'csukuangfj', repo: 'sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8', revision: '2bda32ec70b097a55adaa07d9a7173915b43cc78', window: 240, files: [
       { name: 'encoder.int8.onnx', role: 'encoder', bytes: 652_184_281, sha256: 'acfc2b4456377e15d04f0243af540b7fe7c992f8d898d751cf134c3a55fd2247' },
       { name: 'decoder.int8.onnx', role: 'decoder', bytes: 11_845_275, sha256: '179e50c43d1a9de79c8a24149a2f9bac6eb5981823f2a2ed88d655b24248db4e' },
       { name: 'joiner.int8.onnx', role: 'joiner', bytes: 6_355_277, sha256: '3164c13fc2821009440d20fcb5fdc78bff28b4db2f8d0f0b329101719c0948b3' },
@@ -123,10 +146,21 @@ export const localModels: LocalModel[] = [
     description: { de: 'Gute Genauigkeit, mittleres Tempo.', en: 'Good accuracy, medium speed.' }, accuracy: 0.75, speed: 0.60 },
   sherpaModel({ id: 'sherpa/canary-180m', name: 'Canary 180M Flash', original: 'nvidia/canary-180m-flash', maker: 'NVIDIA', language: 'spoken', languages: ['en', 'de', 'es', 'fr'],
     description: { de: 'Sehr schnell. Englisch, Deutsch, Spanisch, Französisch.', en: 'Very fast. English, German, Spanish, French.' }, accuracy: 0.75, speed: 0.85 }, {
-    kind: 'canary', repo: 'sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8', revision: '9077164e0d3dd1d5353743e89ceaa1d3a770838c', window: 30, files: [
+    kind: 'canary', owner: 'csukuangfj', repo: 'sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8', revision: '9077164e0d3dd1d5353743e89ceaa1d3a770838c', window: 30, files: [
       { name: 'encoder.int8.onnx', role: 'encoder', bytes: 132_678_643, sha256: '7a75b4e2a5857a6dcc0819503bbe3fad66943db4a3ccf21d3f27c633667d303f' },
       { name: 'decoder.int8.onnx', role: 'decoder', bytes: 74_437_848, sha256: 'e41a2ab9c0c2fe81a1e8ade5a45fb02a74bc4db7d1f91b89a54a25e2cf79cba2' },
       { name: 'tokens.txt', role: 'tokens', bytes: 53_555, sha256: '2dae6fc7815f9640645e0c765522b278ee0cef49b482d91f6913e334628d3e77' },
+    ] }),
+  sherpaModel({ id: 'sherpa/qwen3-asr-0.6b', name: 'Qwen3-ASR 0.6B', original: 'Qwen/Qwen3-ASR-0.6B-hf', maker: 'Alibaba', language: 'auto',
+    languages: ['en', 'de', 'es', 'fr', 'it', 'pt', 'nl', 'pl', 'ru', 'cs', 'da', 'el', 'fi', 'hu', 'mk', 'ro', 'sv', 'tr', 'ar', 'fa', 'hi', 'id', 'ms', 'th', 'vi', 'fil', 'zh', 'yue', 'ja', 'ko'],
+    description: { de: 'Klein, erkennt die Sprache selbst. Nimmt den Wortschatz als Hinweis.', en: 'Small, tells the language by itself. Takes the word list as a hint.' }, accuracy: 0.75, speed: 0.55 }, {
+    kind: 'qwen3-asr', owner: 'csukuangfj2', repo: 'sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25', revision: '68818b2313fe77bd06f6a7c5068ff3ef59d02b8a', window: 15, files: [
+      { name: 'conv_frontend.onnx', role: 'convFrontend', bytes: 44_148_281, sha256: 'd22dc4423e0940e49884e903d2ea2f7e5567c14fc1aed97e4e26d6b8f208ef9e' },
+      { name: 'encoder.int8.onnx', role: 'encoder', bytes: 182_491_662, sha256: '60748d3e6744a57c9c91e1b17424a6c2990567e8adceb0783940c03ed98fa9d9' },
+      { name: 'decoder.int8.onnx', role: 'decoder', bytes: 755_914_231, sha256: '4f6885be5959ae26af3089d38ee7972c5fafbeeb1cf8d5e76eab6d8b61ca5771' },
+      { name: 'tokenizer/vocab.json', role: 'tokenizer', bytes: 2_776_833, sha256: 'ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910' },
+      { name: 'tokenizer/merges.txt', role: 'tokenizer', bytes: 1_671_853, sha256: '8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5' },
+      { name: 'tokenizer/tokenizer_config.json', role: 'tokenizer', bytes: 12_487, sha256: '4942d005604266809309cabc9f4e9cb89ce855d59b14681fdc0e1cc62ea26c4c' },
     ] }),
   { ...whisperModel, id: 'onnx-community/whisper-small', name: 'Whisper Small', bytes: 327_955_953, original: 'openai/whisper-small',
     whisper: pinned('36050c46d777d46dc4b5f43f6d90574fc38f8732', [92326160, 'a43a83f3c5361cd591cfa7c36f14b43cf7cb22f47a415cc14a8d557be800fa92'], [233149327, '795c61b344576719c2b249cc9911c78b4cc552c8c6a5407be21a3380a0791b13'], [2480466, '1e95340ff836fad1b5932e800fb7b8c5e6d78a74']),
@@ -137,12 +171,21 @@ export const localModels: LocalModel[] = [
   { ...whisperModel, id: 'onnx-community/whisper-tiny', name: 'Whisper Tiny', bytes: 99_319_158, original: 'openai/whisper-tiny',
     whisper: pinned('ff4177021cc41f7db950912b73ea4fdf7d01d8e7', [10124990, '2af4a414ca47aa30f61246017e5fe82b0a8d229281d1255ba666a2a7f6b84d19'], [86713702, 'a7573efde84f7d018d59e50e7f860c03e26623d68e23eb6037b76135367e72eb'], [2480466, '1e95340ff836fad1b5932e800fb7b8c5e6d78a74']),
     description: { de: 'Am schnellsten, sehr ungenau.', en: 'Fastest, very rough.' }, accuracy: 0.35, speed: 0.95 },
+  sherpaModel({ id: 'sherpa/parakeet-german', name: 'Parakeet V3 German', original: 'primeline/parakeet-primeline', maker: 'primeLine', language: 'de', languages: ['de'],
+    description: { de: 'Auf Deutsch nachtrainiert, schnell. Schreibt „ss“ statt „ß“.', en: 'Retrained on German, fast. Writes "ss" for "ß".' }, accuracy: 0.80, speed: 0.85 }, {
+    // A community export (x-ian) of primeLine's fine-tune. The repo holds other files (a speaker model, a handler) that satz leaves alone.
+    kind: 'nemo-transducer', owner: 'x-ian', repo: 'sherpa-onnx-parakeet-primeline-de-int8', revision: '2a97df7e501bc25c6106a150a3379c5272088c53', window: 240, files: [
+      { name: 'encoder.int8.onnx', role: 'encoder', bytes: 652_282_298, sha256: 'ecb67ffb98a12bf46eaf7657cb2f714f6569511817a831296325dd32bc4daa30' },
+      { name: 'decoder.int8.onnx', role: 'decoder', bytes: 11_845_275, sha256: 'fb4ddefe200706cabb27ee3fc1c81efa50555a4c8a8e00b663cc795216fb9369' },
+      { name: 'joiner.int8.onnx', role: 'joiner', bytes: 6_355_277, sha256: '8220c0d117d81bdd0d8c770881932ac340f1ce4b36932941d561d11ad1aaffce' },
+      { name: 'tokens.txt', role: 'tokens', bytes: 93_939, sha256: 'd58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d' },
+    ] }),
   { ...whisperModel, id: 'onnx-community/whisper-large-v3-turbo-german-ONNX', name: 'Whisper Large v3 Turbo German', bytes: 982_774_635, original: 'primeLine/whisper-large-v3-turbo-german',
     whisper: pinned('7a86cb9d63ad2517468c15fdac7dc9bb6d2abaed', [644795356, 'ac189ad19f63aa243af53cccd4dc4b82f27b2538c301cee7f861bf2076a39973'], [334048634, '997b30e5561f844e57424a8ea62a5d2b6fa7247aa060239f4b4142a40cb7a508'], [3930645, '33c8354828689f5daef89956ad477df739eccd16']),
     maker: 'primeLine', language: 'de', languages: ['de'], description: { de: 'Turbo, auf Deutsch trainiert.', en: 'Turbo, trained on German.' }, accuracy: 0.80, speed: 0.40 },
   sherpaModel({ id: 'sherpa/parakeet-v2', name: 'Parakeet V2', original: 'nvidia/parakeet-tdt-0.6b-v2', maker: 'NVIDIA', language: 'en', languages: ['en'],
     description: { de: 'Nur Englisch, das beste für Englisch.', en: 'English only. The best for English.' }, accuracy: 0.85, speed: 0.85 }, {
-    kind: 'nemo-transducer', repo: 'sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8', revision: '1ab9323565ddb038682214b292f588070a538ce2', window: 240, files: [
+    kind: 'nemo-transducer', owner: 'csukuangfj', repo: 'sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8', revision: '1ab9323565ddb038682214b292f588070a538ce2', window: 240, files: [
       { name: 'encoder.int8.onnx', role: 'encoder', bytes: 652_184_296, sha256: 'a32b12d17bbbc309d0686fbbcc2987b5e9b8333a7da83fa6b089f0a2acd651ab' },
       { name: 'decoder.int8.onnx', role: 'decoder', bytes: 7_257_753, sha256: 'b6bb64963457237b900e496ee9994b59294526439fbcc1fecf705b31a15c6b4e' },
       { name: 'joiner.int8.onnx', role: 'joiner', bytes: 1_739_080, sha256: '7946164367946e7f9f29a122407c3252b680dbae9a51343eb2488d057c3c43d2' },
@@ -153,7 +196,7 @@ export const localModels: LocalModel[] = [
     maker: 'Hugging Face', language: 'en', languages: ['en'], description: { de: 'Schnell, nur Englisch.', en: 'Fast, English only.' }, accuracy: 0.75, speed: 0.45 },
   sherpaModel({ id: 'sherpa/moonshine-base', name: 'Moonshine Base', original: 'UsefulSensors/moonshine-base', maker: 'Useful Sensors', language: 'en', languages: ['en'],
     description: { de: 'Sehr schnell, nur Englisch. Kommt gut mit Akzenten klar.', en: 'Very fast, English only. Handles accents well.' }, accuracy: 0.70, speed: 0.90 }, {
-    kind: 'moonshine', repo: 'sherpa-onnx-moonshine-base-en-int8', revision: '052b0798ad1bf046a140fdd4efcd9426530fa3f5', window: 30, files: [
+    kind: 'moonshine', owner: 'csukuangfj', repo: 'sherpa-onnx-moonshine-base-en-int8', revision: '052b0798ad1bf046a140fdd4efcd9426530fa3f5', window: 30, files: [
       { name: 'preprocess.onnx', role: 'preprocessor', bytes: 14_077_290, sha256: 'ffa630d395c5ccf76f5d4954be5b882df76aaf6491519ec01fd82ea7a3819fb2' },
       { name: 'encode.int8.onnx', role: 'encoder', bytes: 50_311_494, sha256: '7e38770f776f2e5583a53b052936005df2ba5c833d7e09c2a5fd796b94bf73e2' },
       { name: 'uncached_decode.int8.onnx', role: 'uncachedDecoder', bytes: 122_120_451, sha256: 'c01f4b35093bcac20d352d23a75a539e772964579f9d024a90e5e6f09cae9987' },
@@ -164,13 +207,13 @@ export const localModels: LocalModel[] = [
   // English as "PNNYES … BULLDOSZING THE GROOSSER" (this one writes it right).
   sherpaModel({ id: 'sherpa/sense-voice', name: 'SenseVoice', original: 'FunAudioLLM/SenseVoiceSmall', maker: 'Alibaba', language: 'auto', languages: ['zh', 'en', 'ja', 'ko', 'yue'],
     description: { de: 'Sehr schnell. Chinesisch, Englisch, Japanisch, Koreanisch, Kantonesisch.', en: 'Very fast. Chinese, English, Japanese, Korean, Cantonese.' }, accuracy: 0.65, speed: 0.95 }, {
-    kind: 'sense-voice', repo: 'sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17', revision: '2365baeacb507f821a0c8120fcee3d484dba7a07', window: 30, files: [
+    kind: 'sense-voice', owner: 'csukuangfj', repo: 'sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17', revision: '2365baeacb507f821a0c8120fcee3d484dba7a07', window: 30, files: [
       { name: 'model.int8.onnx', role: 'model', bytes: 239_233_841, sha256: 'c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51' },
       { name: 'tokens.txt', role: 'tokens', bytes: 315_894, sha256: 'f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc' },
     ] }),
   sherpaModel({ id: 'sherpa/moonshine-tiny', name: 'Moonshine Tiny', original: 'UsefulSensors/moonshine-tiny', maker: 'Useful Sensors', language: 'en', languages: ['en'],
     description: { de: 'Extrem schnell, nur Englisch.', en: 'Extremely fast, English only.' }, accuracy: 0.55, speed: 0.95 }, {
-    kind: 'moonshine', repo: 'sherpa-onnx-moonshine-tiny-en-int8', revision: 'bf2b762c076d8ea61e2af0b3851c9564fb77552e', window: 30, files: [
+    kind: 'moonshine', owner: 'csukuangfj', repo: 'sherpa-onnx-moonshine-tiny-en-int8', revision: 'bf2b762c076d8ea61e2af0b3851c9564fb77552e', window: 30, files: [
       { name: 'preprocess.onnx', role: 'preprocessor', bytes: 6_800_738, sha256: 'f33addce61a143460fe753b5ee5b7db255e5140b5b779c065b94f6c83ff0bf4e' },
       { name: 'encode.int8.onnx', role: 'encoder', bytes: 18_249_187, sha256: '8774dfba578de027ec6595c2c654a0836434489bc963a0db124a7f181f571acb' },
       { name: 'uncached_decode.int8.onnx', role: 'uncachedDecoder', bytes: 53_216_096, sha256: '216737000dd5881a17aa043f6bbd286add33e4c3b0ae257153e2ec15438bdc41' },
@@ -220,20 +263,30 @@ const hearsGerman = (model: LocalModel) => model.languages.includes('de')
  * Word error rate in German on FLEURS, of the original models (satz runs
  * 8-bit and 4-bit builds; nobody publishes numbers for those). Large v3,
  * Turbo and Parakeet V3 from the Open ASR Leaderboard's German file (checked
- * against it on 09.10.2026: 3.2, 3.67 and 4.16), medium, small, base and tiny
- * from the Whisper paper (arXiv 2212.04356, Table 13), the only place they
- * are published. None for the German fine-tune and Canary 180M Flash (the
- * leaderboard has no row for them) and the models that write no German.
+ * against it on 09.10.2026: 3.2, 3.67 and 4.16), Cohere Transcribe, Canary 1B
+ * v2 and Qwen3-ASR 0.6B from the same file on 10.10.2026 (3.33, 3.43 and 5.41;
+ * the leaderboard names Qwen's "-hf"), medium, small, base and tiny from the
+ * Whisper paper (arXiv 2212.04356, Table 13), the only place they are
+ * published. None for the German fine-tunes and Canary 180M Flash (the
+ * leaderboard has no row for them; the makers' own numbers are on other
+ * test sets) and the models that write no German.
  */
 export const shippedGermanErrors: Record<string, number> = {
   'openai/whisper-large-v3-turbo': 3.67,
   'openai/whisper-large-v3': 3.2,
+  'CohereLabs/cohere-transcribe-03-2026': 3.33,
+  'nvidia/canary-1b-v2': 3.43,
   'nvidia/parakeet-tdt-0.6b-v3': 4.16,
+  'Qwen/Qwen3-ASR-0.6B-hf': 5.41,
   'openai/whisper-medium': 6.5,
   'openai/whisper-small': 10.2,
   'openai/whisper-base': 17.9,
   'openai/whisper-tiny': 27.8,
 }
+
+/** Where a German error rate comes from, named in the bar's help: the Whisper paper for the four it alone has numbers for. */
+const whisperPaper = new Set(['openai/whisper-medium', 'openai/whisper-small', 'openai/whisper-base', 'openai/whisper-tiny'])
+const errorSource = (original: string, language: Language) => (whisperPaper.has(original) ? (language === 'de' ? 'Whisper-Paper' : 'Whisper paper') : 'Open ASR Leaderboard')
 
 /** The leaderboard's German results; a new row there reaches satz within a day. */
 export const germanErrorsURL = 'https://huggingface.co/datasets/hf-audio/multilingual_evals/resolve/main/multilingual_de.csv'
@@ -370,7 +423,7 @@ export function modelBars(id: string, language: Language, options: { speed?: Spe
   const accuracy = model && {
     value: model.accuracy,
     help: rate === undefined ? t('Geschätzt', 'Estimated')
-      : `${formatGermanErrors(rate, language)} ${t('(FLEURS, Originalmodell, nicht die geladene Fassung)', '(FLEURS, full model, not the downloaded build)')}`,
+      : `${formatGermanErrors(rate, language)} ${t(`(FLEURS, ${errorSource(model!.original, language)}, Originalmodell, nicht die geladene Fassung)`, `(FLEURS, ${errorSource(model!.original, language)}, full model, not the downloaded build)`)}`,
   }
   const measured = options.speed
   let speed: Bar | undefined

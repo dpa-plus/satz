@@ -109,6 +109,23 @@ public enum SpeechGate {
         return end(of: levels, above: threshold(levels), sampleRate: sampleRate)
     }
 
+    /// Whether a piece is one steady level, like a fan, hiss or hum, rather
+    /// than speech. Speech rises and falls with every syllable and pause: its
+    /// louder frames (30 ms, the 90th percentile) are 18 to 1500 times the
+    /// quieter ones (the 10th) in clips of every kind tried, steady noise is
+    /// 1.1 times; twice splits them with room on both sides, and speech only
+    /// 6 dB above the fan it is recorded over still passes. `hasSpeech` cannot
+    /// tell: it takes anything above -45 dBFS for speech, which a low-gain
+    /// microphone needs, and Cohere Transcribe wrote whole sentences for a fan
+    /// (the same numbers as desktop/src/core/speech.ts). Under a second there
+    /// is too little to judge, and a piece with a silent stretch is not steady.
+    public static func isSteady(_ samples: ArraySlice<Float>, sampleRate: Double = 16_000) -> Bool {
+        let sorted = levels(samples, sampleRate: sampleRate).sorted()
+        guard sorted.count >= 30 else { return false }
+        let quiet = sorted[sorted.count / 10]
+        return quiet > 0 && sorted[sorted.count * 9 / 10] < 2 * quiet
+    }
+
     /// The same for a piece of a recording, by the recording's `threshold`.
     /// Counted from the start of the piece.
     public static func speechEnd(_ piece: ArraySlice<Float>, above threshold: Float, sampleRate: Double = 16_000) -> Int? {

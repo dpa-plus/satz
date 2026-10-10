@@ -1,13 +1,14 @@
 import Foundation
 
 /// Turns recorded audio into text, using any provider that speaks OpenAI's
-/// transcription API, or OpenRouter's JSON flavour of it.
+/// transcription API, OpenRouter's JSON flavour of it, Azure AI Speech's fast
+/// transcription (Microsoft) or the Gemini API (Google).
 ///
 /// One request, one timeout, one result. There is deliberately no second model
 /// rewriting the transcript: what you said is what you get.
 public struct Transcriber: Sendable {
 
-    /// How the audio travels. Both go to `{base}/audio/transcriptions`.
+    /// How the audio travels. The first two go to `{base}/audio/transcriptions`.
     public enum Format: Sendable, Equatable {
         /// OpenAI's own: a multipart file upload. Also Groq and most copies.
         case multipart
@@ -15,6 +16,13 @@ public struct Transcriber: Sendable {
         /// too, but then drops `prompt` and has nowhere to put provider options,
         /// so the word list and clean mode would be lost.
         case openRouter
+        /// Microsoft's: a multipart upload of `audio` and a JSON `definition`
+        /// to Azure AI Speech, the key in `Ocp-Apim-Subscription-Key`
+        /// (`MicrosoftSpeech`).
+        case azureSpeech
+        /// Google's: JSON with the audio inline to the Gemini API's
+        /// `interactions`, the key in `x-goog-api-key` (`GeminiTranscribe`).
+        case gemini
     }
 
     public struct Settings: Sendable {
@@ -26,12 +34,12 @@ public struct Transcriber: Sendable {
         /// recordings get more on top, see `timeout(for:)`.
         public var timeout: TimeInterval = 30
         /// Names, jargon and spellings to bias recognition towards. Sent as the
-        /// endpoint's own hint (`prompt`, or MAI's phrase list), not to a
-        /// second model.
+        /// endpoint's own hint (`prompt`, MAI's phrase list or Gemini's custom
+        /// vocabulary), not to a second model.
         public var vocabulary: [String] = []
-        /// MAI-Transcribe's clean style: drops fillers, stutters and false
-        /// starts, keeps every word that carries meaning. Ignored by models
-        /// that do not have it.
+        /// MAI-Transcribe's clean style (and Gemini's smart mode): drops
+        /// fillers, stutters and false starts, keeps every word that carries
+        /// meaning. Ignored by models that do not have it.
         public var removesFillers = true
         /// Tries per request when the provider throttles. MAI-Transcribe
         /// answers 429 "retry after 2 seconds" now and then, even when idle,
@@ -49,19 +57,33 @@ public struct Transcriber: Sendable {
         public init() {}
 
         /// Settings for `provider`. `customBaseURL` is used only by `.custom`,
-        /// and an empty `model` falls back to the provider's default.
-        public init(provider: Provider, model: String = "", customBaseURL: URL? = nil) {
-            if let url = provider.baseURL ?? customBaseURL {
+        /// and an empty `model` falls back to the provider's default. The
+        /// region and the address are Microsoft's: the address, if there is
+        /// one, wins over the region.
+        public init(provider: Provider, model: String = "", customBaseURL: URL? = nil,
+                    microsoftRegion: String = MicrosoftSpeech.defaultRegion, microsoftEndpoint: String = "") {
+            if provider == .microsoft {
+                // Never the region's host when an address was typed and is
+                // unusable: the key would go somewhere the user did not point.
+                baseURL = MicrosoftSpeech.baseURL(region: microsoftRegion, endpoint: microsoftEndpoint) ?? Self.missingAddress
+            } else if let url = provider.baseURL ?? customBaseURL {
                 baseURL = url
             } else if provider == .custom {
-                // Never OpenAI's address: a custom key and the recording went
-                // there when the address was cleared. This host cannot exist.
-                baseURL = URL(string: "https://address-missing.invalid")!
+                baseURL = Self.missingAddress
             }
             let chosen = model.trimmingCharacters(in: .whitespaces)
             self.model = chosen.isEmpty ? provider.defaultModel : chosen
-            format = provider == .openRouter ? .openRouter : .multipart
+            format = switch provider {
+            case .openRouter: .openRouter
+            case .microsoft: .azureSpeech
+            case .google: .gemini
+            default: .multipart
+            }
         }
+
+        /// Never OpenAI's address: a custom key and the recording went there
+        /// when the address was cleared. This host cannot exist.
+        private static let missingAddress = URL(string: "https://address-missing.invalid")!
 
         /// The base timeout plus a second per four seconds of audio: a five
         /// minute ramble is a 10 MB upload and should not fail at 30 seconds.
@@ -73,6 +95,10 @@ public struct Transcriber: Sendable {
     public enum Failure: Error, LocalizedError, Equatable {
         case noKey
         case unauthorized
+        /// Microsoft answered 401 or 403: the key is not one of the Speech
+        /// resource in that region (or at that address). Azure cannot tell
+        /// the two apart.
+        case keyOrRegionWrong
         case rateLimited
         case offline
         case timedOut
@@ -96,6 +122,7 @@ public struct Transcriber: Sendable {
             switch self {
             case .noKey: de("Kein API-Schlüssel hinterlegt.", en: "No API key saved.")
             case .unauthorized: de("Der API-Schlüssel wird abgelehnt.", en: "The API key was rejected.")
+            case .keyOrRegionWrong: de("Schlüssel oder Region falsch.", en: "Key or region wrong.")
             case .rateLimited: de("Der Anbieter drosselt gerade. Kurz warten.", en: "The provider is throttling. Wait a moment.")
             case .offline: de("Keine Verbindung zum Anbieter.", en: "No connection to the provider.")
             case .timedOut: de("Der Anbieter hat nicht rechtzeitig geantwortet.", en: "The provider did not answer in time.")
@@ -122,6 +149,11 @@ public struct Transcriber: Sendable {
     /// - Parameter wav: 16-bit PCM WAV bytes, as produced by `WAVEncoder`.
     public func transcribe(wav: Data, apiKey: String) async throws -> String {
         guard !apiKey.isEmpty else { throw Failure.noKey }
+        // Gemini takes the audio inline up to 20 MB: past that, say so now
+        // instead of uploading 20 MB to be refused.
+        if settings.format == .gemini, GeminiTranscribe.isTooLarge(wav: wav, vocabulary: settings.vocabulary) {
+            throw Failure.tooLarge
+        }
         // Counted from the start of the upload, so a long recording, whose
         // upload alone takes a while, waits longer before a second copy goes.
         guard settings.format == .openRouter, let base = settings.backupAfter else { return try await attempt(wav: wav, apiKey: apiKey) }
@@ -190,9 +222,9 @@ public struct Transcriber: Sendable {
                 continue
             }
             guard (200 ..< 300).contains(http.statusCode) else {
-                throw Self.failure(status: http.statusCode, body: data)
+                throw Self.failure(status: http.statusCode, body: data, format: settings.format)
             }
-            guard let text = Self.text(in: data) else { throw Failure.unreadableResponse }
+            guard let text = Self.text(in: data, format: settings.format) else { throw Failure.unreadableResponse }
             return text.trimmingCharacters(in: .whitespacesAndNewlines)
         }
     }
@@ -212,13 +244,13 @@ public struct Transcriber: Sendable {
     // MARK: - Private
 
     func makeRequest(wav: Data, apiKey: String) -> URLRequest {
-        var request = URLRequest(url: settings.baseURL.appendingPathComponent("audio/transcriptions"))
+        var request = URLRequest(url: requestURL)
         request.httpMethod = "POST"
         request.timeoutInterval = settings.timeout(for: wav)
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
 
         switch settings.format {
         case .multipart:
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
             var fields: [(name: String, value: String)] = [("model", settings.model)]
             let words = settings.vocabulary.joined(separator: ", ")
             if !words.isEmpty { fields.append(("prompt", words)) }
@@ -229,10 +261,35 @@ public struct Transcriber: Sendable {
             request.httpBody = body.encode(fields: fields, file: ("file", "speech.wav", "audio/wav", wav))
 
         case .openRouter:
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try? JSONSerialization.data(withJSONObject: openRouterBody(wav: wav), options: [.sortedKeys, .withoutEscapingSlashes])
+
+        case .azureSpeech:
+            request.setValue(apiKey, forHTTPHeaderField: "Ocp-Apim-Subscription-Key")
+            let definition = MicrosoftSpeech.definition(model: settings.model, removesFillers: settings.removesFillers,
+                                                        vocabulary: settings.vocabulary)
+            let body = MultipartBody()
+            request.setValue(body.contentType, forHTTPHeaderField: "Content-Type")
+            request.httpBody = body.encode(fields: [("definition", definition)], file: ("audio", "speech.wav", "audio/wav", wav),
+                                           fileFirst: true)
+
+        case .gemini:
+            request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            let body = GeminiTranscribe.body(wav: wav, model: settings.model, vocabulary: settings.vocabulary,
+                                             removesFillers: settings.removesFillers)
+            request.httpBody = try? JSONSerialization.data(withJSONObject: body, options: [.sortedKeys, .withoutEscapingSlashes])
         }
         return request
+    }
+
+    private var requestURL: URL {
+        switch settings.format {
+        case .multipart, .openRouter: settings.baseURL.appendingPathComponent("audio/transcriptions")
+        case .azureSpeech: MicrosoftSpeech.requestURL(base: settings.baseURL)
+        case .gemini: settings.baseURL.appendingPathComponent("interactions")
+        }
     }
 
     /// OpenRouter forwards `provider.options.<slug>` only to that provider, so
@@ -282,23 +339,51 @@ public struct Transcriber: Sendable {
         }
     }
 
-    static func failure(status: Int, body: Data) -> Failure {
+    static func failure(status: Int, body: Data, format: Format = .multipart) -> Failure {
+        let said = message(in: body)
         switch status {
-        case 401, 403: .unauthorized
-        case 429: .rateLimited
-        case 413: .tooLarge
-        default: .server(status: status, message: message(in: body))
+        // Azure says 401 for a key from another region too, and for a wrong
+        // address: it cannot be told which.
+        case 401, 403: return format == .azureSpeech ? .keyOrRegionWrong : .unauthorized
+        case 429: return .rateLimited
+        case 413: return .tooLarge
+        case 400 where format == .gemini && (said.map(namesTheKey) == true || String(decoding: body, as: UTF8.self).contains("API_KEY_INVALID")):
+            // Google answers a key it does not know with 400 INVALID_ARGUMENT.
+            return .unauthorized
+        case 400 where (format == .azureSpeech || format == .gemini) && said.map(namesASizeLimit) == true:
+            // Both refuse a request over their limit as a plain 400.
+            return .tooLarge
+        default: return .server(status: status, message: said)
         }
     }
 
-    /// OpenAI returns `{"error": {"message": "..."}}` on failure.
+    private static func namesTheKey(_ message: String) -> Bool {
+        let text = message.lowercased()
+        return text.contains("api key") && (text.contains("not valid") || text.contains("invalid") || text.contains("expired"))
+    }
+
+    private static func namesASizeLimit(_ message: String) -> Bool {
+        let text = message.lowercased()
+        return ["too large", "too long", "payload size", "request size", "file size", "exceeds the maximum", "exceeds the limit"]
+            .contains { text.contains($0) }
+    }
+
+    /// OpenAI returns `{"error": {"message": "..."}}` on failure; Azure's
+    /// fast transcription also `{"code": "...", "message": "..."}`.
     static func message(in data: Data) -> String? {
-        guard
-            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let error = object["error"] as? [String: Any],
-            let message = error["message"] as? String
-        else { return nil }
-        return message
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        if let error = object["error"] as? [String: Any], let message = error["message"] as? String { return message }
+        return object["message"] as? String
+    }
+
+    /// The transcript out of a success: `{"text": "..."}` for the OpenAI
+    /// shape, which is what OpenRouter answers in too.
+    static func text(in data: Data, format: Format) -> String? {
+        switch format {
+        case .multipart, .openRouter: text(in: data)
+        case .azureSpeech: MicrosoftSpeech.text(in: data)
+        case .gemini: GeminiTranscribe.text(in: data)
+        }
     }
 
     /// A success is `{"text": "..."}`.
