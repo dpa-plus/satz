@@ -4,6 +4,11 @@ import { choiceFor, type ModelChoice } from '../core/models'
 import { localRowAction, providerLabel, providerNeeds, providerOrder, shortcutHint, switchRow, useLocalModel } from '../core/browse'
 import { hasCleanMode, keyPages, microsoftHost, microsoftRegions, providers, type Provider } from '../core/transcriber'
 import { HISTORY_LIMITS, KEEP_ALL } from '../core/historyLimits'
+import { cleanupLevels, levelChange, levelTexts, systemPrompt, trySample, type CleanupLevel } from '../core/cleanup'
+import {
+  chosenModel, cleanupMissing, cleanupNeeds, cleanupProviderLabel, cleanupProviderOrder, cleanupProviders, cleanupSwitchRow, usableAddress, type CleanupProviderId,
+} from '../core/cleanupProviders'
+import { averageChars, estimate, factsLine, menuTitle, tryLine, type Price, type Sample } from '../core/cleanupEstimate'
 import { LoadAfterBlur } from './deferredLoad'
 
 /**
@@ -12,12 +17,25 @@ import { LoadAfterBlur } from './deferredLoad'
  * Rebuilt from scratch on every change: it is a short page.
  */
 type LocalState = { kind: 'missing' | 'preparing' | 'ready' } | { kind: 'downloading'; fraction: number } | { kind: 'failed'; message: string }
+/** What Ollama or LM Studio has installed, and whether it answered. */
+type Installed = { state: 'loading' | 'ok' | 'down'; models: string[] }
+type TryResult = { outcome: string; answer?: string; rejected: boolean; seconds?: number; dollars?: number; cancelled?: boolean }
 interface Replacement { id: string; spoken: string; written: string; isOn: boolean }
 interface Info {
   prefs: {
     provider: Provider; models: Record<string, string>; customBaseURL: string; microsoftRegion: string; microsoftEndpoint: string; words: string[]; triggerMode: 'tap' | 'hold'
     language: 'de' | 'en'; spokenLanguage: 'de' | 'en' | null; toldLanguage?: string | null; replacements: Replacement[]; usesReplacements: boolean; removesFillers: boolean
     keepsOnClipboard: boolean; historyLimit: number; pausesMedia: boolean
+    cleansText: boolean; cleanupLevel: CleanupLevel; cleanupPrompt: string; cleanupProvider: CleanupProviderId | null
+    cleanupModels: Partial<Record<CleanupProviderId, string>>; cleanupAddresses: Partial<Record<CleanupProviderId, string>>
+  }
+  /** Newest first; how long the user's dictations are, for the cleanup estimate. */
+  history: { text: string; original?: string }[]
+  /** The cleanup provider shown and the one in use, and what the page shows about the shown one. */
+  cleanup: {
+    inUse: CleanupProviderId; shown: CleanupProviderId; hasKey: boolean; inUseHasKey: boolean
+    prices: Record<string, Price>; samples: Record<string, Sample[]>
+    installed: Installed | null; inUseInstalled?: Installed | null
   }
   /** The provider the page shows, which `hasKey` and `models` are about; dictations go to `prefs.provider`. */
   shown: Provider
@@ -55,6 +73,22 @@ let typingModel = false
 let selectModelId = false
 /** The field to put the cursor in after the next drawing, by id. */
 let focusNext: string | null = null
+
+// Cleanup, the page's own like the provider above: looking at a provider is not using it.
+let shownCleanup: CleanupProviderId | null = null
+let editingCleanupKey = false
+let cleanupKeyProblem = ''
+let typingCleanupModel = false
+/** "Prompt ansehen" is open. */
+let showsPrompt = false
+/** The own prompt as typed, saved when the field is left and at most every second while typing. */
+let promptDraft: string | null = null
+let promptTimer: ReturnType<typeof setTimeout> | null = null
+/** "Ausprobieren": the text (the sample until changed), whether it runs, and what came back. */
+let tryText: string | null = null
+let trying = false
+let tryToken = 0
+let tryResult: TryResult | null = null
 
 const t = (de: string, en: string) => (info.prefs.language === 'de' ? de : en)
 const defaults = Object.fromEntries(Object.entries(providers).map(([provider, { defaultModel }]) => [provider, defaultModel])) as Record<Provider, string>
@@ -341,19 +375,258 @@ function render() {
   // The page is drawn anew after every change; the cursor stays in the field
   // it was in, so several words can be typed one after the other.
   const focused = (document.activeElement as HTMLElement | null)?.id || null
+  const active = document.activeElement as HTMLInputElement | null
+  let caret: [number, number] | null = null
+  try { if (active && typeof active.selectionStart === 'number') caret = [active.selectionStart, active.selectionEnd ?? active.selectionStart] } catch { /* no selection here */ }
   app.replaceChildren(
     section(t('Kurzbefehl', 'Shortcut'), shortcut, shortcutNote),
     section(t('Anbieter', 'Provider'), providerBox, ...localCaption, ...(isLocal ? localCards() : []), ...(keyProblem ? [el('div', { className: 'error', textContent: keyProblem })] : [])),
     section(t('Wortschatz', 'Vocabulary'), el('div', { className: 'box' }, words)),
     section(t('Ersetzungen', 'Replacements'), replacementBox),
+    cleanupSection(),
     section(t('Allgemein', 'General'), general),
   )
   const target = focusNext ?? focused
   focusNext = null
   const field = target ? document.getElementById(target) as HTMLInputElement | null : null
   field?.focus()
+  // Back where the cursor was: the own prompt is drawn again while it is typed in.
+  if (field && target === focused && caret) { try { field.setSelectionRange(caret[0], caret[1]) } catch { /* not a text field */ } }
   if (selectModelId && target === 'model') field?.select()
   selectModelId = false
+}
+
+/**
+ * Cleanup ("Aufräumen"), between the replacements and General: the order
+ * the text goes through. Everything shows whether it is on or off, so it
+ * can be looked at and tried before it is switched on.
+ */
+function cleanupSection(): HTMLElement {
+  const p = info.prefs
+  const c = info.cleanup
+  const language = p.language
+  const provider = c.shown
+  const entry = cleanupProviders[provider]
+  // While Ollama is still being asked, its model is not missing yet.
+  const known = (installed: Installed | null | undefined) => (installed?.state === 'loading' ? undefined : installed?.models)
+  const needsOf = (id: CleanupProviderId, hasKey: boolean, installed: Installed | null | undefined) => cleanupNeeds(id, {
+    hasKey, address: p.cleanupAddresses?.[id], model: p.cleanupModels?.[id], installed: known(installed),
+  }).filter(need => need !== 'model' || installed?.state !== 'loading')
+
+  // The switch, and what keeps the provider in use from working while it is on.
+  const onBox = el('input', { type: 'checkbox', id: 'cleans-text', checked: p.cleansText })
+  onBox.onchange = () => update({ cleansText: onBox.checked })
+  const toggleBox = el('div', { className: 'box' },
+    el('div', { className: 'row' }, el('label', { className: 'switch' }, t('Text aufräumen', 'Clean up the text'), onBox)),
+    el('div', { className: 'hint', textContent: t('Ein Sprachmodell überarbeitet den Text, bevor satz ihn einfügt. Das Original bleibt im Verlauf.',
+      'A language model edits the text before satz pastes it. The original stays in the history.') }))
+  const missing = p.cleansText
+    ? cleanupMissing(needsOf(c.inUse, c.inUseHasKey, c.inUse === provider ? c.installed : c.inUseInstalled), p.cleanupLevel === 'custom' && !(promptDraft ?? p.cleanupPrompt).trim(), language)
+    : null
+  if (missing) toggleBox.append(el('div', { className: 'error', id: 'cleanup-missing', textContent: missing }))
+
+  // How much: four presets and the user's own prompt.
+  const levelBox = el('div', { className: 'box' })
+  for (const level of cleanupLevels) {
+    const radio = el('input', { type: 'radio', name: 'cleanup-level', id: `cleanup-level-${level}`, value: level, checked: p.cleanupLevel === level })
+    radio.onchange = () => {
+      // The own prompt starts as the instructions of the level chosen before (the test mode's cleanup-level does the same).
+      const change = levelChange({ cleanupLevel: p.cleanupLevel, cleanupPrompt: promptDraft ?? p.cleanupPrompt }, level)
+      if ('cleanupPrompt' in change) promptDraft = null
+      update(change)
+    }
+    const words = levelTexts[level][language]
+    levelBox.append(el('label', { className: 'row choice' }, radio,
+      el('span', { className: 'choice-text' }, el('span', { className: 'choice-title', textContent: words.title }), el('span', { className: 'choice-line', textContent: words.line }))))
+  }
+  if (p.cleanupLevel === 'custom') {
+    const editor = el('textarea', { id: 'cleanup-prompt', className: 'prompt-editor', value: promptDraft ?? p.cleanupPrompt, spellcheck: false })
+    editor.setAttribute('aria-label', t('Eigener Prompt', 'Own prompt'))
+    editor.oninput = () => { promptDraft = editor.value; savePromptSoon() }
+    editor.onblur = () => { void savePrompt() }
+    levelBox.append(el('div', { className: 'row prompt-row' }, editor),
+      el('div', { className: 'hint', textContent: t('Der diktierte Text wird angehängt, dein Wortschatz auch.', 'The dictated text is added after it, and so is your vocabulary.') }))
+  } else {
+    // Nothing hidden: the exact prompt satz sends for this level.
+    const details = el('details', { id: 'cleanup-prompt-details', open: showsPrompt },
+      el('summary', { textContent: t('Prompt ansehen', 'Show prompt') }),
+      el('pre', { className: 'prompt', textContent: systemPrompt(p.cleanupLevel, p.words) }))
+    details.ontoggle = () => { showsPrompt = details.open }
+    levelBox.append(el('div', { className: 'disclosure' }, details))
+  }
+
+  // The provider, its key, address and model, and what a dictation costs there.
+  const providerMenu = select(provider, cleanupProviderOrder.map((id): [CleanupProviderId, string] => [id, cleanupProviderLabel(id, c.inUse, language)]),
+    v => { editingCleanupKey = false; typingCleanupModel = false; cleanupKeyProblem = ''; shownCleanup = v; load() }, t('Anbieter fürs Aufräumen', 'Cleanup provider'), 'cleanup-provider')
+  // The dot and "In Benutzung" beside the menu while it shows the provider in use, as on the Mac.
+  const inUseMark = provider === c.inUse
+    ? [el('span', { className: 'provider-in-use', id: 'cleanup-in-use' }, el('span', { className: 'dot', ariaHidden: 'true' }), t('In Benutzung', 'In use'))] : []
+  const providerBox = el('div', { className: 'box' }, el('div', { className: 'row' }, el('span', { className: 'grow', textContent: t('Anbieter', 'Provider') }), ...inUseMark, providerMenu))
+  const switching = cleanupSwitchRow(provider, c.inUse, language, needsOf(provider, c.hasKey, c.installed))
+  if (switching) {
+    const parts: HTMLElement[] = [el('span', { className: 'grow', textContent: switching.text })]
+    if (switching.button) {
+      const use = el('button', { id: 'use-cleanup-provider', className: 'accent', textContent: switching.button })
+      use.onclick = () => { editingCleanupKey = false; update({ cleanupProvider: provider }) }
+      parts.push(use)
+    }
+    providerBox.append(el('div', { className: 'row switch-provider' }, ...parts))
+  }
+  if (entry.account) {
+    const keyRow = el('div', { className: 'row' })
+    if (editingCleanupKey || !c.hasKey) {
+      const input = el('input', { type: 'password', id: 'cleanup-key', className: 'grow', placeholder: entry.keyPlaceholder[language] })
+      const save = el('button', { className: 'accent', textContent: t('Sichern', 'Save') })
+      const commit = async () => {
+        if (!input.value.trim()) return
+        const ok = await satz.invoke('cleanup:store-key', input.value, provider)
+        cleanupKeyProblem = ok ? '' : t('Konnte nicht gesichert werden.', 'Could not be saved.')
+        editingCleanupKey = false
+        await load()
+      }
+      save.onclick = commit
+      input.onkeydown = e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape' && c.hasKey) { editingCleanupKey = false; render() } }
+      keyRow.append(el('span', { textContent: t('Schlüssel', 'Key') }), input, save)
+      if (c.hasKey) { const cancel = el('button', { textContent: '×', title: t('Abbrechen', 'Cancel') }); cancel.onclick = () => { editingCleanupKey = false; render() }; keyRow.append(cancel) }
+    } else {
+      const change = el('button', { textContent: t('Ändern', 'Change') })
+      change.onclick = () => { editingCleanupKey = true; focusNext = 'cleanup-key'; render() }
+      keyRow.append(el('span', { className: 'grow', textContent: t('Schlüssel gesichert', 'Key saved') }), change)
+    }
+    providerBox.append(keyRow)
+    // One key file for both: the transcription provider's own.
+    if (Object.hasOwn(providers, entry.account)) providerBox.append(el('div', { className: 'hint', textContent: t('Derselbe Schlüssel wie für die Spracherkennung.', 'The same key as for speech recognition.') }))
+    if (entry.keyNote) providerBox.append(el('div', { className: 'hint', textContent: entry.keyNote[language] }))
+    if (entry.keyPage && (editingCleanupKey || !c.hasKey)) {
+      const open = el('button', { className: 'quiet', id: 'cleanup-key-page', textContent: t('Schlüssel holen', 'Get a key') })
+      open.onclick = () => satz.invoke('cleanup:open-key-page', provider)
+      providerBox.append(el('div', { className: 'hint' }, open))
+    }
+    if (cleanupKeyProblem) providerBox.append(el('div', { className: 'error', textContent: cleanupKeyProblem }))
+  }
+  if (entry.addressKind !== 'fixed') {
+    const typed = p.cleanupAddresses?.[provider] ?? ''
+    // Ollama's and LM Studio's default stands in the field, so changing the host or port is one edit; emptied, it comes back (cleanupBase).
+    const address = el('input', { type: 'text', id: 'cleanup-address', className: 'grow', value: typed.trim() || (entry.addressKind === 'default' ? entry.address! : typed),
+      placeholder: entry.address ?? (provider === 'azure' ? 'https://….openai.azure.com' : 'https://…/v1') })
+    address.onchange = () => update({ cleanupAddresses: { ...p.cleanupAddresses, [provider]: address.value.trim() } })
+    providerBox.append(el('div', { className: 'row' }, el('span', { textContent: t('Adresse', 'Address') }), address))
+    if (typed.trim() && !usableAddress(typed)) providerBox.append(el('div', { className: 'error', textContent: t('Das ist keine gültige Adresse (https://…).', 'That is not a valid address (https://…).') }))
+    else if (provider === 'azure') providerBox.append(el('div', { className: 'hint', textContent: t('Die Adresse der Azure-OpenAI- oder Foundry-Ressource.', 'The address of the Azure OpenAI or Foundry resource.') }))
+  }
+
+  // The model: a menu of the catalog (or what Ollama and LM Studio have), each with its time and price, and "Other" typed by hand.
+  const avgChars = averageChars(info.history ?? [])
+  const prompt = promptDraft ?? p.cleanupPrompt
+  const estimateFor = (model: string) => estimate({ provider, model, level: p.cleanupLevel, vocabulary: p.words, customPrompt: prompt, avgChars, livePrice: c.prices[model], samples: c.samples[model] })
+  const listed = entry.lists ? (c.installed?.models ?? []) : entry.models.map(model => model.id)
+  const current = chosenModel(provider, p.cleanupModels?.[provider], c.installed?.models)
+  const saveModel = (id: string, redraw: boolean) => {
+    typingCleanupModel = false
+    const change = { cleanupModels: { ...p.cleanupModels, [provider]: id } }
+    if (redraw) update(change)
+    else satz.invoke('settings:update', change).then(next => { info.prefs = next })
+  }
+  const modelField = el('input', { type: 'text', id: 'cleanup-model-id', className: 'grow', value: p.cleanupModels?.[provider] ?? '',
+    placeholder: provider === 'azure' ? t('Name der Bereitstellung', 'Deployment name') : entry.defaultModel || t('Modell', 'Model') })
+  modelField.onchange = () => saveModel(modelField.value.trim(), false)
+  modelField.onkeydown = event => {
+    if (event.key === 'Enter') saveModel(modelField.value.trim(), true)
+    if (event.key === 'Escape') { modelField.value = p.cleanupModels?.[provider] ?? ''; typingCleanupModel = false; render() }
+  }
+  const typedOnly = provider === 'azure' || provider === 'custom'
+  const inList = listed.includes(current)
+  if (!typedOnly) {
+    const menu = el('select', { id: 'cleanup-model', className: 'grow' })
+    menu.setAttribute('aria-label', t('Modell fürs Aufräumen', 'Cleanup model'))
+    for (const id of listed) menu.append(el('option', { value: id, textContent: menuTitle(estimateFor(id), language) }))
+    menu.append(el('option', { value: '', textContent: t('Anderes Modell …', 'Other model …') }))
+    menu.value = inList && !typingCleanupModel ? current : ''
+    menu.onchange = () => {
+      if (!menu.value) { typingCleanupModel = true; focusNext = 'cleanup-model-id'; render(); return }
+      saveModel(menu.value, true)
+    }
+    providerBox.append(el('div', { className: 'row' }, el('span', { textContent: t('Modell', 'Model') }), menu))
+  }
+  if (typedOnly || typingCleanupModel || (current !== '' && !inList)) {
+    providerBox.append(el('div', { className: 'row' }, el('span', { textContent: typedOnly ? t('Modell', 'Model') : t('Modell-ID', 'Model ID') }), modelField))
+  }
+  const down = entry.lists && c.installed?.state === 'down'
+  const facts = down ? (provider === 'ollama' ? t('Ollama läuft nicht. ollama.com', 'Ollama is not running. ollama.com') : t('LM Studio läuft nicht.', 'LM Studio is not running.'))
+    : current ? factsLine(estimateFor(current), language) : ''
+  if (facts) providerBox.append(el('div', { className: 'hint', id: 'cleanup-facts', textContent: facts }))
+
+  const title = (text: string) => el('h3', { className: 'subhead', textContent: text })
+  return section(t('Aufräumen', 'Cleanup'), toggleBox, title(t('Stärke', 'How much')), levelBox, title(t('Anbieter', 'Provider')), providerBox, title(t('Ausprobieren', 'Try it')), tryBox())
+}
+
+/**
+ * "Ausprobieren": the shown provider, model, level and prompt on a sample,
+ * before anything is switched. Drawn on its own too, when its answer comes:
+ * the rest of the page waits while someone types elsewhere.
+ */
+function tryBox(): HTMLElement {
+  const provider = info.cleanup.shown
+  const sample = el('textarea', { id: 'cleanup-try', className: 'try-text', rows: 3, value: tryText ?? trySample(info.spokenLanguage), readOnly: trying })
+  sample.setAttribute('aria-label', t('Text zum Ausprobieren', 'Text to try'))
+  sample.oninput = () => { tryText = sample.value }
+  const go = el('button', { id: 'cleanup-try-button', className: trying ? 'trying' : '' },
+    ...(trying ? [el('span', { className: 'spinner', ariaHidden: 'true' }), t('Abbrechen', 'Cancel')] : [t('Ausprobieren', 'Try')]))
+  go.onclick = () => (trying ? cancelTry() : runTry(sample.value, provider))
+  const box = el('div', { className: 'box', id: 'cleanup-try-box' }, el('div', { className: 'row prompt-row' }, sample), el('div', { className: 'row' }, el('span', { className: 'grow' }), go))
+  if (tryResult) {
+    const result = el('div', { className: 'try-result', id: 'cleanup-try-result' })
+    if (tryResult.answer !== undefined) result.append(el('div', { className: 'try-answer', textContent: tryResult.answer }))
+    if (tryResult.seconds !== undefined) result.append(el('div', { className: 'hint-line', textContent: tryLine(tryResult.seconds, tryResult.dollars, info.prefs.language) }))
+    if (tryResult.rejected) {
+      result.append(el('div', { className: 'error-line', textContent: t('Verworfen: sah nicht nach deinem Text aus. satz würde das Original einfügen.', 'Rejected: did not look like your text. satz would paste the original.') }))
+    } else if (tryResult.outcome !== 'ok') result.append(el('div', { className: 'error-line', textContent: tryResult.outcome }))
+    box.append(result)
+  }
+  return box
+}
+
+/** The try box alone, keeping the focus where it is. */
+function redrawTry() {
+  const focused = document.activeElement
+  const fresh = tryBox()
+  document.getElementById('cleanup-try-box')?.replaceWith(fresh)
+  if (focused?.id === 'cleanup-try-button') document.getElementById('cleanup-try-button')?.focus()
+}
+
+/** The own prompt, saved without drawing the page again: that would take the cursor out of it. */
+function savePrompt(): Promise<void> {
+  if (promptTimer) { clearTimeout(promptTimer); promptTimer = null }
+  if (promptDraft === null || promptDraft === info.prefs.cleanupPrompt) return Promise.resolve()
+  return satz.invoke('settings:update', { cleanupPrompt: promptDraft }).then(next => { info.prefs = next })
+}
+
+/** At most once a second while typing: nothing typed is lost if satz quits. */
+function savePromptSoon() {
+  if (!promptTimer) promptTimer = setTimeout(() => { promptTimer = null; void savePrompt() }, 1000)
+}
+
+async function runTry(text: string, provider: CleanupProviderId) {
+  const mine = ++tryToken
+  await savePrompt()
+  trying = true
+  tryResult = null
+  redrawTry()
+  const result = await satz.invoke('cleanup:try', text, provider) as TryResult | null
+  // Cancelled, or another try started meanwhile: this one's answer is not shown.
+  if (mine !== tryToken) return
+  trying = false
+  tryResult = result && !result.cancelled ? result : null
+  redrawTry()
+  // Its time is a measurement now: the facts line may change.
+  loadWhenFree()
+}
+
+function cancelTry() {
+  tryToken++
+  trying = false
+  void satz.invoke('cleanup:cancel-try')
+  redrawTry()
 }
 
 /** Small line icons for the cards, after Lucide's (ISC). */
@@ -506,8 +779,9 @@ function modelCard({ id, state, measuring, speed }: LocalEntry, yours: boolean):
 }
 
 async function load() {
-  info = await satz.invoke('settings:get', shownProvider)
+  info = await satz.invoke('settings:get', shownProvider, shownCleanup)
   shownProvider = info.shown
+  shownCleanup = info.cleanup.shown
   document.documentElement.lang = info.prefs.language
   document.dispatchEvent(new CustomEvent('satz-language', { detail: info.prefs.language }))
   render()
@@ -518,18 +792,24 @@ async function load() {
 const afterBlur = new LoadAfterBlur()
 function loadWhenFree() {
   const field = document.activeElement
-  if (field instanceof HTMLInputElement && field.type !== 'checkbox' && field.closest('#settings-page')) afterBlur.later(field, load)
+  const typing = (field instanceof HTMLInputElement && field.type !== 'checkbox' && field.type !== 'radio') || field instanceof HTMLTextAreaElement
+  if (typing && field.closest('#settings-page')) afterBlur.later(field, load)
   else load()
 }
 satz.on('models:changed', loadWhenFree)
 satz.on('local:changed', loadWhenFree)
 // Opened again (from the tray, the history or its tab): the provider in use, not the one looked at last.
 document.addEventListener('satz-page-opened', event => {
-  if ((event as CustomEvent).detail !== 'settings' || shownProvider === null || shownProvider === info?.prefs.provider) return
+  if ((event as CustomEvent).detail !== 'settings' || shownProvider === null) return
+  if (shownProvider === info?.prefs.provider && shownCleanup === info?.cleanup.inUse) return
   shownProvider = null
+  shownCleanup = null
   editingKey = false
   typingModel = false
   keyProblem = ''
+  editingCleanupKey = false
+  typingCleanupModel = false
+  cleanupKeyProblem = ''
   load()
 })
 load()

@@ -6,7 +6,7 @@ import { Microphone } from './microphone'
  * buttons at the right. The window around it is fixed; the card grows to the
  * left and upward inside it, so the buttons never move from under the mouse.
  */
-type Phase = { kind: string; message?: string; canRetry?: boolean; canRestore?: boolean }
+type Phase = { kind: string; message?: string; canRetry?: boolean; canRestore?: boolean; cleaning?: boolean; reason?: string }
 interface State {
   phase: Phase
   runs: { text: string; seg: number; mark: number }[]
@@ -29,6 +29,7 @@ const icons = {
   eye: '<svg viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.4" d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5Z"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>',
   eyeOff: '<svg viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.4" d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5Z M2 14 14 2"/></svg>',
   close: '<svg viewBox="0 0 16 16"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="m4 4 8 8M12 4l-8 8"/></svg>',
+  warning: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" d="M8 2 14.5 13.5h-13Z"/><path stroke="currentColor" stroke-width="1.6" stroke-linecap="round" d="M8 6.5v3"/><circle cx="8" cy="11.6" r=".9" fill="currentColor"/></svg>',
 }
 
 const words = (de: string, en: string) => (state?.language === 'de' ? de : en)
@@ -37,7 +38,7 @@ function render() {
   if (!state) return
   const { phase } = state
   const k = phase.kind
-  const canHoldText = !['idle', 'discarded', 'clipboard'].includes(k)
+  const canHoldText = !['idle', 'discarded', 'clipboard', 'notCleaned'].includes(k)
   const showsText = state.showsText && state.hasRealText && canHoldText
   const statusOnly = !showsText && !['idle', 'starting', 'listening', 'paused'].includes(k)
 
@@ -87,7 +88,7 @@ function render() {
     middle.append(wave)
   } else if (k === 'finishing') {
     const dots = document.createElement('div'); dots.className = 'dots'; dots.innerHTML = '<i></i><i></i><i></i>'
-    middle.append(dots); label(words('Schreibt', 'Writing'))
+    middle.append(dots); label(phase.cleaning ? words('Räumt auf', 'Cleaning up') : words('Schreibt', 'Writing'))
   } else if (k === 'failed') {
     label(phase.message ?? '')
     if (phase.canRetry) {
@@ -105,6 +106,10 @@ function render() {
     undo.dataset.action = 'undo'; middle.append(undo)
   } else if (k === 'clipboard') {
     label(words('Auf der Zwischenablage · Strg+V', 'On the clipboard · Ctrl+V'))
+  } else if (k === 'notCleaned') {
+    // Pasted as it was said; why is in the history and the log.
+    const warning = document.createElement('span'); warning.className = 'warning'; warning.innerHTML = icons.warning
+    middle.append(warning); label(words('Nicht aufgeräumt', 'Not cleaned up'))
   }
 
   const listening = k === 'listening'

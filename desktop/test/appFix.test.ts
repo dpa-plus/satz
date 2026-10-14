@@ -261,7 +261,10 @@ test('each dictation keeps its own paste target: a dictation started while the l
 
 test('main.ts hands the target to the delivery together with the text', () => {
   const main = fs.readFileSync(path.join(root, 'src', 'main', 'main.ts'), 'utf8')
-  assert.match(main, /deliver:\s*text\s*=>\s*deliverInto\(text,\s*target\)/)
+  // The line before the delivery only tells the cleaner whether this dictation was cleaned up (the test mode's state).
+  assert.match(main, /deliver:\s*\(text,\s*cleanup\)\s*=>\s*\{[^}]*return deliverInto\(text,\s*target,\s*cleanup\)/)
+  // Cleanup's state is that of the dictation delivered: none when this one went out without the model.
+  assert.match(main, /cleaner\.delivered\(cleanup !== undefined\)/)
 })
 
 test('a window that would not come back puts the text on the clipboard, and the history knows it was not pasted', async () => {

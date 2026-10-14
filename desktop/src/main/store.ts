@@ -1,8 +1,12 @@
 import { app } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
+import { historyFields, type CleanupLevel } from '../core/cleanup'
+import { cleanupAccounts, type CleanupProviderId } from '../core/cleanupProviders'
+import { readHistory, type HistoryEntry } from '../core/history'
 import { setLanguage, systemLanguage, type Language } from '../core/language'
 import { standardReplacements, swapPredefined, type Replacement } from '../core/replacements'
+import type { CleanupOutcome } from '../core/session'
 import { defaultMicrosoftRegion, microsoftHost, type Provider, type TranscriberSettings } from '../core/transcriber'
 
 /**
@@ -40,9 +44,19 @@ export interface Preferences {
   startAtLoginDefaulted: boolean
   /** The user's choice, so the entry follows satz when it moves (Windows keys it on the exe's path). */
   startsAtLogin?: boolean
+  /** Cleanup: a language model edits the text before it is pasted. Off until the user turns it on. */
+  cleansText: boolean
+  cleanupLevel: CleanupLevel
+  /** The user's own instruction, for the level "custom". */
+  cleanupPrompt: string
+  /** Where cleanup goes; null: worked out from the transcription provider until the user picks one (core/cleanupProviders.ts). */
+  cleanupProvider: CleanupProviderId | null
+  /** Each cleanup provider's model and address, kept per provider like `models`. */
+  cleanupModels: Partial<Record<CleanupProviderId, string>>
+  cleanupAddresses: Partial<Record<CleanupProviderId, string>>
 }
 
-export interface HistoryEntry { id: string; text: string; date: string; pasted: boolean }
+export type { HistoryEntry }
 
 export const STANDARD_HISTORY = 50
 const newId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
@@ -97,13 +111,16 @@ export class Store {
       showsText: true,
       cardSpot: null,
       startAtLoginDefaulted: false,
+      cleansText: false,
+      cleanupLevel: 'light',
+      cleanupPrompt: '',
+      cleanupProvider: null,
+      cleanupModels: {},
+      cleanupAddresses: {},
       ...stored,
     }
     setLanguage(this.prefs.language)
-    // Entries from before 0.1.2 have no id yet.
-    this.history = (readJSON<HistoryEntry[]>('history.json') ?? [])
-      .map(entry => ({ ...entry, id: entry.id ?? newId() }))
-      .slice(0, this.prefs.historyLimit)
+    this.history = readHistory(readJSON('history.json'), this.prefs.historyLimit, newId)
   }
 
   save() { writeJSON('preferences.json', this.prefs) }
@@ -163,12 +180,28 @@ export class Store {
     writeAtomically(target, key.trim(), 0o600)
   }
 
+  /**
+   * Cleanup's keys, by the file they live in: a provider that also
+   * transcribes shares its file, so one key serves both. Only the accounts
+   * of core/cleanupProviders.ts, never a name from elsewhere.
+   */
+  readAccount(account: string): string | null {
+    if (!cleanupAccounts.includes(account)) return null
+    try { return fs.readFileSync(path.join(dir(), 'keys', account), 'utf8').trim() || null } catch { return null }
+  }
+
+  storeAccount(account: string, key: string) {
+    if (!cleanupAccounts.includes(account)) return
+    fs.mkdirSync(path.join(dir(), 'keys'), { recursive: true, mode: 0o700 })
+    writeAtomically(path.join(dir(), 'keys', account), key.trim(), 0o600)
+  }
+
   // MARK: - History
 
-  addHistory(text: string, pasted: boolean) {
+  addHistory(text: string, pasted: boolean, cleanup?: CleanupOutcome) {
     // Off means nothing is written, not written and then forgotten.
     if (!text || this.prefs.historyLimit === 0) return
-    this.history = [{ id: newId(), text, date: new Date().toISOString(), pasted }, ...this.history].slice(0, this.prefs.historyLimit)
+    this.history = [{ id: newId(), text, date: new Date().toISOString(), pasted, ...historyFields(text, cleanup) }, ...this.history].slice(0, this.prefs.historyLimit)
     writeJSON('history.json', this.history, 0o600)
   }
 

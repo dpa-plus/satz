@@ -1,4 +1,4 @@
-import { Session, type AudioSource } from '../src/core/session'
+import { Session, type AudioSource, type CleanupOutcome } from '../src/core/session'
 import { setLanguage } from '../src/core/language'
 
 setLanguage('en')
@@ -51,7 +51,10 @@ export function deferred<T = void>() {
 export interface Options {
   mode?: 'tap' | 'hold'
   transcribe?: (samples: Float32Array) => Promise<string>
-  deliver?: (text: string) => Promise<{ pasted: boolean; reason?: string }>
+  deliver?: (text: string, cleanup?: CleanupOutcome) => Promise<{ pasted: boolean; reason?: string }>
+  /** The cleanup model's stand-in, and whether cleanup is on (it is, when one is given). */
+  cleanup?: (text: string) => Promise<{ text: string; outcome: string }>
+  cleansText?: () => boolean
   /** Use core/speech.ts's gate: for sources that make real sound, not letters. */
   realGate?: boolean
   makeSource?: (index: number) => AudioSource
@@ -64,6 +67,8 @@ export function disposeAll() { for (const session of created.splice(0)) session.
 export function setup(scripts: string[], options: Options = {}) {
   const sources: AudioSource[] = []
   const delivered: string[] = []
+  /** What each delivery said about its cleanup, for the history. */
+  const cleanups: (CleanupOutcome | undefined)[] = []
   let mode = options.mode ?? 'tap'
   const session = new Session({
     makeSource: () => { const s = options.makeSource ? options.makeSource(sources.length) : new FakeSource(scripts[sources.length] ?? ''); sources.push(s); return s },
@@ -72,9 +77,10 @@ export function setup(scripts: string[], options: Options = {}) {
     missing: () => null,
     endpointMissing: () => false,
     triggerMode: () => mode,
-    deliver: options.deliver ?? (async text => { delivered.push(text); return { pasted: true } }),
+    deliver: options.deliver ?? (async (text, cleanup) => { delivered.push(text); cleanups.push(cleanup); return { pasted: true } }),
+    ...(options.cleanup ? { cleanup: options.cleanup, cleansText: options.cleansText ?? (() => true) } : {}),
     ...(options.realGate ? {} : { hasSpeech: (samples: Float32Array) => samples.length > 0 }),
   })
   created.push(session)
-  return { session, sources: sources as FakeSource[], delivered, setMode: (m: 'tap' | 'hold') => { mode = m } }
+  return { session, sources: sources as FakeSource[], delivered, cleanups, setMode: (m: 'tap' | 'hold') => { mode = m } }
 }

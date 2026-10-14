@@ -1,4 +1,5 @@
 import { de } from '../core/language'
+import type { CleanupOutcome } from '../core/session'
 import type { Foreground } from './foreground'
 
 /**
@@ -17,7 +18,8 @@ export interface DeliveryDeps {
   keyTap(terminal: boolean): void
   writeClipboard(text: string): void | Promise<void>
   keepsOnClipboard(): boolean
-  addHistory(text: string, pasted: boolean): void
+  /** `cleanup`: what cleanup did, when it was on (the original and "ok" or why it failed). */
+  addHistory(text: string, pasted: boolean, cleanup?: CleanupOutcome): void
   /** The text is done with: noted for tests, and the windows that show the history are told. */
   delivered(text: string): void
   log(message: string): void
@@ -32,10 +34,11 @@ export function makeDelivery(deps: DeliveryDeps) {
    *   in with the text, not read from a variable once the 120 ms are over: a
    *   dictation started meanwhile replaced it, and the text went to the
    *   window of the next one.
+   * @param cleanup what cleanup did, for the history.
    */
-  return async function deliver(text: string, target: Promise<string | null>): Promise<Outcome> {
+  return async function deliver(text: string, target: Promise<string | null>, cleanup?: CleanupOutcome): Promise<Outcome> {
     if (deps.records) {
-      deps.addHistory(text, true)
+      deps.addHistory(text, true, cleanup)
       deps.delivered(text)
       return { pasted: true }
     }
@@ -46,14 +49,14 @@ export function makeDelivery(deps: DeliveryDeps) {
     if (window && !(await deps.windows.restore(window))) {
       await deps.writeClipboard(text)
       deps.log('paste: the window the dictation started in is gone or would not come back')
-      deps.addHistory(text, false)
+      deps.addHistory(text, false, cleanup)
       deps.delivered(text)
       return { pasted: false, reason: de('Auf der Zwischenablage, das Fenster ist nicht mehr da.', 'On the clipboard, the window is gone.') }
     }
     const terminal = window ? await deps.windows.isTerminal(window) : false
     const outcome = await deps.paste(text, () => deps.keyTap(terminal), deps.keepsOnClipboard(), deps.log)
     deps.log(`paste: ${outcome.pasted ? 'sent Ctrl+V' : 'clipboard only'}, ${text.length} characters`)
-    deps.addHistory(text, outcome.pasted)
+    deps.addHistory(text, outcome.pasted, cleanup)
     deps.delivered(text)
     return outcome
   }

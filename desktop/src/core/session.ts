@@ -20,11 +20,17 @@ export type Phase =
   | { kind: 'starting' }
   | { kind: 'listening' }
   | { kind: 'paused' }
-  | { kind: 'finishing' }
+  /** `cleaning`: the text is with the cleanup model ("Räumt auf"). */
+  | { kind: 'finishing'; cleaning?: boolean }
   /** `canRestore`: the text is kept as a snapshot and the card can bring it back (a delivery that threw). */
   | { kind: 'failed'; message: string; canRetry: boolean; canRestore?: boolean }
   | { kind: 'discarded' }
   | { kind: 'clipboard' }
+  /** Pasted as it was said: the cleanup failed (the reason is in the history and the log). */
+  | { kind: 'notCleaned'; reason: string }
+
+/** What a dictation's cleanup did, for the history: the text before it, and "ok" or why it failed. */
+export interface CleanupOutcome { original: string; outcome: string }
 
 /** What records: the microphone, or a file in test mode. */
 export interface AudioSource {
@@ -47,8 +53,12 @@ export interface SessionDeps {
   missing(): string | null
   endpointMissing(): boolean
   triggerMode(): 'tap' | 'hold'
-  /** Pastes; false with a reason when the text only reached the clipboard. */
-  deliver(text: string): Promise<{ pasted: boolean; reason?: string }>
+  /** Pastes; false with a reason when the text only reached the clipboard. `cleanup` when cleanup was on. */
+  deliver(text: string, cleanup?: CleanupOutcome): Promise<{ pasted: boolean; reason?: string }>
+  /** Cleanup is on: the text goes to the cleanup model before it is pasted. */
+  cleansText?(): boolean
+  /** The cleaned text, or the original with the reason it stayed so ('ok' otherwise). Never throws. */
+  cleanup?(text: string): Promise<{ text: string; outcome: 'ok' | string }>
   log?(message: string): void
   /** Sample rate of everything the sources produce. */
   sampleRate?: number
@@ -139,7 +149,7 @@ export class Session {
   get inFlight() { return this.sends.size }
   get canRestore() {
     const p = this.phase
-    return ['idle', 'discarded', 'clipboard'].includes(p.kind) || (p.kind === 'failed' && p.canRestore === true)
+    return ['idle', 'discarded', 'clipboard', 'notCleaned'].includes(p.kind) || (p.kind === 'failed' && p.canRestore === true)
   }
   plainText() { return this.doc.plain() }
 
@@ -149,7 +159,7 @@ export class Session {
   press() {
     this.keyHeld = true
     const mode = this.deps.triggerMode(), p = this.phase
-    if (p.kind === 'idle' || p.kind === 'discarded' || p.kind === 'clipboard') return this.begin()
+    if (p.kind === 'idle' || p.kind === 'discarded' || p.kind === 'clipboard' || p.kind === 'notCleaned') return this.begin()
     if (mode === 'tap' && (p.kind === 'listening' || p.kind === 'paused')) return this.finish()
     // Pressed again while the microphone is still opening (a slow Bluetooth
     // headset): kept, and done once it is open. Ignored, it ran on.
@@ -214,7 +224,7 @@ export class Session {
   discard() {
     const p = this.phase.kind
     if (p === 'idle') return
-    if (p === 'discarded' || p === 'clipboard') return this.close()
+    if (p === 'discarded' || p === 'clipboard' || p === 'notCleaned') return this.close()
     this.log(`discarded while ${p}`)
     // What was said is kept too, also the part still in the microphone.
     const kept = new Map<number, Segment>()
@@ -422,11 +432,20 @@ export class Session {
   }
 
   private async deliver() {
-    // Read before close() resets it.
+    // Spaces only: a line break at either end was said ("neue Zeile").
+    const output = this.doc.plain().replace(/^ +| +$/g, '')
+    const token = this.sessionToken
+    // Off, nothing waits: the text goes out as it always did.
+    const cleaned = output !== '' && this.deps.cleanup && this.deps.cleansText?.() ? await this.cleanUp(output) : null
+    // Thrown away while it was being cleaned up: the late answer is dropped,
+    // and so is a start queued before (the shortcut after × is a new one).
+    if (token !== this.sessionToken) return
+    // Read after the cleanup, which the shortcut may have queued the next
+    // dictation behind, and before close() resets it.
     const startNext = this.startWhenDone
     const generation = this.generation
     try {
-      await this.deliverText()
+      await this.deliverText(output, cleaned)
     } finally {
       // The card is gone while the text is pasted, so the next dictation may
       // already have been started by hand; starting the queued one now would
@@ -438,9 +457,27 @@ export class Session {
     }
   }
 
-  private async deliverText() {
-    // Spaces only: a line break at either end was said ("neue Zeile").
-    const output = this.doc.plain().replace(/^ +| +$/g, '')
+  /**
+   * The text through the cleanup model, while the card says "Räumt auf".
+   * The card behaves as while writing: × throws it away (and keeps the text
+   * restorable), the shortcut queues the next dictation.
+   */
+  private async cleanUp(output: string): Promise<{ text: string; cleanup: CleanupOutcome }> {
+    this.phase = { kind: 'finishing', cleaning: true }
+    this.changed()
+    let result: { text: string; outcome: string }
+    try {
+      result = await this.deps.cleanup!(output)
+    } catch (error) {
+      // Never lose the words: whatever went wrong, the original goes out.
+      this.log(`cleanup failed: ${(error as Error)?.name ?? 'error'}`)
+      result = { text: output, outcome: de('Anbieter-Fehler', 'Provider error') }
+    }
+    const text = result.outcome === 'ok' && result.text.trim() !== '' ? result.text : output
+    return { text, cleanup: { original: output, outcome: result.outcome } }
+  }
+
+  private async deliverText(output: string, cleaned: { text: string; cleanup: CleanupOutcome } | null) {
     if (output === '') {
       const seconds = [...this.segments.values()].reduce((sum, s) => sum + s.audio.length, 0) / this.rate
       this.log(`nothing heard in ${seconds.toFixed(1)} s of audio`)
@@ -456,7 +493,7 @@ export class Session {
     this.close()
     let outcome: { pasted: boolean; reason?: string }
     try {
-      outcome = await this.deps.deliver(output)
+      outcome = cleaned ? await this.deps.deliver(cleaned.text, cleaned.cleanup) : await this.deps.deliver(output)
     } catch (error) {
       this.log(`delivery failed: ${(error as Error)?.message ?? error}`)
       this.discarded = snapshot
@@ -473,10 +510,19 @@ export class Session {
       this.log(outcome.reason ?? 'clipboard only')
       // A new dictation started in the meantime: it stays.
       if (this.phase.kind !== 'idle') return
+      // The text waiting on the clipboard matters more than why it was not cleaned up.
       this.phase = { kind: 'clipboard' }
       this.onOpen()
       this.changed()
       this.closeLater(4000)
+      return
+    }
+    if (cleaned && cleaned.cleanup.outcome !== 'ok') {
+      if (this.phase.kind !== 'idle') return
+      this.phase = { kind: 'notCleaned', reason: cleaned.cleanup.outcome }
+      this.onOpen()
+      this.changed()
+      this.closeLater(3000)
     }
   }
 

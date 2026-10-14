@@ -4,6 +4,8 @@ import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import { de, setLanguage } from '../core/language'
+import { isCleanupLevel, levelChange, trySample } from '../core/cleanup'
+import { chosenModel, cleanupBase, cleanupProviders, defaultCleanupProvider, isCleanupProvider, type CleanupProviderId } from '../core/cleanupProviders'
 import { Session, type AudioSource } from '../core/session'
 import { keyPages, needsKey, providers, transcribe, TranscriptionFailure, type Provider } from '../core/transcriber'
 import { localModelIds, offeredModels, toldLanguage } from '../core/localModels'
@@ -22,6 +24,7 @@ import { GermanErrors } from './localBenchmarks'
 import { machineName } from './localFiles'
 import { SpeedTests } from './speedTests'
 import { foreground } from './foreground'
+import { Cleaner, cleanupState, cleanupTryState, cleanupView, type CleanupRun, type CleanupSettings } from './cleanup'
 
 /**
  * satz for Windows and Linux. Double-tap right Ctrl, talk, double-tap again:
@@ -35,6 +38,8 @@ const devPort = flag('--dev-control')
 const testMode = devPort !== undefined
 const testModelsDir = flag('--models-dir')
 const realPasteInTest = args.includes('--test-paste')
+/** Test mode cleans up only through a stand-in server on this computer unless a test asks for the real thing. */
+const realCleanupInTest = args.includes('--test-cleanup-remote')
 /** A provider's name, as the settings page sends it. */
 const isProvider = (value: unknown): value is Provider => typeof value === 'string' && Object.hasOwn(providers, value)
 
@@ -137,10 +142,37 @@ async function start() {
     keyTap: terminal => keyboard?.paste(terminal),
     writeClipboard: text => clipboard.writeText(text),
     keepsOnClipboard: () => store.prefs.keepsOnClipboard,
-    addHistory: (text, pasted) => store.addHistory(text, pasted),
+    addHistory: (text, pasted, cleanup) => store.addHistory(text, pasted, cleanup),
     delivered: text => { delivered.push(text); historyChanged() },
     log,
   })
+
+  // Cleanup: where it goes until the user picks a place, and what it goes by.
+  const cleanupInUse = (): CleanupProviderId => store.prefs.cleanupProvider ?? defaultCleanupProvider(store.prefs.provider)
+  const cleanupSettings = (provider = cleanupInUse()): CleanupSettings => ({
+    provider,
+    model: store.prefs.cleanupModels?.[provider] ?? '',
+    address: store.prefs.cleanupAddresses?.[provider] ?? '',
+    level: store.prefs.cleanupLevel,
+    customPrompt: store.prefs.cleanupPrompt,
+    // The user's words; the replacements' phrases are for the transcription.
+    vocabulary: store.prefs.words,
+  })
+  const cleaner = new Cleaner({
+    dir: app.getPath('userData'),
+    settings: cleanupSettings,
+    readAccount: account => store.readAccount(account),
+    fetcher: net.fetch as never,
+    log,
+    changed: () => tellWindow('models:changed'),
+    onlyThisComputer: testMode && !realCleanupInTest,
+  })
+  // "Ausprobieren" under way (a second click cancels it), and the last one's outcome for the test mode's state.
+  let tryRun: AbortController | null = null
+  let lastTry: CleanupRun | null = null
+  /** The cleanup provider Settings shows while it is not the one in use (looking is not switching); null: the one in use. */
+  let cleanupLooking: CleanupProviderId | null = null
+  let cleanupShowsInUse = false
 
   const session = new Session({
     // In test mode silence once the files run out: a test never records the room.
@@ -156,7 +188,10 @@ async function start() {
     log,
     // The window this dictation started in goes along with its text, read
     // now: the next dictation replaces `target` while this one is pasted.
-    deliver: text => deliverInto(text, target),
+    // `cleanup` is there when the dictation went through the model: the state then shows that run, else none.
+    deliver: (text, cleanup) => { cleaner.delivered(cleanup !== undefined); return deliverInto(text, target, cleanup) },
+    cleansText: () => store.prefs.cleansText,
+    cleanup: async text => { const run = await cleaner.run(text); return { text: run.text, outcome: run.outcome } },
   })
 
   // The speed of a local model, measured on this computer with a 10 s public
@@ -332,11 +367,28 @@ async function start() {
    * in use (core/browse.ts). Its key and model list are what the page gets;
    * nothing here switches dictations to it.
    */
-  ipcMain.handle('settings:get', (_e, asked: unknown) => {
+  ipcMain.handle('settings:get', (_e, asked: unknown, askedCleanup: unknown) => {
     const shown = isProvider(asked) ? asked : store.prefs.provider
     modelLists.refresh(shown)
     if (shown === 'local') germanErrors.refresh()
+    // The cleanup provider the page shows, which need not be the one in use either.
+    const cleanupInUseNow = cleanupInUse()
+    // The test mode's `cleanup-provider` switches and shows the new one: the page follows once, whatever it looked at.
+    const cleanupShown = cleanupShowsInUse ? cleanupInUseNow : isCleanupProvider(askedCleanup) ? askedCleanup : cleanupInUseNow
+    cleanupShowsInUse = false
+    // For the test mode's `cleanup-model` and `cleanup-address`, which act on the provider the page shows.
+    cleanupLooking = cleanupShown === cleanupInUseNow ? null : cleanupShown
+    const cleanupKey = (provider: CleanupProviderId) => { const account = cleanupProviders[provider].account; return account ? store.readAccount(account) !== null : false }
+    const viewOf = (provider: CleanupProviderId) => { const s = cleanupSettings(provider); return cleanupView(cleaner, provider, s.model, s.address) }
     return {
+      cleanup: {
+        inUse: cleanupInUseNow,
+        shown: cleanupShown,
+        hasKey: cleanupKey(cleanupShown),
+        inUseHasKey: cleanupKey(cleanupInUseNow),
+        ...viewOf(cleanupShown),
+        inUseInstalled: cleanupShown === cleanupInUseNow ? undefined : viewOf(cleanupInUseNow).installed,
+      },
       prefs: store.prefs,
       shown,
       hasKey: store.hasKey(shown),
@@ -364,6 +416,11 @@ async function start() {
   ipcMain.handle('local:measure', (_e, id: unknown) => { if (isListed(id)) speedTests.request(id) })
   ipcMain.handle('local:remove', (_e, id: unknown) => isListed(id) ? local.remove(id, folder => shell.trashItem(folder)) : undefined)
   ipcMain.handle('settings:update', (_e, change) => {
+    // Names the page sends are checked: an unknown one would fail every cleanup.
+    if (change && typeof change === 'object') {
+      if ('cleanupProvider' in change && change.cleanupProvider !== null && !isCleanupProvider(change.cleanupProvider)) delete change.cleanupProvider
+      if ('cleanupLevel' in change && !isCleanupLevel(change.cleanupLevel)) delete change.cleanupLevel
+    }
     store.update(change)
     // A loaded model is a gigabyte of memory: there only while "Lokal" is chosen.
     if ('provider' in change || 'models' in change) {
@@ -399,6 +456,39 @@ async function start() {
     void shell.openExternal(page)
     return true
   })
+  // Cleanup's keys go by the provider's account, from the table: a key shared with transcription is the same file.
+  ipcMain.handle('cleanup:store-key', (_e, key: unknown, asked: unknown) => {
+    const account = isCleanupProvider(asked) ? cleanupProviders[asked].account : null
+    if (!account || typeof key !== 'string') return false
+    store.storeAccount(account, key)
+    return store.readAccount(account) !== null
+  })
+  ipcMain.handle('cleanup:open-key-page', (_e, asked: unknown) => {
+    const page = isCleanupProvider(asked) ? cleanupProviders[asked].keyPage : undefined
+    if (!page) return false
+    if (testMode) { log(`dev: would open ${page}`); return true }
+    void shell.openExternal(page)
+    return true
+  })
+  // "Ausprobieren": the provider shown, with the level and prompt there are, whether cleanup is on or not.
+  async function tryCleanup(text: string, provider: CleanupProviderId): Promise<{ run: CleanupRun; cancelled: boolean }> {
+    tryRun?.abort()
+    const mine = new AbortController()
+    tryRun = mine
+    // The state says "running" until this one answers, as the Mac's does.
+    lastTry = null
+    try {
+      const run = await cleaner.run(text, { provider, signal: mine.signal, trying: true })
+      if (!mine.signal.aborted) lastTry = run
+      return { run, cancelled: mine.signal.aborted }
+    } finally { if (tryRun === mine) tryRun = null }
+  }
+  ipcMain.handle('cleanup:try', async (_e, text: unknown, asked: unknown) => {
+    if (typeof text !== 'string' || !isCleanupProvider(asked)) return null
+    const { run, cancelled } = await tryCleanup(text, asked)
+    return { outcome: run.outcome, answer: run.answer ?? (run.outcome === 'ok' ? run.text : undefined), rejected: run.rejected, seconds: run.seconds, dollars: run.dollars, cancelled }
+  })
+  ipcMain.handle('cleanup:cancel-try', () => { tryRun?.abort(); tryRun = null })
   ipcMain.handle('settings:clear-history', () => { store.clearHistory(); historyChanged() })
   ipcMain.handle('settings:start-at-login', (_e, on: boolean) => { startAtLogin.set(on); store.update({ startsAtLogin: on }); return startAtLogin.get() })
   ipcMain.handle('settings:open-log', () => shell.openPath(path.join(app.getPath('userData'), 'satz.log')))
@@ -433,6 +523,28 @@ async function start() {
     cancel: id => local.cancel(id ?? localModel()),
     measure: id => speedTests.request(id ?? localModel()),
     state: id => ({ state: local.state(id ?? localModel()), measuring: local.isMeasuring(id ?? localModel()), waiting: speedTests.isWaiting(id ?? localModel()), speed: local.speed(id ?? localModel()), inUse: localModel(), modelsDir }),
+  }, {
+    // The provider the commands act on: the one Settings shows, else the one in use (the Mac's `shown`).
+    shown: () => cleanupLooking ?? cleanupInUse(),
+    // `cleanup-provider` sets the one in use and shows it, an open Settings page too.
+    use: provider => { store.update({ cleanupProvider: provider }); cleanupLooking = null; cleanupShowsInUse = true; tellWindow('models:changed') },
+    try: async () => { const { run } = await tryCleanup(trySample(store.spokenLanguage), cleanupLooking ?? cleanupInUse()); return cleanupTryState(run) },
+    state: () => {
+      const provider = cleanupInUse()
+      const settings = cleanupSettings(provider)
+      const base = cleanupBase(provider, settings.address)
+      return {
+        cleaning: session.phase.kind === 'finishing' && session.phase.cleaning === true,
+        cleanup: cleanupState(cleaner.last),
+        cleanupSettings: {
+          on: store.prefs.cleansText, level: store.prefs.cleanupLevel, provider,
+          model: chosenModel(provider, settings.model, base && cleanupProviders[provider].lists ? cleaner.installedAt(provider, base).models : []),
+          address: store.prefs.cleanupAddresses?.[provider] ?? (cleanupProviders[provider].addressKind === 'default' ? cleanupProviders[provider].address : ''),
+        },
+        // Only a running or finished try shows: "running" while one is under way.
+        ...(tryRun ? { cleanupTry: 'running' } : lastTry ? { cleanupTry: cleanupTryState(lastTry) } : {}),
+      }
+    },
   })
 }
 
@@ -465,11 +577,18 @@ const startAtLogin = {
  * --test-paste is given.
  */
 function startDevControl(port: number, session: Session, card: CardWindow, delivered: string[], store: Store,
-  local: { download(id?: string): void; cancel(id?: string): void; measure(id?: string): void; state(id?: string): unknown }) {
+  local: { download(id?: string): void; cancel(id?: string): void; measure(id?: string): void; state(id?: string): unknown },
+  cleanup: { shown(): CleanupProviderId; use(provider: CleanupProviderId): void; try(): Promise<unknown>; state(): Record<string, unknown> }) {
   const server = http.createServer(async (request, response) => {
     const url = new URL(request.url ?? '/', 'http://localhost')
-    const command = url.pathname.slice(1)
-    log(`dev: ${command}${url.search}`)
+    // The Mac's spelling works too: "cleanup-level:light" as well as "cleanup-level?id=light".
+    let asked = url.pathname.slice(1)
+    try { asked = decodeURIComponent(asked) } catch { /* kept as sent */ }
+    const colon = asked.indexOf(':')
+    let command = colon < 0 ? asked : asked.slice(0, colon)
+    const argument = colon < 0 ? url.searchParams.get('id') ?? url.searchParams.get('url') ?? '' : asked.slice(colon + 1)
+    if (command === 'cleanup' && (argument === 'on' || argument === 'off')) command = `cleanup-${argument}`
+    log(`dev: ${asked}${url.search}`)
     let body: unknown = { ok: true }
     switch (command) {
       case 'press': session.press(); break
@@ -497,6 +616,17 @@ function startDevControl(port: number, session: Session, card: CardWindow, deliv
       case 'local-cancel': local.cancel(url.searchParams.get('id') ?? undefined); break
       case 'local-measure': local.measure(url.searchParams.get('id') ?? undefined); break
       case 'local': body = local.state(url.searchParams.get('id') ?? undefined); break
+      // Cleanup, as Settings would change it: on and off, the level (Eigener Prompt starts with the instructions of the level before, as in Settings),
+      // the provider in use (shown at once), the model and address of the provider shown, and "Ausprobieren" with the provider shown.
+      // A wrong argument is logged and left alone, as on the Mac.
+      case 'cleanup': log('dev: cleanup takes on or off'); break
+      case 'cleanup-on': store.update({ cleansText: true }); break
+      case 'cleanup-off': store.update({ cleansText: false }); break
+      case 'cleanup-level': if (isCleanupLevel(argument)) store.update(levelChange(store.prefs, argument)); else log('dev: unknown cleanup level'); break
+      case 'cleanup-provider': if (isCleanupProvider(argument)) cleanup.use(argument); else log('dev: unknown cleanup provider'); break
+      case 'cleanup-model': store.update({ cleanupModels: { ...store.prefs.cleanupModels, [cleanup.shown()]: argument.trim() } }); break
+      case 'cleanup-address': store.update({ cleanupAddresses: { ...store.prefs.cleanupAddresses, [cleanup.shown()]: argument } }); break
+      case 'cleanup-try': body = await cleanup.try(); break
       case 'state':
       default:
         body = {
@@ -508,6 +638,7 @@ function startDevControl(port: number, session: Session, card: CardWindow, deliv
           window: card.window.getBounds(),
           visible: card.window.isVisible(),
           discarded: session.discarded?.preview ?? null,
+          ...cleanup.state(),
         }
     }
     response.setHeader('Content-Type', 'application/json')

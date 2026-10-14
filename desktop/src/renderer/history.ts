@@ -9,13 +9,16 @@ import { KEEP_ALL } from '../core/historyLimits'
 /** The same icons as the Mac's: two sheets for copy, a tick once copied. */
 const COPY_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 5.5V4.1A1.6 1.6 0 0 0 8.9 2.5H4.1A1.6 1.6 0 0 0 2.5 4.1v4.8a1.6 1.6 0 0 0 1.6 1.6h1.4" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>'
 const COPIED_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-interface Entry { id: string; text: string; date: string; pasted: boolean }
+/** `original`: as said, where cleanup changed it; `cleanup`: "ok" or why it failed, while cleanup was on. */
+interface Entry { id: string; text: string; date: string; pasted: boolean; original?: string; cleanup?: string }
 interface Info { entries: Entry[]; limit: number; language: 'de' | 'en' }
 
 const app = document.getElementById('history-page')!
 let info: Info
 let query = ''
 let copiedId: string | null = null
+/** The rows showing the text as it was said instead of the cleaned one. */
+const showsOriginal = new Set<string>()
 
 const t = (de: string, en: string) => (info?.language === 'de' ? de : en)
 
@@ -36,11 +39,16 @@ function dayTitle(date: Date): string {
 function row(entry: Entry): HTMLElement {
   const time = new Date(entry.date).toLocaleTimeString(info.language, { hour: '2-digit', minute: '2-digit' })
   const meta = entry.id === copiedId ? t('Kopiert', 'Copied') : `${entry.pasted ? t('Eingefügt', 'Pasted') : t('Zwischenablage', 'Clipboard')} · ${time}`
+  // The row copies what it shows: the cleaned text, or the original once swapped.
+  const original = entry.original !== undefined && showsOriginal.has(entry.id)
+  const shown = original ? entry.original! : entry.text
+  const failed = entry.cleanup !== undefined && entry.cleanup !== 'ok'
   const copy = el('button', { className: 'copy', title: t('Kopieren', 'Copy') },
-    el('span', { className: 'text', textContent: entry.text }),
+    el('span', { className: 'text', textContent: shown }),
+    ...(failed ? [el('span', { className: 'cleanup-note', textContent: t(`Nicht aufgeräumt: ${entry.cleanup}`, `Not cleaned up: ${entry.cleanup}`) })] : []),
     el('span', { className: 'meta', textContent: meta }))
   copy.onclick = async () => {
-    await satz.invoke('history:copy', entry.text)
+    await satz.invoke('history:copy', shown)
     copiedId = entry.id
     render()
     setTimeout(() => { if (copiedId === entry.id) { copiedId = null; render() } }, 1200)
@@ -54,7 +62,14 @@ function row(entry: Entry): HTMLElement {
     innerHTML: entry.id === copiedId ? COPIED_ICON : COPY_ICON })
   icon.setAttribute('aria-hidden', 'true')
   icon.onclick = () => copy.click()
-  return el('div', { className: 'entry' }, copy, remove, icon)
+  if (entry.original === undefined) return el('div', { className: 'entry' }, copy, remove, icon)
+  const swap = el('button', { className: 'swap', textContent: original ? t('Aufgeräumt', 'Cleaned up') : 'Original',
+    title: original ? t('Den aufgeräumten Text zeigen', 'Show the cleaned-up text') : t('Den Text zeigen, wie er gesagt wurde', 'Show the text as it was said') })
+  swap.onclick = () => {
+    if (original) showsOriginal.delete(entry.id); else showsOriginal.add(entry.id)
+    render()
+  }
+  return el('div', { className: 'entry' }, copy, swap, remove, icon)
 }
 
 function render() {
@@ -72,7 +87,7 @@ function render() {
   }
 
   const words = query.trim().toLowerCase()
-  const shown = words ? info.entries.filter(e => e.text.toLowerCase().includes(words)) : info.entries
+  const shown = words ? info.entries.filter(e => e.text.toLowerCase().includes(words) || e.original?.toLowerCase().includes(words)) : info.entries
   if (info.limit === 0 && info.entries.length === 0) {
     children.push(el('p', { className: 'quiet', textContent: t('Der Verlauf ist aus. In den Einstellungen lässt er sich wieder einschalten.', 'History is off. It can be switched back on in Settings.') }))
   } else if (info.entries.length === 0) {
