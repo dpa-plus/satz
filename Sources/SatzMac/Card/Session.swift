@@ -35,6 +35,9 @@ final class Session {
         case discarded
         /// Pasting was not possible, so the text waits on the clipboard.
         case clipboard
+        /// The original was pasted because cleanup did not work; the reason
+        /// is in the history and the log.
+        case notCleaned
     }
 
     /// A stretch of audio said into one spot, and how much of it the text
@@ -49,6 +52,8 @@ final class Session {
     }
 
     private(set) var phase: Phase = .idle
+    /// Within `.finishing`: the text is with the cleanup model ("Räumt auf").
+    private(set) var isCleaning = false
     /// Enough history to fill the full card's waveform; the pill shows the end.
     private(set) var levels = Array(repeating: Float(0), count: 32)
     /// Recordings on their way to the provider.
@@ -89,6 +94,21 @@ final class Session {
     @ObservationIgnored var onRecord: () -> Void = {}
     /// Test mode: receives the finished text instead of it being pasted.
     @ObservationIgnored var deliverOverride: ((String) -> Void)?
+    /// Cleans up the finished text while cleanup is on; the app's runs the
+    /// provider in use (`CleanupStore.clean`), tests put in their own.
+    @ObservationIgnored var cleaner: (@MainActor (String) async -> CleanupResult)?
+    /// The last dictation's cleanup, for test mode's state file.
+    @ObservationIgnored private(set) var lastCleanup: CleanupRecord?
+
+    struct CleanupRecord {
+        let outcome: String
+        let failure: CleanupFailure?
+        let original: String
+        let cleaned: String?
+        let provider: String?
+        let model: String?
+        let seconds: Double?
+    }
     @ObservationIgnored var onClose: () -> Void = {}
     /// Escape discards while recording; off for a test copy.
     @ObservationIgnored var takesEscape = true
@@ -160,7 +180,7 @@ final class Session {
     /// The shortcut went down.
     func press() {
         switch (preferences.triggerMode, phase) {
-        case (_, .idle), (_, .discarded), (_, .clipboard): begin()
+        case (_, .idle), (_, .discarded), (_, .clipboard), (_, .notCleaned): begin()
         case (.tap, .listening), (.tap, .paused): finish()
         // Pressed again while the microphone is still opening (a slow
         // Bluetooth headset takes a second): kept, and done once it is open.
@@ -223,7 +243,7 @@ final class Session {
     func discard() {
         switch phase {
         case .idle: return
-        case .discarded, .clipboard:
+        case .discarded, .clipboard, .notCleaned:
             close()
             return
         default: break
@@ -271,7 +291,7 @@ final class Session {
     /// Whether a discarded dictation can come back now: not over one that is
     /// still going.
     var canRestore: Bool {
-        phase == .idle || phase == .discarded || phase == .clipboard
+        phase == .idle || phase == .discarded || phase == .clipboard || phase == .notCleaned
     }
 
     /// Brings a discarded dictation back, paused, from the card or the menu.
@@ -336,7 +356,7 @@ final class Session {
     /// The user is about to change `range`. False refuses the change.
     func userWillEdit(_ range: NSRange) -> Bool {
         switch phase {
-        case .finishing, .discarded, .clipboard, .idle: return false
+        case .finishing, .discarded, .clipboard, .notCleaned, .idle: return false
         default: break
         }
         // The placeholders are satz's, not part of the text, and typing
@@ -515,18 +535,36 @@ final class Session {
                 phase = .failed(failure, canRetry: !segments.values.contains { $0.failure != nil && !$0.retryHelps })
                 return
             }
-            deliver()
+            // Spaces only: a line break at either end was said ("neue Zeile"),
+            // and a list dictated item by item needs it. This, with the
+            // replacements and the user's own edits, is what gets cleaned up.
+            let output = plainText().trimmingCharacters(in: .whitespaces)
+            guard !output.isEmpty, preferences.cleansText, let cleaner else { return deliver(output) }
+            // Still "finishing": Escape, × and the shortcut work as while
+            // writing, and a discard drops the answer when it comes.
+            isCleaning = true
+            let result = await cleaner(output)
+            guard token == sessionToken else { return }
+            isCleaning = false
+            deliver(result.text, original: output, cleanup: result)
         }
     }
 
-    private func deliver() {
+    /// Pastes `output`, the cleaned text or the original. `cleanup` is nil
+    /// while cleanup is off.
+    private func deliver(_ output: String, original: String? = nil, cleanup: CleanupResult? = nil) {
         // Read before close() resets it.
         let startNext = startWhenDone
         defer { if startNext { begin() } }
-        // Spaces only: a line break at either end was said ("neue Zeile"),
-        // and a list dictated item by item needs it.
-        let output = plainText().trimmingCharacters(in: .whitespaces)
         let window = originWindow, field = originField
+        // This dictation's, or none: test mode's dump must not show an earlier one's.
+        lastCleanup = cleanup.flatMap { cleanup in
+            original.map {
+                CleanupRecord(outcome: cleanup.failure?.code ?? "ok", failure: cleanup.failure, original: $0,
+                              cleaned: cleanup.cleaned, provider: cleanup.provider?.rawValue, model: cleanup.model,
+                              seconds: cleanup.seconds)
+            }
+        }
         guard !output.isEmpty else {
             let seconds = Double(segments.values.map(\.audio.count).reduce(0, +)) / 16_000
             Log.note(String(format: "nothing heard in %.1f s of audio", seconds))
@@ -538,16 +576,19 @@ final class Session {
         let origin = self.origin
         // The card had the keyboard if the user clicked into its text.
         let cardHadKeyboard = NSApp.keyWindow != nil
+        let cleaned = cleanup.map { $0.outcome() }
+        let notCleaned = cleanup?.failure != nil
         // Gone before pasting, so the keyboard is back with the app it belongs to.
         close()
         if let deliverOverride {
             deliverOverride(output)
             // Test mode keeps its own history file, so this never reaches the user's.
-            history.add(output, app: origin?.localizedName, pasted: true)
+            history.add(output, app: origin?.localizedName, pasted: true, original: original, cleanup: cleaned)
+            if notCleaned { tellNotCleaned() }
             return
         }
         guard cardHadKeyboard else {
-            paste(output, into: origin, window: window, field: field)
+            paste(output, into: origin, window: window, field: field, original: original, cleanup: cleaned)
             return
         }
         // The keyboard has to get back to the other app before ⌘V, or the
@@ -555,25 +596,39 @@ final class Session {
         origin?.activate()
         Task {
             try? await Task.sleep(for: .milliseconds(150))
-            paste(output, into: origin, window: window, field: field)
+            paste(output, into: origin, window: window, field: field, original: original, cleanup: cleaned)
         }
     }
 
-    private func paste(_ output: String, into origin: NSRunningApplication?, window: AXUIElement?, field: AXUIElement?) {
+    private func paste(_ output: String, into origin: NSRunningApplication?, window: AXUIElement?, field: AXUIElement?,
+                       original: String? = nil, cleanup: String? = nil) {
         // Which app is in front at the moment of ⌘V tells whether a paste
         // that did not arrive went to the wrong place or nowhere. Never the text.
         let front = NSWorkspace.shared.frontmostApplication?.localizedName ?? "?"
         let outcome = Paster.deliver(output, into: origin, window: window, field: field, keepsOnClipboard: preferences.keepsOnClipboard)
         Log.note("paste: \(outcome == .pasted ? "sent ⌘V" : "clipboard only") into \(origin?.localizedName ?? "?"), front was \(front), \(output.count) characters")
-        history.add(output, app: origin?.localizedName, pasted: outcome == .pasted)
+        history.add(output, app: origin?.localizedName, pasted: outcome == .pasted, original: original, cleanup: cleanup)
         if case .clipboardOnly(let reason) = outcome {
             Log.note(reason)
             // A new dictation started in the moment before: it stays.
             guard phase == .idle else { return }
+            // ⌘V is the more urgent thing to say; why it was not cleaned up
+            // is in the history.
             phase = .clipboard
             onOpen()
             closeLater(after: .seconds(3))
+        } else if cleanup != nil, cleanup != "ok" {
+            tellNotCleaned()
         }
+    }
+
+    /// "Nicht aufgeräumt" for a moment after the paste, like the clipboard's
+    /// notice: never over a dictation that started meanwhile.
+    private func tellNotCleaned() {
+        guard phase == .idle else { return }
+        phase = .notCleaned
+        onOpen()
+        closeLater(after: .seconds(3))
     }
 
     // MARK: - Sending
@@ -903,6 +958,7 @@ final class Session {
 
     private func stopEverything() {
         sessionToken += 1
+        isCleaning = false
         startToken += 1
         recorder?.cancel()
         recorder = nil
@@ -969,7 +1025,8 @@ final class Session {
     // MARK: - Fixtures
 
     /// Puts the card into a fixed state, for snapshots.
-    func stage(_ phase: Phase, text staged: String = "", marker: Bool = false, levels levelValues: [Float] = []) {
+    func stage(_ phase: Phase, text staged: String = "", marker: Bool = false, levels levelValues: [Float] = [], cleaning: Bool = false) {
+        isCleaning = cleaning
         edit {
             text.setAttributedString(NSAttributedString(string: staged, attributes: Self.textAttributes))
             if marker { text.append(Self.marker(for: 1)) }

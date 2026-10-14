@@ -27,15 +27,20 @@ public enum LaunchMode: Equatable, Sendable {
             let name = argument.drop { $0 == "-" }.prefix { $0 != "=" }
             if testFlags.contains("--" + name) { return .invalid("\(argument) needs two dashes: -\(argument)") }
         }
-        // `--test-media` is a switch: a value would only be misread.
+        // `--test-media` and `--test-cleanup-remote` are switches: a value
+        // would only be misread.
         if arguments.contains(where: { $0.hasPrefix("--test-media=") }) {
             return .invalid("--test-media takes no value")
+        }
+        if arguments.contains(where: { $0.hasPrefix("--test-cleanup-remote=") }) {
+            return .invalid("--test-cleanup-remote takes no value")
         }
 
         let stateFile = value(of: "--dev-control", in: arguments)
         let modelsFolder = value(of: "--models-dir", in: arguments)
         let testAudio = value(of: "--test-audio", in: arguments)
         let testMedia = arguments.contains("--test-media")
+        let testCleanupRemote = arguments.contains("--test-cleanup-remote")
         switch (stateFile, modelsFolder) {
         case (nil, nil):
             // Clips for the microphone, or the user's music left alone, mean
@@ -43,6 +48,7 @@ public enum LaunchMode: Equatable, Sendable {
             // answering from a file.
             if testAudio != nil { return .invalid("--test-audio works only with --dev-control <state file>") }
             if testMedia { return .invalid("--test-media works only with --dev-control <state file>") }
+            if testCleanupRemote { return .invalid("--test-cleanup-remote works only with --dev-control <state file>") }
             return .normal
         case (nil, .some): return .invalid("--models-dir works only with --dev-control <state file>")
         case (.some(nil), _): return .invalid("--dev-control needs a state file")
@@ -79,6 +85,15 @@ public enum LaunchMode: Equatable, Sendable {
         CommandLine.arguments.contains("--test-media")
     }
 
+    /// Whether cleanup may go only to this computer: in test mode, unless the
+    /// test passes `--test-cleanup-remote`. A test copy shares the key files
+    /// with the real satz, so `cleanup:on` with the provider that transcribes
+    /// would otherwise send a real request, and cost real money. The same
+    /// switch has the same name on Windows and Linux.
+    public func cleanupStaysHere(arguments: [String] = CommandLine.arguments) -> Bool {
+        stateFile != nil && !arguments.contains("--test-cleanup-remote")
+    }
+
     /// The value of a flag, spelled `--flag value` or `--flag=value`; nil
     /// when the flag is absent or has no usable value. For the flags the app
     /// reads itself (`--snapshot`, `--test-audio`, …).
@@ -86,7 +101,7 @@ public enum LaunchMode: Equatable, Sendable {
         value(of: flag, in: arguments) ?? nil
     }
 
-    private static let testFlags = ["--dev-control", "--models-dir", "--test-audio", "--test-media"]
+    private static let testFlags = ["--dev-control", "--models-dir", "--test-audio", "--test-media", "--test-cleanup-remote"]
 
     /// nil when the flag is absent, .some(nil) when it has no usable value
     /// (none, empty, or the next flag).

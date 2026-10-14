@@ -1,7 +1,8 @@
 import Foundation
 import Security
 
-/// API keys, one per provider.
+/// API keys, one per account: a file per key, named after the account
+/// (`KeyAccount`), so the OpenRouter key that transcribes also cleans up.
 ///
 /// On the Mac: a file per provider in satz's own folder, readable only by the
 /// user (0600 in a 0700 folder), the same way Handy keeps its key. Not the
@@ -36,21 +37,21 @@ public enum Secrets {
         .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("satz/keys", isDirectory: true)
 
-    private static func file(for provider: Provider) -> URL {
-        directory.appendingPathComponent(provider.keychainAccount)
+    private static func file(for account: String) -> URL {
+        directory.appendingPathComponent(account)
     }
 
-    public static func store(_ secret: String, for provider: Provider) throws {
+    public static func store(_ secret: String, account: String) throws {
         let manager = FileManager.default
         do {
             try manager.createDirectory(at: directory, withIntermediateDirectories: true,
                                         attributes: [.posixPermissions: 0o700])
             try manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
-            let target = file(for: provider)
+            let target = file(for: account)
             // Written beside it at 0600, never with looser permissions, and
             // only then moved over the old key in one step: emptied first, a
             // failed write lost the key that worked.
-            let temporary = directory.appendingPathComponent(".\(provider.rawValue).new")
+            let temporary = directory.appendingPathComponent(".\(account).new")
             try? manager.removeItem(at: temporary)
             guard manager.createFile(atPath: temporary.path, contents: Data(secret.utf8), attributes: [.posixPermissions: 0o600]) else {
                 throw CocoaError(.fileWriteUnknown)
@@ -64,18 +65,18 @@ public enum Secrets {
         }
     }
 
-    public static func read(for provider: Provider) -> String? {
-        guard let data = try? Data(contentsOf: file(for: provider)) else { return nil }
+    public static func read(account: String) -> String? {
+        guard let data = try? Data(contentsOf: file(for: account)) else { return nil }
         let key = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
         return key.isEmpty ? nil : key
     }
 
-    public static func exists(for provider: Provider) -> Bool {
-        read(for: provider) != nil
+    public static func exists(account: String) -> Bool {
+        read(account: account) != nil
     }
 
-    public static func remove(for provider: Provider) {
-        try? FileManager.default.removeItem(at: file(for: provider))
+    public static func remove(account: String) {
+        try? FileManager.default.removeItem(at: file(for: account))
     }
     #else
 
@@ -85,9 +86,9 @@ public enum Secrets {
     ///
     /// Update rather than delete-then-add: if the add failed after the delete,
     /// the old key would be gone and the new one not stored.
-    public static func store(_ secret: String, for provider: Provider) throws {
+    public static func store(_ secret: String, account: String) throws {
         let data = Data(secret.utf8)
-        let item = query(for: provider)
+        let item = query(for: account)
 
         let updated = SecItemUpdate(item as CFDictionary, [kSecValueData as String: data] as CFDictionary)
         if updated == errSecSuccess { return }
@@ -105,8 +106,8 @@ public enum Secrets {
         guard added == errSecSuccess else { throw Failure.keychain(added) }
     }
 
-    public static func read(for provider: Provider) -> String? {
-        var search = query(for: provider)
+    public static func read(account: String) -> String? {
+        var search = query(for: account)
         search[kSecReturnData as String] = true
         search[kSecMatchLimit as String] = kSecMatchLimitOne
 
@@ -121,23 +122,42 @@ public enum Secrets {
     /// Asks for the item's attributes only. Reading the secret itself can make
     /// macOS show an access prompt, and a settings window that checks status
     /// repeatedly must never cause one.
-    public static func exists(for provider: Provider) -> Bool {
-        var search = query(for: provider)
+    public static func exists(account: String) -> Bool {
+        var search = query(for: account)
         search[kSecReturnAttributes as String] = true
         search[kSecMatchLimit as String] = kSecMatchLimitOne
         return SecItemCopyMatching(search as CFDictionary, nil) == errSecSuccess
     }
 
-    public static func remove(for provider: Provider) {
-        SecItemDelete(query(for: provider) as CFDictionary)
+    public static func remove(account: String) {
+        SecItemDelete(query(for: account) as CFDictionary)
     }
 
-    private static func query(for provider: Provider) -> [String: Any] {
+    private static func query(for account: String) -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: provider.keychainAccount,
+            kSecAttrAccount as String: account,
         ]
     }
     #endif
+
+    // MARK: - By provider
+
+    /// The key transcription with `provider` reads.
+    public static func store(_ secret: String, for provider: Provider) throws {
+        try store(secret, account: provider.keychainAccount)
+    }
+
+    public static func read(for provider: Provider) -> String? {
+        read(account: provider.keychainAccount)
+    }
+
+    public static func exists(for provider: Provider) -> Bool {
+        exists(account: provider.keychainAccount)
+    }
+
+    public static func remove(for provider: Provider) {
+        remove(account: provider.keychainAccount)
+    }
 }

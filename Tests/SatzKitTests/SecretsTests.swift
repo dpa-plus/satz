@@ -43,6 +43,19 @@ struct SecretsTests {
         #expect(mode == 0o600)
     }
 
+    @Test func aKeyIsAnAccountsFileSharedByEveryUse() throws {
+        // OpenRouter transcribes and cleans up with the one key.
+        try Secrets.store("sk-or-shared", for: .openRouter)
+        #expect(Secrets.read(account: CleanupProvider.openRouter.keyAccount!.name) == "sk-or-shared")
+        // A cleanup provider's own key is a file of its own, 0600 too.
+        try Secrets.store("sk-ant-test", account: "anthropic")
+        #expect(Secrets.exists(account: "anthropic") && Secrets.read(account: "anthropic") == "sk-ant-test")
+        let mode = try FileManager.default.attributesOfItem(atPath: folder.appendingPathComponent("anthropic").path)[.posixPermissions] as? Int
+        #expect(mode == 0o600)
+        Secrets.remove(account: "anthropic")
+        #expect(!Secrets.exists(account: "anthropic"))
+    }
+
     @Test func removingForgetsIt() throws {
         try Secrets.store("sk-test", for: .custom)
         Secrets.remove(for: .custom)

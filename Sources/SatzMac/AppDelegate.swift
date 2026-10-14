@@ -30,6 +30,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mainWindow: AppWindow!
     private let navigation = MainNavigation()
     private lazy var models = ModelStore()
+    /// In test mode its measurements live next to the state file, like the history.
+    /// A test copy shares the key files with the real satz, so its cleanup goes
+    /// only to this computer unless the test says `--test-cleanup-remote`.
+    private lazy var cleanups = CleanupStore(
+        speedsFile: LaunchMode.current.stateFile.map { URL(fileURLWithPath: $0).deletingLastPathComponent().appendingPathComponent("cleanup-speeds.json") }
+            ?? CleanupStore.standardSpeedsFile,
+        onlyThisComputer: LaunchMode.current.cleanupStaysHere()
+    )
     private var setupWindow: AppWindow!
     private var devControl: DevControl?
     private let mediaPause = MediaPause()
@@ -109,6 +117,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         card = CardController(session: session, preferences: preferences)
         session.onOpen = { [weak self] in self?.card.show() }
         session.onRecord = { [weak self] in self?.mediaPause.dictationStarted() }
+        session.cleaner = { [weak self] text in
+            guard let self else { return CleanupResult(text: text) }
+            return await cleanups.clean(text, preferences)
+        }
         session.onClose = { [weak self] in self?.card.hide(); self?.mediaPause.dictationEnded() }
         // Never in test mode, where it would pause the user's own music,
         // unless a test asks for it.
@@ -122,6 +134,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let stateFile = LaunchMode.current.stateFile {
             devControl = DevControl(session: session, card: card, stateFile: URL(fileURLWithPath: stateFile))
             devControl?.toggleEye = { [weak self] in self?.preferences.showsText.toggle() }
+            devControl?.preferences = preferences
+            devControl?.cleanups = cleanups
             devControl?.spoken = { [weak self] in self?.preferences.spokenLanguage ?? .german }
             devControl?.use = { [weak self] model in
                 self?.preferences.localModel = model
@@ -145,7 +159,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             startsWithoutFocus: true
         ) { [unowned self] in
             AnyView(MainView(navigation: navigation, history: history, preferences: preferences, setup: setup,
-                             shortcut: shortcut, launchAtLogin: launchAtLogin, models: models))
+                             shortcut: shortcut, launchAtLogin: launchAtLogin, models: models, cleanups: cleanups))
         }
         navigation.onChange = { [weak self] in self?.mainWindow.retitle() }
         setupWindow = AppWindow(title: de("satz einrichten", en: "Set up satz"), freshEachTime: true) { [unowned self] in
@@ -372,14 +386,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// or logged. Stored by satz itself so the Keychain never asks satz for
     /// permission to read its own item.
     private func importKey(_ arguments: [String]) {
-        guard arguments.count == 2, let provider = Provider(rawValue: arguments[0]),
-              let contents = try? String(contentsOfFile: arguments[1], encoding: .utf8)
-        else {
-            Log.note("usage: satz --import-key openai|openrouter|groq|microsoft|google|custom <file>")
+        guard arguments.count == 2, let contents = try? String(contentsOfFile: arguments[1], encoding: .utf8) else {
+            Log.note("usage: satz --import-key openai|openrouter|groq|microsoft|google|custom|anthropic|cerebras|mistral|deepseek|xai|azure|custom-cleanup <file>")
             return
         }
         let key = contents.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return }
+        // A cleanup provider's own key: stored, nothing switched.
+        guard let provider = Provider(rawValue: arguments[0]) else {
+            let account = arguments[0] == "custom-cleanup" ? CleanupProvider.custom.keyAccount
+                : CleanupProvider(rawValue: arguments[0])?.keyAccount
+            guard let account else { return Log.note("no such key: \(arguments[0])") }
+            do {
+                try Secrets.store(key, account: account.name)
+                Log.note("key imported for \(account.name)")
+            } catch {
+                Log.note("key import failed: \(error.localizedDescription)")
+            }
+            return
+        }
         do {
             try Secrets.store(key, for: provider)
             preferences.provider = provider

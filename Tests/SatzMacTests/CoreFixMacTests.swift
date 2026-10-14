@@ -478,6 +478,7 @@ private func clip(_ name: String, seconds: Double, tone: Bool = true) -> URL {
 @MainActor
 private final class Dictation {
     let preferences = Preferences(defaults: nil)
+    let history = History()
     let session: Session
     var delivered: [String] = []
 
@@ -495,7 +496,7 @@ private final class Dictation {
         preferences.triggerMode = mode
         preferences.usesReplacements = false
         AudioSources.testFiles = clips
-        session = Session(preferences: preferences, history: History(), discarded: Discarded())
+        session = Session(preferences: preferences, history: history, discarded: Discarded())
         session.takesEscape = false
         session.deliverOverride = { [unowned self] text in delivered.append(text) }
     }
@@ -624,5 +625,99 @@ struct SessionTests {
         await d.dictate()
         #expect(await eventually(8) { d.isFailed })
         #expect(d.failureCanRetry == true)
+    }
+}
+
+// MARK: - Cleanup in the session
+
+/// A cleanup that answers from a script and counts what it was given.
+@MainActor
+private final class FakeCleaner {
+    var given: [String] = []
+    var delay: Duration = .zero
+    var answer: (String) -> CleanupResult
+
+    init(_ answer: @escaping (String) -> CleanupResult) { self.answer = answer }
+
+    func attach(to d: Dictation) {
+        d.session.cleaner = { [self] text in
+            given.append(text)
+            if delay > .zero { try? await Task.sleep(for: delay) }
+            return answer(text)
+        }
+    }
+}
+
+extension SessionTests {
+
+    @Test func cleanupOnPastesTheCleanedTextAndTheHistoryKeepsTheOriginal() async {
+        let d = Dictation(clips: [clip("c1", seconds: 2)], script: [(0, 200, #"{"text":"hallo welt wie geht es dir"}"#)])
+        d.preferences.cleansText = true
+        let cleaner = FakeCleaner { _ in CleanupResult(text: "Hallo Welt, wie geht es dir?", cleaned: "Hallo Welt, wie geht es dir?", seconds: 0.2) }
+        cleaner.attach(to: d)
+        await d.dictate()
+        #expect(await eventually(8) { !d.delivered.isEmpty })
+        #expect(d.delivered == ["Hallo Welt, wie geht es dir?"])
+        // Exactly what would have been pasted otherwise.
+        #expect(cleaner.given == ["hallo welt wie geht es dir"])
+        #expect(d.history.entries.first?.text == "Hallo Welt, wie geht es dir?")
+        #expect(d.history.entries.first?.original == "hallo welt wie geht es dir")
+        #expect(d.history.entries.first?.cleanup == "ok")
+        #expect(d.session.lastCleanup?.outcome == "ok" && d.session.phase == .idle)
+    }
+
+    @Test func aFailedCleanupPastesTheOriginalWithTheReasonAndANotice() async {
+        for failure in [CleanupFailure.tooSlow, .rejected, .providerError] {
+            let d = Dictation(clips: [clip("f-\(failure.code)", seconds: 2)], script: [(0, 200, #"{"text":"hallo welt wie geht es dir"}"#)])
+            d.preferences.cleansText = true
+            FakeCleaner { text in CleanupResult(text: text, failure: failure, seconds: 0.3) }.attach(to: d)
+            await d.dictate()
+            #expect(await eventually(8) { !d.delivered.isEmpty })
+            #expect(d.delivered == ["hallo welt wie geht es dir"])
+            #expect(d.history.entries.first?.original == nil)
+            #expect(d.history.entries.first?.cleanup == failure.short())
+            #expect(d.session.lastCleanup?.failure == failure)
+            // "Nicht aufgeräumt" for a moment, then the card goes.
+            #expect(d.session.phase == .notCleaned)
+            #expect(await eventually(5) { d.session.phase == .idle })
+        }
+    }
+
+    @Test func whileCleaningTheCardSaysSoAndADiscardDropsTheLateAnswer() async {
+        let d = Dictation(clips: [clip("d1", seconds: 2)], script: [(0, 200, #"{"text":"hallo welt wie geht es dir"}"#)])
+        d.preferences.cleansText = true
+        let cleaner = FakeCleaner { _ in CleanupResult(text: "Zu spät.", cleaned: "Zu spät.", seconds: 1.5) }
+        cleaner.delay = .milliseconds(1500)
+        cleaner.attach(to: d)
+        await d.dictate()
+        #expect(await eventually(8) { d.session.isCleaning })
+        #expect(d.session.phase == .finishing)
+        d.session.discard()
+        #expect(d.session.phase == .discarded && !d.session.isCleaning)
+        try? await Task.sleep(for: .milliseconds(1800))
+        #expect(d.delivered.isEmpty && d.history.entries.isEmpty)
+        // What was said can still come back.
+        d.session.undoDiscard()
+        #expect(d.session.plainText().contains("hallo welt"))
+        d.session.discard()
+    }
+
+    @Test func cleanupOffChangesNothingAndAsksNobody() async {
+        let d = Dictation(clips: [clip("o0", seconds: 2), clip("o1", seconds: 2)],
+                          script: [(0, 200, #"{"text":"erst aufgeräumt"}"#), (0, 200, #"{"text":"hallo welt"}"#)])
+        let cleaner = FakeCleaner { _ in CleanupResult(text: "Anders.", cleaned: "Anders.") }
+        cleaner.attach(to: d)
+        // One with cleanup first: test mode's dump must not show it for the next.
+        d.preferences.cleansText = true
+        await d.dictate()
+        #expect(await eventually(8) { d.delivered.count == 1 && d.session.phase == .idle })
+        #expect(d.session.lastCleanup?.outcome == "ok")
+        d.preferences.cleansText = false
+        await d.dictate()
+        #expect(await eventually(8) { d.delivered.count == 2 })
+        #expect(d.delivered.last == "hallo welt" && cleaner.given == ["erst aufgeräumt"])
+        #expect(d.history.entries.first?.cleanup == nil && d.history.entries.first?.original == nil)
+        #expect(d.session.lastCleanup == nil)
+        #expect(d.session.phase == .idle)
     }
 }

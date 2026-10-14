@@ -185,6 +185,80 @@ final class Preferences {
         didSet { defaults?.set(removesFillers, forKey: Key.removesFillers) }
     }
 
+    // MARK: - Aufräumen
+
+    /// A language model edits the text before it is pasted. Off until the
+    /// user turns it on: nothing rewrites what was said unless asked to.
+    var cleansText: Bool {
+        didSet { defaults?.set(cleansText, forKey: Key.cleansText) }
+    }
+
+    /// How much it may change.
+    private(set) var cleanupLevel: CleanupLevel {
+        didSet { defaults?.set(cleanupLevel.rawValue, forKey: Key.cleanupLevel) }
+    }
+
+    /// The user's own instruction, for "Eigener Prompt".
+    var cleanupPrompt: String {
+        didSet { defaults?.set(cleanupPrompt, forKey: Key.cleanupPrompt) }
+    }
+
+    /// Picking the own prompt for the first time starts it with the
+    /// instructions of the level chosen before, rather than an empty field.
+    func chooseCleanupLevel(_ level: CleanupLevel) {
+        if level == .custom, cleanupPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           let start = cleanupLevel.instructions {
+            cleanupPrompt = start
+        }
+        cleanupLevel = level
+    }
+
+    /// The provider the user picked for cleanup; nil until they pick one.
+    var cleanupProviderChoice: CleanupProvider? {
+        didSet { defaults?.set(cleanupProviderChoice?.rawValue, forKey: Key.cleanupProvider) }
+    }
+
+    /// Where cleanup goes: the user's pick, or until then the transcription
+    /// provider if it can (its key is there), else OpenRouter with a key,
+    /// else Apple's model on this Mac.
+    var cleanupProvider: CleanupProvider {
+        get {
+            cleanupProviderChoice ?? CleanupProvider.standard(
+                transcription: provider,
+                hasOpenRouterKey: defaults != nil && Secrets.exists(for: .openRouter),
+                appleAvailable: defaults != nil && AppleCleanup.isAvailable
+            )
+        }
+        set { cleanupProviderChoice = newValue }
+    }
+
+    /// The model for a cleanup provider, as stored; empty for Ollama and LM
+    /// Studio until one is picked (the first installed one is used then).
+    func cleanupModel(for provider: CleanupProvider) -> String {
+        cleanupModels[provider.rawValue] ?? provider.defaultModel
+    }
+
+    func setCleanupModel(_ id: String, for provider: CleanupProvider) {
+        cleanupModels[provider.rawValue] = id.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// The address for Azure, Ollama, LM Studio and an own server, as typed.
+    func cleanupAddress(for provider: CleanupProvider) -> String {
+        cleanupAddresses[provider.rawValue] ?? provider.defaultAddress
+    }
+
+    func setCleanupAddress(_ address: String, for provider: CleanupProvider) {
+        cleanupAddresses[provider.rawValue] = address
+    }
+
+    private var cleanupModels: [String: String] {
+        didSet { defaults?.set(cleanupModels, forKey: Key.cleanupModels) }
+    }
+
+    private var cleanupAddresses: [String: String] {
+        didSet { defaults?.set(cleanupAddresses, forKey: Key.cleanupAddresses) }
+    }
+
     /// Everything the transcriber needs, read fresh at send time so an edit in
     /// the settings window applies to the very next dictation.
     var transcriberSettings: Transcriber.Settings {
@@ -285,6 +359,12 @@ final class Preferences {
         static let keepsOnClipboard = "keepsOnClipboard"
         static let historyLimit = "historyLimit"
         static let pausesMedia = "pausesMedia"
+        static let cleansText = "cleansText"
+        static let cleanupLevel = "cleanupLevel"
+        static let cleanupPrompt = "cleanupPrompt"
+        static let cleanupProvider = "cleanupProvider"
+        static let cleanupModels = "cleanupModels"
+        static let cleanupAddresses = "cleanupAddresses"
     }
 
     init(defaults: UserDefaults? = .standard) {
@@ -326,6 +406,12 @@ final class Preferences {
         keepsOnClipboard = defaults?.bool(forKey: Key.keepsOnClipboard) ?? false
         historyLimit = defaults?.object(forKey: Key.historyLimit) as? Int ?? History.standardLimit
         pausesMedia = defaults?.object(forKey: Key.pausesMedia) as? Bool ?? true
+        cleansText = defaults?.bool(forKey: Key.cleansText) ?? false
+        cleanupLevel = defaults?.string(forKey: Key.cleanupLevel).flatMap(CleanupLevel.init(rawValue:)) ?? .standard
+        cleanupPrompt = defaults?.string(forKey: Key.cleanupPrompt) ?? ""
+        cleanupProviderChoice = defaults?.string(forKey: Key.cleanupProvider).flatMap(CleanupProvider.init(rawValue:))
+        cleanupModels = defaults?.dictionary(forKey: Key.cleanupModels) as? [String: String] ?? [:]
+        cleanupAddresses = defaults?.dictionary(forKey: Key.cleanupAddresses) as? [String: String] ?? [:]
         // Only the real, stored preferences set the app-wide language and
         // colours; a fixture made for a snapshot must not reset them.
         if defaults != nil {

@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import SatzKit
 
 /// The last transcripts, so a paste that went somewhere unexpected is not a
 /// lost paragraph, and something said yesterday can be found again.
@@ -20,6 +21,10 @@ final class History {
         let app: String?
         /// false when it only reached the clipboard.
         let pasted: Bool
+        /// The text before cleanup, when what was pasted differs from it.
+        var original: String? = nil
+        /// nil when cleanup was off; "ok", or why it did not work ("Zu langsam").
+        var cleanup: String? = nil
     }
 
     /// The menu shows this many: the newest in full, the rest as lines.
@@ -52,11 +57,19 @@ final class History {
         }
     }
 
-    func add(_ text: String, app: String?, pasted: Bool, at date: Date = .now) {
+    func add(_ text: String, app: String?, pasted: Bool, at date: Date = .now, original: String? = nil, cleanup: String? = nil) {
         // Off means nothing is written, not written and then forgotten.
         guard !text.isEmpty, limit > 0 else { return }
-        entries.insert(Entry(text: text, date: date, app: app, pasted: pasted), at: 0)
+        entries.insert(Entry(text: text, date: date, app: app, pasted: pasted,
+                             original: original == text ? nil : original, cleanup: cleanup), at: 0)
         trim()
+    }
+
+    /// How long the dictations are, newest first: what was said, before any
+    /// cleanup. For the cleanup's estimate.
+    var spokenLengths: [Int] {
+        // As Unicode scalars, the way Windows and Linux count (`CleanupTiming.characters`).
+        entries.map { CleanupTiming.characters($0.original ?? $0.text) }
     }
 
     func remove(_ entry: Entry) {

@@ -11,6 +11,7 @@ struct MainView: View {
     let shortcut: Shortcut
     let launchAtLogin: LaunchAtLogin
     let models: ModelStore
+    let cleanups: CleanupStore
 
     @Environment(\.theme) private var theme
 
@@ -35,7 +36,7 @@ struct MainView: View {
                     .id(preferences.lookKey)
             case .settings:
                 SettingsView(preferences: preferences, setup: setup, shortcut: shortcut,
-                             launchAtLogin: launchAtLogin, history: history, models: models)
+                             launchAtLogin: launchAtLogin, history: history, models: models, cleanups: cleanups)
             }
         }
         .frame(width: 560, height: 760, alignment: .topLeading)

@@ -1,0 +1,258 @@
+{
+ "about": [
+  "Answers a model gave and what satz pastes after cleaning them (spec 2.5): think and dictation tags, fences, wrapping quotes, the original's line breaks.",
+  "Read by Tests/SatzKitTests (CleanupAnswerTests) and desktop/test/cleanupAnswerCases.test.ts, so both platforms clean every answer the same way."
+ ],
+ "cases": [
+  {
+   "answer": "<think>hmm</think> Hallo Welt.",
+   "original": "hallo welt",
+   "expected": "Hallo Welt."
+  },
+  {
+   "answer": "<THINK>x</THINK>Hallo",
+   "original": "hallo",
+   "expected": "Hallo"
+  },
+  {
+   "answer": "\n  <think>x</think>\nHallo",
+   "original": "hallo",
+   "expected": "Hallo"
+  },
+  {
+   "answer": "<think>x</think><think>y</think>Hallo",
+   "original": "hallo",
+   "expected": "<think>y</think>Hallo"
+  },
+  {
+   "answer": "<think>never closed Hallo",
+   "original": "hallo",
+   "expected": "<think>never closed Hallo"
+  },
+  {
+   "answer": "<thinking>x</thinking>Hallo",
+   "original": "hallo",
+   "expected": "Hallo"
+  },
+  {
+   "answer": "<reasoning>x</reasoning>Hallo",
+   "original": "hallo",
+   "expected": "Hallo"
+  },
+  {
+   "answer": "<think>x</think>",
+   "original": "hallo",
+   "expected": ""
+  },
+  {
+   "answer": "<dictation>\nHallo\n</dictation>",
+   "original": "hallo",
+   "expected": "Hallo"
+  },
+  {
+   "answer": "<Dictation>Hallo</Dictation>",
+   "original": "hallo",
+   "expected": "Hallo"
+  },
+  {
+   "answer": "<dictation></dictation>",
+   "original": "hallo",
+   "expected": ""
+  },
+  {
+   "answer": "```\nHallo\n```",
+   "original": "hallo",
+   "expected": "Hallo"
+  },
+  {
+   "answer": "```text\nHallo\n```",
+   "original": "hallo",
+   "expected": "Hallo"
+  },
+  {
+   "answer": "```Hallo```",
+   "original": "hallo",
+   "expected": "Hallo"
+  },
+  {
+   "answer": "```Here is the text:\nHallo\n```",
+   "original": "hallo",
+   "expected": "Here is the text:\nHallo"
+  },
+  {
+   "answer": "```\n```",
+   "original": "hallo",
+   "expected": ""
+  },
+  {
+   "answer": "```text\nline one\nline two\n```",
+   "original": "line one line two",
+   "expected": "line one\nline two"
+  },
+  {
+   "answer": "\"Hallo.\"",
+   "original": "hallo",
+   "expected": "Hallo."
+  },
+  {
+   "answer": "„Hallo.“",
+   "original": "hallo",
+   "expected": "Hallo."
+  },
+  {
+   "answer": "“Hallo.”",
+   "original": "hallo",
+   "expected": "Hallo."
+  },
+  {
+   "answer": "'Hallo.'",
+   "original": "hallo",
+   "expected": "Hallo."
+  },
+  {
+   "answer": "\"Hallo\" sagte er",
+   "original": "hallo sagte er",
+   "expected": "\"Hallo\" sagte er"
+  },
+  {
+   "answer": "\"Hallo.\"",
+   "original": "\"hallo\"",
+   "expected": "\"Hallo.\""
+  },
+  {
+   "answer": "'Hallo.'",
+   "original": "«hallo»",
+   "expected": "'Hallo.'"
+  },
+  {
+   "answer": "'Hallo.'",
+   "original": "’hallo",
+   "expected": "'Hallo.'"
+  },
+  {
+   "answer": "'Hallo.'",
+   "original": "‘hallo",
+   "expected": "'Hallo.'"
+  },
+  {
+   "answer": "\"",
+   "original": "hallo",
+   "expected": "\""
+  },
+  {
+   "answer": "\"\"",
+   "original": "hallo",
+   "expected": ""
+  },
+  {
+   "answer": "Hallo.",
+   "original": "\n\nhallo\n",
+   "expected": "\n\nHallo.\n"
+  },
+  {
+   "answer": "Hallo.",
+   "original": "  \n hallo",
+   "expected": "Hallo."
+  },
+  {
+   "answer": "Hallo.",
+   "original": "hallo \n",
+   "expected": "Hallo.\n"
+  },
+  {
+   "answer": "Hallo.",
+   "original": "hallo\n \n",
+   "expected": "Hallo.\n"
+  },
+  {
+   "answer": "Hallo.",
+   "original": "\r\nhallo\r\n",
+   "expected": "\r\nHallo.\r\n"
+  },
+  {
+   "answer": "Hallo.",
+   "original": " hallo ",
+   "expected": "Hallo."
+  },
+  {
+   "answer": "  Hallo.  ",
+   "original": "hallo",
+   "expected": "Hallo."
+  },
+  {
+   "answer": "﻿Hallo.",
+   "original": "hallo",
+   "expected": "Hallo."
+  },
+  {
+   "answer": "   ",
+   "original": "hallo",
+   "expected": ""
+  },
+  {
+   "answer": "Hallo.",
+   "original": "hallo",
+   "expected": "Hallo."
+  },
+  {
+   "answer": "- eins\n- zwei",
+   "original": "neue zeile eins zwei",
+   "expected": "- eins\n- zwei"
+  },
+  {
+   "answer": "<Think>x</think>Hallo",
+   "original": "hallo",
+   "expected": "Hallo"
+  },
+  {
+   "answer": "<DICTATION>Hallo</dictation>",
+   "original": "hallo",
+   "expected": "Hallo"
+  },
+  {
+   "answer": "```python\nprint(1)\n```",
+   "original": "code",
+   "expected": "print(1)"
+  },
+  {
+   "answer": "```c++\nint x;\n```",
+   "original": "code",
+   "expected": "int x;"
+  },
+  {
+   "answer": "```objective-c\nint x;\n```",
+   "original": "code",
+   "expected": "int x;"
+  },
+  {
+   "answer": "```Hier:\nHallo\n```",
+   "original": "hallo",
+   "expected": "Hier:\nHallo"
+  },
+  {
+   "answer": "```Hier ist der Text\nHallo\n```",
+   "original": "hallo",
+   "expected": "Hier ist der Text\nHallo"
+  },
+  {
+   "answer": "```text\nHallo\n```",
+   "original": "hallo",
+   "expected": "Hallo"
+  },
+  {
+   "answer": "'Hallo.'",
+   "original": "‹hallo›",
+   "expected": "'Hallo.'"
+  },
+  {
+   "answer": "'Hallo.'",
+   "original": "›hallo",
+   "expected": "'Hallo.'"
+  },
+  {
+   "answer": "\"Hallo.\"",
+   "original": "«hallo»",
+   "expected": "\"Hallo.\""
+  }
+ ]
+}

@@ -99,7 +99,11 @@ struct HistoryView: View {
     private var shown: [History.Entry] {
         let words = query.trimmingCharacters(in: .whitespaces)
         guard !words.isEmpty else { return history.entries }
-        return history.entries.filter { $0.text.localizedCaseInsensitiveContains(words) || ($0.app?.localizedCaseInsensitiveContains(words) ?? false) }
+        // What was said before cleanup counts too: it is what the user remembers saying.
+        return history.entries.filter {
+            $0.text.localizedCaseInsensitiveContains(words) || ($0.original?.localizedCaseInsensitiveContains(words) ?? false)
+                || ($0.app?.localizedCaseInsensitiveContains(words) ?? false)
+        }
     }
 
     /// The entries by day, newest day first, each day as one surface.
@@ -146,7 +150,8 @@ struct HistoryView: View {
 
 /// One dictation: the text in full up to three lines, where it went and when.
 /// The row copies on click, and says so with the copy icon at its end; under
-/// the pointer it also offers to forget it.
+/// the pointer it also offers to forget it. A cleaned-up one can show what was
+/// said before, and copies that while it shows it.
 private struct HistoryRow: View {
     let entry: History.Entry
     let remove: () -> Void
@@ -154,25 +159,53 @@ private struct HistoryRow: View {
     @Environment(\.theme) private var theme
     @State private var hovering = false
     @State private var copied = false
+    @State private var showsOriginal = false
+
+    private var shownText: String { showsOriginal ? entry.original ?? entry.text : entry.text }
+
+    /// "Zu langsam" when cleanup was on and did not work.
+    private var notCleaned: String? {
+        guard let reason = entry.cleanup, reason != "ok" else { return nil }
+        return reason
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Button(action: copy) {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(entry.text)
+                    Text(shownText)
                         .font(Typography.text(15))
                         .lineSpacing(2)
                         .lineLimit(3)
                         .foregroundStyle(theme.ink)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    Text(copied ? de("Kopiert", en: "Copied") : meta)
-                        .font(Typography.text(12.5))
-                        .foregroundStyle(theme.inkSecondary)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(copied ? de("Kopiert", en: "Copied") : meta)
+                        if let notCleaned {
+                            Text(de("Nicht aufgeräumt: \(notCleaned)", en: "Not cleaned up: \(notCleaned)"))
+                        }
+                    }
+                    .font(Typography.text(12.5))
+                    .foregroundStyle(theme.inkSecondary)
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .help(de("Kopieren", en: "Copy"))
+
+            if entry.original != nil {
+                Button { showsOriginal.toggle() } label: {
+                    Text(showsOriginal ? de("Aufgeräumt", en: "Cleaned up") : "Original")
+                        .font(Typography.text(12.5, .medium))
+                        .underline()
+                        .frame(height: 24)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(theme.inkSecondary)
+                .help(showsOriginal ? de("Den aufgeräumten Text zeigen", en: "Show the cleaned-up text")
+                                    : de("Zeigen, was gesagt wurde", en: "Show what was said"))
+            }
 
             Button(action: remove) {
                 Image(systemName: "xmark")
@@ -220,7 +253,7 @@ private struct HistoryRow: View {
     }
 
     private func copy() {
-        Clipboard.put(entry.text)
+        Clipboard.put(shownText)
         copied = true
         Task {
             try? await Task.sleep(for: .seconds(1.2))

@@ -21,6 +21,8 @@ final class StandInServer: @unchecked Sendable {
         var status = 200
         var headers: [String: String] = [:]
         var body = ""
+        /// Seconds before answering, for a provider that is too slow.
+        var delay: TimeInterval = 0
     }
 
     private let listener: NWListener
@@ -108,7 +110,10 @@ final class StandInServer: @unchecked Sendable {
         var head = "HTTP/1.1 \(answer.status) Stand-in\r\nContent-Type: application/json\r\nContent-Length: \(answer.body.utf8.count)\r\nConnection: close\r\n"
         for (name, value) in answer.headers { head += "\(name): \(value)\r\n" }
         head += "\r\n"
-        connection.send(content: Data(head.utf8) + Data(answer.body.utf8), completion: .contentProcessed { _ in connection.cancel() })
+        let response = Data(head.utf8) + Data(answer.body.utf8)
+        queue.asyncAfter(deadline: .now() + answer.delay) {
+            connection.send(content: response, completion: .contentProcessed { _ in connection.cancel() })
+        }
     }
 }
 

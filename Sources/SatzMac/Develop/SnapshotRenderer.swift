@@ -51,6 +51,20 @@ enum SnapshotRenderer {
             ("history", .german, { AnyView(historySheet.environment(\.theme, .light)) }),
             ("history-en", .english, { AnyView(historySheet.environment(\.theme, .dark)) }),
             ("setup-probe", .german, { AnyView(setupSheet(.probe).environment(\.theme, .light)) }),
+            // The cleanup block alone, at full size: on, "Leicht", OpenRouter with an estimate.
+            ("cleanup", .german, { AnyView(cleanupSheet(.light).environment(\.theme, .light)) }),
+            ("cleanup-en", .english, { AnyView(cleanupSheet(.light).environment(\.theme, .dark)) }),
+            // The own prompt, a model measured on this Mac, a try that was rejected.
+            ("cleanup-custom", .german, { AnyView(cleanupSheet(.custom).environment(\.theme, .dark)) }),
+            ("cleanup-custom-en", .english, { AnyView(cleanupSheet(.custom).environment(\.theme, .light)) }),
+            // The prompt shown, Apple looked at while OpenRouter is in use, no key for it.
+            ("cleanup-browse", .german, { AnyView(cleanupSheet(.smooth, browsing: .apple).environment(\.showsCleanupPrompt, true).environment(\.theme, .light)) }),
+            ("cleanup-ollama", .german, { AnyView(cleanupSheet(.punctuation, provider: .ollama).environment(\.theme, .dark)) }),
+            // A provider with no key yet: "Schlüssel holen" opens the page where one is made.
+            ("cleanup-key", .german, { AnyView(cleanupSheet(.light, browsing: .anthropic).environment(\.theme, .light)) }),
+            ("cleanup-key-en", .english, { AnyView(cleanupSheet(.light, browsing: .azure).environment(\.theme, .dark)) }),
+            // The whole window, with the block where it sits.
+            ("settings-cleanup", .german, { AnyView(settingsSheet(.openRouter, cleanup: true).environment(\.theme, .light)) }),
         ]
         for (name, language, view) in sheets {
             Language.current = language
@@ -162,13 +176,20 @@ enum SnapshotRenderer {
         for (text, app, pasted, offset) in texts {
             history.add(text, app: app, pasted: pasted, at: now.addingTimeInterval(offset))
         }
+        // One cleaned up, with what was said behind "Original"; one that was not.
+        history.add("Can we move the meeting to Tuesday? And who else is coming?", app: "Slack", pasted: true,
+                    at: now.addingTimeInterval(-2 * 60),
+                    original: "um so can we move the meeting to monday no tuesday and uh who else is coming",
+                    cleanup: "ok")
+        history.add("Bitte denk an die Folien für morgen.", app: "Mail", pasted: true, at: now.addingTimeInterval(-60),
+                    cleanup: Language.current == .english ? "Too slow" : "Zu langsam")
         return history
     }
 
     private static var historySheet: some View {
         MainView(navigation: MainNavigation(), history: longHistory, preferences: preferences,
                  setup: Setup(hasKey: true, microphone: .allowed, canPaste: true), shortcut: shortcut,
-                 launchAtLogin: LaunchAtLogin(), models: ModelStore(folder: nil))
+                 launchAtLogin: LaunchAtLogin(), models: ModelStore(folder: nil), cleanups: CleanupStore(folder: nil, speedsFile: nil))
     }
 
     private static var shortcut: Shortcut {
@@ -179,9 +200,9 @@ enum SnapshotRenderer {
 
     private static let speech: [Float] = [0.1, 0.3, 0.55, 0.8, 0.62, 0.35, 0.5, 0.75, 0.9, 0.6, 0.3, 0.45]
 
-    private static func card(_ phase: Session.Phase, text: String = "", marker: Bool = false) -> some View {
+    private static func card(_ phase: Session.Phase, text: String = "", marker: Bool = false, cleaning: Bool = false) -> some View {
         let session = Session(preferences: preferences, history: History(), discarded: Discarded())
-        session.stage(phase, text: text, marker: marker, levels: phase == .listening ? speech : [])
+        session.stage(phase, text: text, marker: marker, levels: phase == .listening ? speech : [], cleaning: cleaning)
         return CardView(session: session, preferences: preferences)
     }
 
@@ -192,9 +213,11 @@ enum SnapshotRenderer {
             card(.listening, text: text + " ", marker: true)
             card(.paused, text: text)
             card(.finishing, text: text)
+            card(.finishing, text: text, cleaning: true)
             card(.failed("Keine Verbindung", canRetry: true), text: text)
             card(.discarded)
             card(.clipboard)
+            card(.notCleaned)
         }
         .padding(28)
         .background(Color(hex: 0xE9DDD2))
@@ -225,20 +248,78 @@ enum SnapshotRenderer {
     private static var settingsSheet: some View { settingsSheet(.openRouter) }
 
     private static func settingsSheet(_ provider: Provider, localModel: String = LocalCatalog.parakeetV3,
-                                      toldLanguage: String? = nil, endpoint: String = "", hasKey: Bool = true) -> some View {
+                                      toldLanguage: String? = nil, endpoint: String = "", hasKey: Bool = true,
+                                      cleanup: Bool = false) -> some View {
         let preferences = preferences
         preferences.provider = provider
         preferences.localModel = localModel
         preferences.toldLanguage = toldLanguage
         preferences.microsoftEndpoint = endpoint
+        preferences.cleansText = cleanup
+        let cleanups = CleanupStore(folder: nil, speedsFile: nil)
+        cleanups.stage()
         return SettingsView(
             preferences: preferences,
             setup: Setup(hasKey: hasKey, microphone: .allowed, canPaste: true),
             shortcut: shortcut,
             launchAtLogin: LaunchAtLogin(),
             history: history,
-            models: ModelStore(folder: nil)
+            models: ModelStore(folder: nil),
+            cleanups: cleanups
         )
+    }
+
+    /// The cleanup block on its own, as wide as in the window.
+    private static func cleanupSheet(_ level: CleanupLevel, provider: CleanupProvider = .openRouter,
+                                     browsing: CleanupProvider? = nil) -> some View {
+        let preferences = preferences
+        preferences.cleansText = true
+        preferences.cleanupProvider = provider
+        let store = CleanupStore(folder: nil, speedsFile: nil)
+        let measured = Date(timeIntervalSince1970: 1_791_000_000)
+        var speeds = CleanupSpeeds()
+        var tried: CleanupStore.Tried?
+        switch level {
+        case .custom:
+            // Picked after "Leicht": the field starts with its instructions.
+            preferences.chooseCleanupLevel(.light)
+            preferences.chooseCleanupLevel(.custom)
+            preferences.cleanupPrompt += " Answer in the dictation's language, as a short email with a greeting."
+            preferences.setCleanupModel("anthropic/claude-haiku-5.5", for: .openRouter)
+            for seconds in [0.9, 1.1, 0.8] {
+                speeds.add(.openRouter, model: "anthropic/claude-haiku-5.5", seconds: seconds, dollars: 0.00021, at: measured)
+            }
+            // The own prompt asked for a mail: nothing judges it but the user.
+            let mail = Language.current == .english
+                ? "Hi,\n\ncan we move the meeting to Tuesday? And who else is coming?\n\nBest"
+                : "Hallo,\n\nkönnen wir das Meeting auf Dienstag legen? Und wer kommt noch?\n\nViele Grüße"
+            tried = .init(provider: .openRouter, model: "anthropic/claude-haiku-5.5",
+                          result: CleanupResult(text: mail, cleaned: mail, seconds: 0.92, dollars: 0.00019))
+        default:
+            preferences.chooseCleanupLevel(level)
+            let cleaned = Language.current == .english
+                ? "So I wanted to ask if we can move the meeting to Tuesday, and can you tell me who else is coming?"
+                : "Also, ich wollte fragen, ob wir das Meeting am Dienstag machen können, und kannst du mir sagen, wer noch kommt?"
+            tried = .init(provider: .openRouter, model: "google/gemini-3.5-flash-lite",
+                          result: CleanupResult(text: cleaned, cleaned: cleaned, seconds: 0.78, dollars: 0.00019))
+        }
+        if provider == .ollama { tried = nil }
+        // Apple's small model answered the question in the text: thrown away.
+        if browsing == .apple {
+            tried = .init(provider: .apple, model: CleanupCatalog.appleModel, result: CleanupResult(
+                text: CleanupSample.text(for: preferences.spokenLanguage), failure: .rejected,
+                cleaned: Language.current == .english ? "Tuesday works. Anna, Tom and Lena are coming." : "Dienstag passt. Es kommen Anna, Tom und Lena.",
+                seconds: 1.62))
+        }
+        store.stage(speeds: speeds, installed: [.ollama: ["gemma4:4b", "qwen3.8:8b", "llama4:8b"]], tried: tried)
+        store.looking = browsing
+        return CleanupBlock(preferences: preferences, setup: Setup(hasKey: browsing == nil, microphone: .allowed, canPaste: true),
+                            store: store, history: History())
+            .padding(.horizontal, 32)
+            .padding(.vertical, 20)
+            .frame(width: 560, alignment: .leading)
+            .background(Color.clear)
+            .modifier(GroundBackground())
     }
 
     private static func setupSheet(_ step: SetupView.Step, provider: Provider = .openRouter, localModel: String? = nil,
@@ -339,4 +420,13 @@ extension EnvironmentValues {
     /// The provider Settings shows at first, for a picture of one looked at
     /// but not in use.
     @Entry var showsProvider: Provider? = nil
+}
+
+/// The window's ground behind a piece rendered on its own.
+private struct GroundBackground: ViewModifier {
+    @Environment(\.theme) private var theme
+
+    func body(content: Content) -> some View {
+        content.background(theme.ground)
+    }
 }

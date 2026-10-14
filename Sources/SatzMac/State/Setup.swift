@@ -87,7 +87,19 @@ final class Setup {
 
     /// Whether `provider` has a key, in use or not. A fixture has one for each.
     func hasKey(for provider: Provider) -> Bool {
-        preferences == nil ? hasKey : Secrets.exists(for: provider)
+        hasKey(account: provider.keyAccount)
+    }
+
+    /// Any key file, the cleanup providers' too. A fixture has one for each.
+    func hasKey(account: KeyAccount) -> Bool {
+        preferences == nil ? hasKey : Secrets.exists(account: account.name)
+    }
+
+    /// A key for any account, in use or not.
+    func store(key: String, account: KeyAccount) throws {
+        guard preferences != nil else { return }
+        try Secrets.store(key, account: account.name)
+        refresh()
     }
 
     /// What `provider` still lacks before it can take a dictation, in use or

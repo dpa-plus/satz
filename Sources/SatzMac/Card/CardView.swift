@@ -92,7 +92,7 @@ struct CardView: View {
     /// Phases in which the card can show text at all.
     private var canHoldText: Bool {
         switch session.phase {
-        case .idle, .discarded, .clipboard: false
+        case .idle, .discarded, .clipboard, .notCleaned: false
         default: true
         }
     }
@@ -101,7 +101,7 @@ struct CardView: View {
     private var showsText: Bool {
         guard preferences.showsText, session.hasRealText else { return false }
         switch session.phase {
-        case .idle, .discarded, .clipboard: return false
+        case .idle, .discarded, .clipboard, .notCleaned: return false
         default: return true
         }
     }
@@ -159,7 +159,7 @@ private struct Strip: View {
             .clipped()
         case .finishing:
             WritingDots()
-            label(de("Schreibt", en: "Writing"))
+            label(session.isCleaning ? de("Räumt auf", en: "Cleaning up") : de("Schreibt", en: "Writing"))
             if wide { Spacer(minLength: 0) }
         case .failed(let message, let canRetry):
             Image(systemName: "exclamationmark.triangle")
@@ -191,6 +191,13 @@ private struct Strip: View {
                 .foregroundStyle(theme.accent)
             label(de("Zwischenablage", en: "Clipboard"))
             KeyLabel(glyph: "⌘", name: "V")
+            Spacer(minLength: 4)
+        case .notCleaned:
+            // The original went in; why is in the history and the log.
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(theme.accent)
+            label(de("Nicht aufgeräumt", en: "Not cleaned up"))
             Spacer(minLength: 4)
         }
     }

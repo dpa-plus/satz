@@ -10,6 +10,7 @@ struct SettingsView: View {
     let launchAtLogin: LaunchAtLogin
     let history: History
     let models: ModelStore
+    let cleanups: CleanupStore
 
     @Environment(\.theme) private var theme
     @Environment(\.isSnapshot) private var isSnapshot
@@ -46,6 +47,7 @@ struct SettingsView: View {
                 ProviderBlock(preferences: preferences, setup: setup, models: models)
                 WordsBlock(preferences: preferences)
                 ReplacementsBlock(preferences: preferences)
+                CleanupBlock(preferences: preferences, setup: setup, store: cleanups, history: history)
                 GeneralBlock(preferences: preferences, launchAtLogin: launchAtLogin, history: history)
             }
             .padding(.horizontal, 32)
@@ -194,7 +196,7 @@ private struct ProviderBlock: View {
                 }
                 Rule()
                 if shown.needsKey {
-                    KeyRow(setup: setup, provider: shown)
+                    KeyRow(setup: setup, account: shown.keyAccount)
                     Rule()
                 }
                 if shown == .microsoft {
@@ -454,9 +456,16 @@ private struct ModelRow: View {
     }
 }
 
-private struct KeyRow: View {
+/// A key: its field until one is saved, then "Schlüssel · Ändern". Shared
+/// by every provider that keeps its key in the same file (`KeyAccount`).
+struct KeyRow: View {
     let setup: Setup
-    let provider: Provider
+    let account: KeyAccount
+    /// Said under the key when another use reads the same file.
+    var shared: String? = nil
+    /// "Schlüssel holen" under the key, while there is none (or it is being
+    /// changed) and the account has a page to create one.
+    var linksToPage = false
 
     @Environment(\.theme) private var theme
     @Environment(\.isSnapshot) private var isSnapshot
@@ -468,14 +477,25 @@ private struct KeyRow: View {
         VStack(alignment: .leading, spacing: 0) {
             row
                 .frame(height: 48)
-            // What is not obvious about this provider's key.
-            if let note = provider.keyNote {
+            // What is not obvious about this key, or that it is shared.
+            ForEach([account.note, shared].compactMap { $0 }, id: \.self) { note in
                 Text(note)
                     .font(Typography.text(12))
                     .foregroundStyle(theme.inkSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, -6)
                     .padding(.bottom, 10)
+            }
+            if linksToPage, let page = account.page, editing || !setup.hasKey(account: account) {
+                Button { NSWorkspace.shared.open(page) } label: {
+                    Text(de("Schlüssel holen", en: "Get a key")).underline()
+                }
+                .buttonStyle(.plain)
+                .font(Typography.text(12))
+                .foregroundStyle(theme.inkSecondary)
+                .padding(.top, -6)
+                .padding(.bottom, 10)
+                .help(page.host ?? "")
             }
             // Said where it happened, not in a tooltip nobody hovers.
             if let problem {
@@ -488,20 +508,20 @@ private struct KeyRow: View {
         .font(Typography.text(15))
         .foregroundStyle(theme.ink)
         .padding(.horizontal, 16)
-        .onChange(of: provider) { close() }
+        .onChange(of: account) { close() }
     }
 
     private var row: some View {
         HStack(spacing: 10) {
             Image(systemName: "lock")
                 .font(.system(size: 13, weight: .medium))
-            if editing || !setup.hasKey(for: provider) {
+            if editing || !setup.hasKey(account: account) {
                 // Always empty when opened: the stored key is never read back
                 // into a field, where it would sit in memory for no reason.
                 if isSnapshot {
-                    Text(provider.keyPlaceholder).font(Typography.mono(13)).foregroundStyle(theme.inkOnCard)
+                    Text(account.placeholder).font(Typography.mono(13)).foregroundStyle(theme.inkOnCard)
                 } else {
-                    SecureField("", text: $input, prompt: Text(provider.keyPlaceholder).foregroundStyle(theme.inkOnCard))
+                    SecureField("", text: $input, prompt: Text(account.placeholder).foregroundStyle(theme.inkOnCard))
                         .textFieldStyle(.plain)
                         .font(Typography.mono(13))
                         .onSubmit(save)
@@ -513,7 +533,7 @@ private struct KeyRow: View {
                     .buttonStyle(.outlineCompact)
                     .disabled(input.trimmingCharacters(in: .whitespaces).isEmpty)
                 // "Ändern" can be taken back: the stored key stays.
-                if editing && setup.hasKey(for: provider) {
+                if editing && setup.hasKey(account: account) {
                     Button(action: close) {
                         Image(systemName: "xmark").font(.system(size: 10, weight: .bold))
                             .frame(width: 22, height: 22)
@@ -535,7 +555,7 @@ private struct KeyRow: View {
         let key = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return }
         do {
-            try setup.store(key: key, for: provider)
+            try setup.store(key: key, account: account)
             problem = nil
             close()
         } catch {
@@ -550,7 +570,7 @@ private struct KeyRow: View {
     }
 }
 
-private struct FieldRow: View {
+struct FieldRow: View {
     let label: String
     @Binding var text: String
     let prompt: String

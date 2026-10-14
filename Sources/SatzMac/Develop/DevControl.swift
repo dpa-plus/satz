@@ -5,7 +5,8 @@ import SatzKit
 ///
 /// Only listens when launched with `--dev-control <state file>`. Commands
 /// arrive as distributed notifications named `plus.dpa.satz.dev`, with the
-/// command as the object: `press`, `release`, `mic`, `discard`, `undo`,
+/// command as the object, prefixed with `@<state file>|` to reach one copy
+/// only: `press`, `release`, `mic`, `discard`, `undo`,
 /// `caret:<index>` (as if clicked there), `field` (logs where the focused
 /// text field is), `dump`, which writes the card's
 /// phase and text to the state file, `picture`, which saves the live
@@ -16,9 +17,15 @@ import SatzKit
 /// `settings`, `setup`, `history`, `menu` and `close` for satz's own windows,
 /// `download:<model>`, `cancel:<model>`, `measure:<model>`, `use:<model>`
 /// and `local:<model>` for a model on this Mac (its download, stopping it,
-/// its speed test, dictating with it, its state), and `quit`, which quits
-/// the way the menu does. Downloads need `--models-dir <folder>`: a test
-/// never fills or empties the user's own models folder.
+/// its speed test, dictating with it, its state), `cleanup:on`, `cleanup:off`,
+/// `cleanup-level:<id>`, `cleanup-provider:<id>` (the one in use, and then
+/// the one shown), `cleanup-model:<id>` and `cleanup-address:<url>` (for the
+/// provider shown) and `cleanup-try` (Ausprobieren with the sample, into
+/// `dump`'s `cleanupTry`; a bad argument is logged and ignored), and `quit`,
+/// which quits the way the menu does. Downloads need `--models-dir <folder>`:
+/// a test never fills or empties the user's own models folder. Cleanup goes
+/// only to this computer (a stand-in server, Apple's model) unless the copy is
+/// started with `--test-cleanup-remote`: the key files are the real satz's.
 @MainActor
 final class DevControl {
 
@@ -27,6 +34,8 @@ final class DevControl {
     private let stateFile: URL
     private var observer: NSObjectProtocol?
     private var delivered: [String] = []
+    /// Commands came addressed to this copy (`@<state file>|…`).
+    private var addressed = false
     /// The eye button, from the app's preferences.
     var toggleEye: () -> Void = {}
     /// Opens satz's own windows: "settings", "setup", "menu"; "close" closes them.
@@ -35,6 +44,10 @@ final class DevControl {
     var spoken: () -> Language = { .german }
     /// What clicking one of "Your models" does: the model, and Lokal, in use.
     var use: (String) -> Void = { _ in }
+    /// For the cleanup commands. A test copy never calls a real provider
+    /// unless the test points it at one: the commands are how it does.
+    var preferences: Preferences?
+    var cleanups: CleanupStore?
 
     init(session: Session, card: CardController, stateFile: URL) {
         self.session = session
@@ -56,6 +69,18 @@ final class DevControl {
     }
 
     private func run(_ command: String) {
+        // "@<state file>|press" is for this copy only: a command goes to
+        // every test copy listening, and two at once drove each other.
+        // Once a script talks to it that way, it takes nothing else: another
+        // session's `quit` stopped this copy halfway through a test.
+        var command = command
+        if command.hasPrefix("@") {
+            guard let bar = command.firstIndex(of: "|"), command[command.index(after: command.startIndex) ..< bar] == stateFile.path else { return }
+            command = String(command[command.index(after: bar)...])
+            addressed = true
+        } else if addressed {
+            return Log.note("dev: \(command) ignored, this copy takes its own commands only")
+        }
         Log.note("dev: \(command)")
         switch command {
         case "press": session.press()
@@ -87,6 +112,8 @@ final class DevControl {
             } else if command.hasPrefix("use:") {
                 use(String(command.dropFirst(4)))
                 dump()
+            } else if command.hasPrefix("cleanup") {
+                cleanup(command)
             } else if command.hasPrefix("local:") {
                 let model = String(command.dropFirst(6))
                 let local = LocalModels.shared
@@ -97,6 +124,41 @@ final class DevControl {
                 dump()
             }
         }
+    }
+
+    /// A value for the state file, null when there is none.
+    static func json(_ value: Any?) -> Any { value ?? NSNull() }
+
+    /// The cleanup settings, as Settings would change them. A bad argument is
+    /// logged and ignored, the same on Windows and Linux.
+    private func cleanup(_ command: String) {
+        guard let preferences, let cleanups else { return }
+        let parts = command.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+        let name = String(parts[0])
+        let value = parts.count > 1 ? String(parts[1]) : ""
+        // `cleanup-model` and `cleanup-address` are for the provider Settings shows.
+        let shown = cleanups.shown(preferences)
+        switch name {
+        case "cleanup":
+            guard value == "on" || value == "off" else { return Log.note("dev: cleanup takes on or off, ignored") }
+            preferences.cleansText = value == "on"
+        case "cleanup-level":
+            guard let level = CleanupLevel(rawValue: value) else { return Log.note("dev: \(value) is no cleanup level, ignored") }
+            // As choosing it in Settings: the own prompt starts with the level before.
+            preferences.chooseCleanupLevel(level)
+        case "cleanup-provider":
+            guard let provider = CleanupProvider(rawValue: value) else { return Log.note("dev: \(value) is no cleanup provider, ignored") }
+            // The one in use, and the one Settings shows.
+            preferences.cleanupProvider = provider
+            cleanups.looking = nil
+        case "cleanup-model": preferences.setCleanupModel(value, for: shown)
+        case "cleanup-address": preferences.setCleanupAddress(value, for: shown)
+        case "cleanup-try":
+            cleanups.tryOut(CleanupSample.text(for: spoken()), preferences) { [weak self] in self?.dump() }
+        default: return Log.note("dev: unknown cleanup command, ignored")
+        }
+        Log.note("cleanup: \(preferences.cleansText ? "on" : "off"), \(preferences.cleanupLevel.rawValue), \(preferences.cleanupProvider.rawValue) \(cleanups.modelID(preferences.cleanupProvider, preferences))")
+        dump()
     }
 
     /// Toggles the eye and saves a picture every 40 ms while the card
@@ -174,9 +236,44 @@ final class DevControl {
         ]
     }
 
+    /// The state file's `cleanup`: the last dictation's, absent when cleanup was
+    /// off for it. `outcome` is "ok" or a stable code (`CleanupFailure.code`),
+    /// `reason` the localized short reason and absent on "ok", `cleaned` what
+    /// the model answered (also when it was not used, nil when nothing came
+    /// back). The same shape on Windows and Linux.
+    static func cleanupState(_ record: Session.CleanupRecord) -> [String: Any] {
+        var state: [String: Any] = [
+            "outcome": record.outcome,
+            "original": record.original,
+            "cleaned": json(record.cleaned),
+            "provider": json(record.provider),
+            "model": json(record.model),
+            "seconds": json(record.seconds),
+        ]
+        if let failure = record.failure { state["reason"] = failure.short() }
+        return state
+    }
+
+    /// The state file's `cleanupTry`: the keys of `cleanup` (but for `original`),
+    /// `rejected` (the guard threw the answer out) and `dollars`.
+    static func tryState(_ tried: CleanupStore.Tried) -> [String: Any] {
+        var state: [String: Any] = [
+            "provider": tried.provider.rawValue,
+            "model": tried.model,
+            "outcome": tried.result.failure?.code ?? "ok",
+            "cleaned": json(tried.result.cleaned),
+            "rejected": tried.result.failure == .rejected,
+            "seconds": json(tried.result.seconds),
+            "dollars": json(tried.result.dollars),
+        ]
+        if let failure = tried.result.failure { state["reason"] = failure.short() }
+        return state
+    }
+
     private func dump() {
-        let state: [String: Any] = [
+        var state: [String: Any] = [
             "phase": String(describing: session.phase),
+            "cleaning": session.isCleaning,
             "text": session.plainText(),
             "raw": session.text.string,
             "sending": session.inFlight.count,
@@ -184,6 +281,21 @@ final class DevControl {
             "window": card.frameDescription,
             "local": localState(),
         ]
+        if let record = session.lastCleanup { state["cleanup"] = Self.cleanupState(record) }
+        if let preferences {
+            state["cleanupSettings"] = [
+                "on": preferences.cleansText,
+                "level": preferences.cleanupLevel.rawValue,
+                "provider": preferences.cleanupProvider.rawValue,
+                "model": cleanups?.modelID(preferences.cleanupProvider, preferences) ?? "",
+                "address": preferences.cleanupAddress(for: preferences.cleanupProvider),
+            ]
+        }
+        if let tried = cleanups?.tried {
+            state["cleanupTry"] = Self.tryState(tried)
+        } else if cleanups?.trying == true {
+            state["cleanupTry"] = "running"
+        }
         if let data = try? JSONSerialization.data(withJSONObject: state, options: [.prettyPrinted, .sortedKeys]) {
             try? data.write(to: stateFile)
         }
