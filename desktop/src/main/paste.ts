@@ -2,7 +2,7 @@ import { clipboard, ClipboardItem } from 'electron'
 import { execFile } from 'node:child_process'
 import fs from 'node:fs'
 import { de } from '../core/language'
-import { ClipboardHandback, registerHandback, type ClipboardPort } from './clipboardHandback'
+import { ClipboardHandback, isPlainTextForms, isTextAlias, registerHandback, type ClipboardPort } from './clipboardHandback'
 
 /**
  * Puts the transcript where the user was typing: on the clipboard, then
@@ -40,6 +40,8 @@ async function save(): Promise<ClipboardItem[]> {
     for (const type of item.types) {
       try { payload[type] = await item.getType(type) } catch { /* that form is gone already */ }
     }
+    // The system's other names for the same text (Linux lists UTF8_STRING, TARGETS …) are views of text/plain, not content: written back by name they are no use.
+    if (payload['text/plain'] !== undefined) for (const type of Object.keys(payload)) if (isTextAlias(type)) delete payload[type]
     if (Object.keys(payload).length > 0) copies.push(new ClipboardItem(payload as never))
     // Something was there and none of it could be read: not an empty clipboard.
     else if (item.types.length > 0) throw new Error('none of the forms on the clipboard could be read')
@@ -57,7 +59,7 @@ const system: ClipboardPort<ClipboardItem[]> = {
   holdsOnly: async text => {
     // Unreadable: not known to hold just the transcript, so it is left alone.
     const items = await readItems().catch(() => [] as ClipboardItem[])
-    const onlyText = items.length === 1 && items[0].types.every(type => type.startsWith('text/plain'))
+    const onlyText = items.length === 1 && isPlainTextForms(items[0].types)
     return onlyText && (await clipboard.readText()) === text
   },
 }

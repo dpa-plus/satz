@@ -105,4 +105,5 @@ button.trying { display: inline-flex; align-items: center; gap: 8px; }
 .try-result { display: flex; flex-direction: column; gap: 4px; padding: 10px 14px 12px; border-top: 1px solid var(--line); }
 .try-answer { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 .hint-line { color: var(--secondary); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.try-by { overflow-wrap: anywhere; }
 .error-line { color: var(--accent); font-size: 12.5px; }

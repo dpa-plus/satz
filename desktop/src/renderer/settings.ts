@@ -19,7 +19,8 @@ import { LoadAfterBlur } from './deferredLoad'
 type LocalState = { kind: 'missing' | 'preparing' | 'ready' } | { kind: 'downloading'; fraction: number } | { kind: 'failed'; message: string }
 /** What Ollama or LM Studio has installed, and whether it answered. */
 type Installed = { state: 'loading' | 'ok' | 'down'; models: string[] }
-type TryResult = { outcome: string; answer?: string; rejected: boolean; seconds?: number; dollars?: number; cancelled?: boolean }
+/** `provider` and `model`: who answered, from the main process if it says, else from what the page asked for. */
+type TryResult = { outcome: string; answer?: string; rejected: boolean; seconds?: number; dollars?: number; cancelled?: boolean; provider?: string; model?: string }
 interface Replacement { id: string; spoken: string; written: string; isOn: boolean }
 interface Info {
   prefs: {
@@ -89,6 +90,8 @@ let tryText: string | null = null
 let trying = false
 let tryToken = 0
 let tryResult: TryResult | null = null
+/** What the running or shown Try was made from (tryKey), and for whom it asked: the answer is labelled with it. */
+let tryMade: { key: string; provider: CleanupProviderId; model: string } | null = null
 
 const t = (de: string, en: string) => (info.prefs.language === 'de' ? de : en)
 const defaults = Object.fromEntries(Object.entries(providers).map(([provider, { defaultModel }]) => [provider, defaultModel])) as Record<Provider, string>
@@ -407,6 +410,8 @@ function render() {
  * can be looked at and tried before it is switched on.
  */
 function cleanupSection(): HTMLElement {
+  // The page was drawn for another provider, model, level, prompt or sample than the Try was made for.
+  dropStaleTry(false)
   const p = info.prefs
   const c = info.cleanup
   const language = p.language
@@ -423,8 +428,10 @@ function cleanupSection(): HTMLElement {
   onBox.onchange = () => update({ cleansText: onBox.checked })
   const toggleBox = el('div', { className: 'box' },
     el('div', { className: 'row' }, el('label', { className: 'switch' }, t('Text aufräumen', 'Clean up the text'), onBox)),
-    el('div', { className: 'hint', textContent: t('Ein Sprachmodell überarbeitet den Text, bevor satz ihn einfügt. Das Original bleibt im Verlauf.',
-      'A language model edits the text before satz pastes it. The original stays in the history.') }))
+    // The original is kept in the history, so with the history off there is nothing to promise.
+    el('div', { className: 'hint', id: 'cleanup-original-note', textContent: t('Ein Sprachmodell überarbeitet den Text, bevor satz ihn einfügt. ', 'A language model edits the text before satz pastes it. ')
+      + ((p.historyLimit ?? 50) === 0 ? t('Der Verlauf ist aus: das Original wird nicht aufbewahrt.', 'History is off: the original is not kept.')
+        : t('Das Original bleibt im Verlauf.', 'The original stays in the history.')) }))
   const missing = p.cleansText
     ? cleanupMissing(needsOf(c.inUse, c.inUseHasKey, c.inUse === provider ? c.installed : c.inUseInstalled), p.cleanupLevel === 'custom' && !(promptDraft ?? p.cleanupPrompt).trim(), language)
     : null
@@ -447,7 +454,7 @@ function cleanupSection(): HTMLElement {
   if (p.cleanupLevel === 'custom') {
     const editor = el('textarea', { id: 'cleanup-prompt', className: 'prompt-editor', value: promptDraft ?? p.cleanupPrompt, spellcheck: false })
     editor.setAttribute('aria-label', t('Eigener Prompt', 'Own prompt'))
-    editor.oninput = () => { promptDraft = editor.value; savePromptSoon() }
+    editor.oninput = () => { promptDraft = editor.value; savePromptSoon(); dropStaleTry() }
     editor.onblur = () => { void savePrompt() }
     levelBox.append(el('div', { className: 'row prompt-row' }, editor),
       el('div', { className: 'hint', textContent: t('Der diktierte Text wird angehängt, dein Wortschatz auch.', 'The dictated text is added after it, and so is your vocabulary.') }))
@@ -530,7 +537,7 @@ function cleanupSection(): HTMLElement {
     typingCleanupModel = false
     const change = { cleanupModels: { ...p.cleanupModels, [provider]: id } }
     if (redraw) update(change)
-    else satz.invoke('settings:update', change).then(next => { info.prefs = next })
+    else satz.invoke('settings:update', change).then(next => { info.prefs = next; dropStaleTry() })
   }
   const modelField = el('input', { type: 'text', id: 'cleanup-model-id', className: 'grow', value: p.cleanupModels?.[provider] ?? '',
     placeholder: provider === 'azure' ? t('Name der Bereitstellung', 'Deployment name') : entry.defaultModel || t('Modell', 'Model') })
@@ -574,7 +581,7 @@ function tryBox(): HTMLElement {
   const provider = info.cleanup.shown
   const sample = el('textarea', { id: 'cleanup-try', className: 'try-text', rows: 3, value: tryText ?? trySample(info.spokenLanguage), readOnly: trying })
   sample.setAttribute('aria-label', t('Text zum Ausprobieren', 'Text to try'))
-  sample.oninput = () => { tryText = sample.value }
+  sample.oninput = () => { tryText = sample.value; dropStaleTry() }
   const go = el('button', { id: 'cleanup-try-button', className: trying ? 'trying' : '' },
     ...(trying ? [el('span', { className: 'spinner', ariaHidden: 'true' }), t('Abbrechen', 'Cancel')] : [t('Ausprobieren', 'Try')]))
   go.onclick = () => (trying ? cancelTry() : runTry(sample.value, provider))
@@ -582,6 +589,9 @@ function tryBox(): HTMLElement {
   if (tryResult) {
     const result = el('div', { className: 'try-result', id: 'cleanup-try-result' })
     if (tryResult.answer !== undefined) result.append(el('div', { className: 'try-answer', textContent: tryResult.answer }))
+    // Whose answer it is: the page may show another provider or model by now (it is dropped then, but the label is what makes a comparison honest).
+    const by = tryByLine(tryResult)
+    if (by) result.append(el('div', { className: 'hint-line try-by', id: 'cleanup-try-by', textContent: by }))
     if (tryResult.seconds !== undefined) result.append(el('div', { className: 'hint-line', textContent: tryLine(tryResult.seconds, tryResult.dollars, info.prefs.language) }))
     if (tryResult.rejected) {
       result.append(el('div', { className: 'error-line', textContent: t('Verworfen: sah nicht nach deinem Text aus. satz würde das Original einfügen.', 'Rejected: did not look like your text. satz would paste the original.') }))
@@ -611,17 +621,69 @@ function savePromptSoon() {
   if (!promptTimer) promptTimer = setTimeout(() => { promptTimer = null; void savePrompt() }, 1000)
 }
 
+/** "OpenRouter · google/gemini-3.5-flash-lite": the provider and the model that produced the shown result. */
+function tryByLine(result: TryResult): string {
+  const known = result.provider !== undefined && Object.hasOwn(cleanupProviders, result.provider)
+  const name = known ? cleanupProviders[result.provider as CleanupProviderId].name[info.prefs.language] : (result.provider ?? '')
+  return [name, result.model ?? ''].filter(Boolean).join(' · ')
+}
+
+/**
+ * What a Try is made from: the provider shown with its model and address, the
+ * level, the own prompt where that is the level, the vocabulary and the
+ * sample. The models are as chosen, not as resolved: Ollama's first one
+ * arriving later is not a change of what was tried.
+ */
+function tryKey(sample = tryText ?? trySample(info.spokenLanguage)): string {
+  const p = info.prefs
+  const provider = info.cleanup.shown
+  return JSON.stringify([provider, p.cleanupModels?.[provider] ?? '', p.cleanupAddresses?.[provider] ?? '', p.cleanupLevel,
+    p.cleanupLevel === 'custom' ? (promptDraft ?? p.cleanupPrompt) : '', p.words, sample])
+}
+
+/**
+ * The page moved on from what the Try was made for (another provider, model,
+ * address, level, prompt or sample): a Try still running is cancelled, its
+ * answer would be shown under the wrong settings, and a result is taken away.
+ * `draw` false while the page itself is being drawn.
+ */
+function dropStaleTry(draw = true) {
+  if (!tryMade || tryMade.key === tryKey()) return
+  const running = trying
+  tryToken++
+  tryMade = null
+  tryResult = null
+  trying = false
+  if (running) void Promise.resolve(satz.invoke('cleanup:cancel-try')).catch(() => {})
+  if (!draw) return
+  // Only the result goes while the sample is typed in: drawing the box again would take the cursor out of it.
+  if (running) redrawTry()
+  else document.getElementById('cleanup-try-result')?.remove()
+}
+
 async function runTry(text: string, provider: CleanupProviderId) {
   const mine = ++tryToken
-  await savePrompt()
-  trying = true
-  tryResult = null
-  redrawTry()
-  const result = await satz.invoke('cleanup:try', text, provider) as TryResult | null
-  // Cancelled, or another try started meanwhile: this one's answer is not shown.
-  if (mine !== tryToken) return
-  trying = false
-  tryResult = result && !result.cancelled ? result : null
+  try {
+    await savePrompt()
+    // Another click or a change of the page came first.
+    if (mine !== tryToken) return
+    trying = true
+    tryResult = null
+    const p = info.prefs
+    tryMade = { key: tryKey(text), provider, model: chosenModel(provider, p.cleanupModels?.[provider], info.cleanup.installed?.models) }
+    redrawTry()
+    const result = await satz.invoke('cleanup:try', text, provider) as TryResult | null
+    // Cancelled, or another try started meanwhile: this one's answer is not shown.
+    if (mine !== tryToken) return
+    trying = false
+    tryResult = result && !result.cancelled ? { ...result, provider: result.provider ?? tryMade.provider, model: result.model ?? tryMade.model } : null
+    if (!tryResult) tryMade = null
+  } catch {
+    // The app could not answer (its handler threw): the box must not stay busy with a Cancel button and no word.
+    if (mine !== tryToken) return
+    trying = false
+    tryResult = { outcome: t('Das Ausprobieren ist fehlgeschlagen.', 'Trying it failed.'), rejected: false }
+  }
   redrawTry()
   // Its time is a measurement now: the facts line may change.
   loadWhenFree()
@@ -630,7 +692,8 @@ async function runTry(text: string, provider: CleanupProviderId) {
 function cancelTry() {
   tryToken++
   trying = false
-  void satz.invoke('cleanup:cancel-try')
+  tryMade = null
+  void Promise.resolve(satz.invoke('cleanup:cancel-try')).catch(() => {})
   redrawTry()
 }
 

@@ -1,12 +1,12 @@
 import { satz } from './bridge'
-import { Microphone } from './microphone'
+import { recordFor } from './microphone'
 
 /**
  * The card: text on top, under it one row with the waveform up to the
  * buttons at the right. The window around it is fixed; the card grows to the
  * left and upward inside it, so the buttons never move from under the mouse.
  */
-type Phase = { kind: string; message?: string; canRetry?: boolean; canRestore?: boolean; cleaning?: boolean; reason?: string }
+type Phase = { kind: string; message?: string; canRetry?: boolean; canRestore?: boolean; cleaning?: boolean; reason?: string; lost?: boolean }
 interface State {
   phase: Phase
   runs: { text: string; seg: number; mark: number }[]
@@ -40,7 +40,9 @@ function render() {
   const k = phase.kind
   const canHoldText = !['idle', 'discarded', 'clipboard', 'notCleaned'].includes(k)
   const showsText = state.showsText && state.hasRealText && canHoldText
-  const statusOnly = !showsText && !['idle', 'starting', 'listening', 'paused'].includes(k)
+  // Paused because the microphone went away: a status to read, not a wave.
+  const lost = k === 'paused' && phase.lost === true
+  const statusOnly = !showsText && (lost || !['idle', 'starting', 'listening', 'paused'].includes(k))
 
   // For screen readers: the language the card speaks.
   document.documentElement.lang = state.language
@@ -75,7 +77,11 @@ function render() {
   // Left of the buttons: the wave, or what is going on.
   middle.replaceChildren()
   const label = (s: string) => { const el = document.createElement('span'); el.textContent = s; middle.append(el) }
-  if (['idle', 'starting', 'listening', 'paused'].includes(k)) {
+  if (lost) {
+    // Recorded so far is kept; Weitersprechen opens the microphone there is now.
+    const warning = document.createElement('span'); warning.className = 'warning'; warning.innerHTML = icons.warning
+    middle.append(warning); label(words('Mikrofon getrennt', 'Microphone lost'))
+  } else if (['idle', 'starting', 'listening', 'paused'].includes(k)) {
     if (k === 'paused') label(words('Pausiert', 'Paused'))
     const wave = document.createElement('div')
     wave.className = 'wave' + (k === 'listening' ? '' : ' dim')
@@ -211,9 +217,9 @@ class Tap extends AudioWorkletProcessor {
 }
 registerProcessor('satz-tap', Tap)`
 
-const microphone = new Microphone({
+recordFor(satz, {
   getUserMedia: () => navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false } }),
-  async openTap(onChunk) {
+  async openTap(onChunk, onFailed) {
     const context = new AudioContext({ sampleRate: 16_000 })
     const url = URL.createObjectURL(new Blob([worklet], { type: 'application/javascript' }))
     try {
@@ -226,28 +232,26 @@ const microphone = new Microphone({
     }
     const node = new AudioWorkletNode(context, 'satz-tap')
     node.port.onmessage = message => onChunk(message.data as Float32Array)
+    // The audio system can end the context by itself (its device went away,
+    // a render error): from then on no audio comes, though the track lives.
+    let closing = false
+    const failed = () => { if (!closing) onFailed() }
+    context.onstatechange = () => { if (context.state === 'closed') failed() }
+    context.addEventListener('error', failed)
+    node.onprocessorerror = failed
     return {
       connect: stream => { context.createMediaStreamSource(stream).connect(node) },
-      close: () => { node.port.onmessage = null; context.close().catch(() => {}) },
+      close: () => { closing = true; node.port.onmessage = null; context.close().catch(() => {}) },
     }
   },
-}, chunk => satz.send('rec:chunk', chunk))
-
-satz.on('rec:start', async (id: number) => {
-  try {
-    // Not answered when it was stopped meanwhile: the main process stopped waiting.
-    if (await microphone.start()) satz.send('rec:started', id)
-  } catch (error) {
-    const name = (error as Error).name
-    // In the card's language, never Chromium's English.
-    const message = name === 'NotFoundError' || name === 'OverconstrainedError' ? words('Kein Mikrofon', 'No microphone')
-      : name === 'NotAllowedError' || name === 'SecurityError' ? words('Mikrofon nicht erlaubt', 'Microphone not allowed')
-      : name === 'NotReadableError' || name === 'AbortError' ? words('Mikrofon belegt', 'Microphone in use')
-      : words('Mikrofon geht nicht', 'Microphone not working')
-    satz.send('rec:started', id, message)
-  }
+}, error => {
+  const name = (error as Error)?.name
+  // In the card's language, never Chromium's English.
+  return name === 'NotFoundError' || name === 'OverconstrainedError' ? words('Kein Mikrofon', 'No microphone')
+    : name === 'NotAllowedError' || name === 'SecurityError' ? words('Mikrofon nicht erlaubt', 'Microphone not allowed')
+    : name === 'NotReadableError' || name === 'AbortError' ? words('Mikrofon belegt', 'Microphone in use')
+    : name === 'MicrophoneLost' ? words('Mikrofon getrennt', 'Microphone lost')
+    : words('Mikrofon geht nicht', 'Microphone not working')
 })
-
-satz.on('rec:stop', () => microphone.stop())
 
 satz.send('card:ready')

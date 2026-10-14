@@ -38,6 +38,38 @@ export class ClipboardBackupError extends Error {
   }
 }
 
+/**
+ * The other names plain text goes by on the X11 and Wayland clipboards: the
+ * old text targets, and the protocol's own bookkeeping targets, which every
+ * selection lists and which carry no content of their own.
+ */
+const textAliases = new Set(['text', 'string', 'utf8_string', 'compound_text', 'targets', 'timestamp', 'multiple', 'save_targets'])
+
+/** A native form Electron has no MIME type for is listed as `electron application/osclipboard;format="<native name>"`. */
+const nativeForm = /^electron application\/osclipboard;format="(.*)"$/i
+
+const isTextForm = (name: string) => /^text\/plain(;.*)?$/i.test(name) || textAliases.has(name.toLowerCase())
+const namesText = (type: string) => isTextForm(type) || isTextForm(nativeForm.exec(type)?.[1] ?? '')
+
+/**
+ * Whether an item's forms are all plain text. On Linux Electron lists the text
+ * it writes as `text/plain` and also under the selection's names (UTF8_STRING,
+ * TARGETS, TIMESTAMP, text/plain;charset=utf-8, wrapped as
+ * `electron application/osclipboard;format="…"`), and a check for "text/plain"
+ * alone took that for something the user had copied: the picture that was on
+ * the clipboard before the dictation never came back (Ubuntu, Codex's third
+ * pass). Anything that is not text, HTML, an image or a file list included,
+ * still counts as the user's own copy.
+ */
+export function isPlainTextForms(types: readonly string[]): boolean {
+  return types.every(namesText)
+}
+
+/** A form that only names the text `text/plain` already carries: a view of it, made again by the system when the text is written. */
+export function isTextAlias(type: string): boolean {
+  return type !== 'text/plain' && namesText(type)
+}
+
 export interface Timers { set(run: () => void, ms: number): unknown; clear(handle: unknown): void }
 
 interface Burst<Saved> { original: Saved; text: string; timer: unknown }

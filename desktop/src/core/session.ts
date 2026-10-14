@@ -19,7 +19,8 @@ export type Phase =
   | { kind: 'idle' }
   | { kind: 'starting' }
   | { kind: 'listening' }
-  | { kind: 'paused' }
+  /** `lost`: the microphone went away while listening ("Mikrofon getrennt"); what it recorded is kept. */
+  | { kind: 'paused'; lost?: boolean }
   /** `cleaning`: the text is with the cleanup model ("Räumt auf"). */
   | { kind: 'finishing'; cleaning?: boolean }
   /** `canRestore`: the text is kept as a snapshot and the card can bring it back (a delivery that threw). */
@@ -41,6 +42,12 @@ export interface AudioSource {
   finishSamples(): Promise<Float32Array | null>
   cancel(): void
   onLevel?: (level: number) => void
+  /**
+   * The microphone went away by itself (unplugged, the audio system failed).
+   * The source ends where it did: sampleCount stops there, and finishSamples
+   * returns everything up to it.
+   */
+  onLost?: () => void
 }
 
 export interface SessionDeps {
@@ -62,8 +69,13 @@ export interface SessionDeps {
   deliver(text: string, cleanup?: CleanupOutcome): Promise<{ pasted: boolean; reason?: string }>
   /** Cleanup is on: the text goes to the cleanup model before it is pasted. */
   cleansText?(): boolean
-  /** The cleaned text, or the original with the reason it stayed so ('ok' otherwise). Never throws. */
-  cleanup?(text: string): Promise<{ text: string; outcome: 'ok' | string }>
+  /**
+   * The cleaned text, or the original with the reason it stayed so ('ok'
+   * otherwise). Never throws. `signal` aborts once nobody waits for the
+   * answer (thrown away, or another dictation began): the request stops, and
+   * a late answer neither costs more nor counts as a measurement.
+   */
+  cleanup?(text: string, signal: AbortSignal): Promise<{ text: string; outcome: 'ok' | string }>
   log?(message: string): void
   /** Sample rate of everything the sources produce. */
   sampleRate?: number
@@ -127,6 +139,8 @@ export class Session {
   private sendGen = 0
   private tailing = new Set<number>()
   private tails: Promise<void>[] = []
+  /** The cleanup under way, stopped with everything else. */
+  private cleaning: AbortController | null = null
   private stopping: Held[] = []
   private sessionToken = 0
   private startToken = 0
@@ -363,6 +377,7 @@ export class Session {
     this.changed()
     const source = this.deps.makeSource()
     source.onLevel = level => this.push(level)
+    source.onLost = () => this.lost(source)
     source.start().then(() => {
       // Thrown away while starting: close the microphone that just opened.
       if (mine !== this.startToken || this.phase.kind !== 'starting') { source.cancel(); return }
@@ -383,11 +398,12 @@ export class Session {
     })
   }
 
-  private pause() {
+  /** `lost`: the microphone went away, and the card says so. */
+  private pause(lost = false) {
     const source = this.source, id = this.activeID
     if (this.phase.kind !== 'listening' || !source || !id) return
     this.source = null
-    this.phase = { kind: 'paused' }
+    this.phase = lost ? { kind: 'paused', lost: true } : { kind: 'paused' }
     this.levels = this.levels.map(() => 0)
     const start = this.liveStart, token = this.sessionToken
     this.tailing.add(id)
@@ -405,6 +421,26 @@ export class Session {
       this.removeMarkerIfDone(id)
       this.changed()
     })())
+  }
+
+  /**
+   * The microphone went away while recording. Listening on, the card showed a
+   * recording that heard nothing, and finishing sent only the words from
+   * before without a word about the rest. Now the dictation pauses with what
+   * was recorded and says so: Weitersprechen opens the microphone there is
+   * now, finishing sends what there is. In a pause's tail the recording just
+   * ends there, and the paused card says why.
+   */
+  private lost(source: AudioSource) {
+    if (source === this.source && this.phase.kind === 'listening') {
+      this.log('microphone lost while listening')
+      return this.pause(true)
+    }
+    if (this.phase.kind === 'paused' && !this.phase.lost && this.stopping.some(held => held.source === source)) {
+      this.log('microphone lost in a pause')
+      this.phase = { kind: 'paused', lost: true }
+      this.changed()
+    }
   }
 
   private resume() {
@@ -489,12 +525,17 @@ export class Session {
     this.phase = { kind: 'finishing', cleaning: true }
     this.changed()
     let result: { text: string; outcome: string }
+    const controller = new AbortController()
+    this.cleaning = controller
     try {
-      result = await this.deps.cleanup!(output)
+      result = await this.deps.cleanup!(output, controller.signal)
     } catch (error) {
       // Never lose the words: whatever went wrong, the original goes out.
-      this.log(`cleanup failed: ${(error as Error)?.name ?? 'error'}`)
+      // Called off here (thrown away): no failure to tell of.
+      if (!controller.signal.aborted) this.log(`cleanup failed: ${(error as Error)?.name ?? 'error'}`)
       result = { text: output, outcome: de('Anbieter-Fehler', 'Provider error') }
+    } finally {
+      if (this.cleaning === controller) this.cleaning = null
     }
     const text = result.outcome === 'ok' && result.text.trim() !== '' ? result.text : output
     return { text, cleanup: { original: output, outcome: result.outcome } }
@@ -748,6 +789,9 @@ export class Session {
     this.source = null
     for (const running of this.sends.values()) running.controller.abort()
     this.sends.clear()
+    // Thrown away while it was cleaned up: its request stops there, the answer would be dropped anyway.
+    this.cleaning?.abort()
+    this.cleaning = null
     this.tails = []
     this.tailing.clear()
     this.stopping = []

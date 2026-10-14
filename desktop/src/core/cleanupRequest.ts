@@ -1,5 +1,6 @@
 import { characters, cleanAnswer, conversation, guard, levelFactor, tokens, type CleanupLevel, type CleanupReason } from './cleanup'
 import { catalogModel, cleanupProviders, isOnThisComputer, modelSeconds, type CatalogModel, type CleanupProviderId } from './cleanupProviders'
+import { RedirectRefused } from './redirect'
 
 /**
  * The three request shapes cleanup speaks: OpenAI's chat completions (and
@@ -193,46 +194,98 @@ export function withoutRefused(request: Request, message: string, dropped: Set<s
 /** `truncated`: the answer hit max_tokens, so its end is missing (thinking models spend the same budget on their thinking). */
 export interface Parsed { text: string; refused: boolean; truncated: boolean; inputTokens?: number; outputTokens?: number; dollars?: number }
 
-const joinText = (parts: unknown) => Array.isArray(parts)
-  ? parts.map(part => (typeof part === 'string' ? part : typeof (part as { text?: unknown })?.text === 'string' ? (part as { text: string }).text : '')).join('')
-  : typeof parts === 'string' ? parts : ''
-
 const count = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : undefined)
 
-/** The text of an answer; undefined for one that is none of the shapes. */
+const isObject = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value)
+
+/**
+ * The text of OpenAI's `content`: a string, a list of strings and parts, or
+ * nothing. Undefined for any other shape, which is not an answer.
+ */
+function joinText(content: unknown): string | undefined {
+  if (content == null) return ''
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return undefined
+  let text = ''
+  for (const part of content) {
+    if (typeof part === 'string') { text += part; continue }
+    if (!isObject(part)) return undefined
+    if (part.text != null && typeof part.text !== 'string') return undefined
+    text += part.text ?? ''
+  }
+  return text
+}
+
+/** The finishReasons with which Gemini holds an answer back instead of finishing it: filters, a block list, personal data, a quote. */
+const geminiBlocks = new Set(['SAFETY', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII', 'RECITATION'])
+
+/**
+ * The text of an answer; undefined for one that is none of the shapes. Every
+ * list and object on the way is checked: a 200 whose `parts` was an object
+ * threw "filter is not a function" out of the parser, past everything that
+ * turns a failed cleanup into the original text (Codex's third pass).
+ */
 export function parseAnswer(provider: CleanupProviderId, json: unknown): Parsed | undefined {
-  if (!json || typeof json !== 'object') return undefined
+  if (!isObject(json)) return undefined
   const family = cleanupProviders[provider].family
   if (family === 'anthropic') {
-    const answer = json as { content?: { type?: string; text?: string }[]; stop_reason?: string; usage?: { input_tokens?: number; output_tokens?: number } }
+    const answer = json as { content?: unknown; stop_reason?: string; usage?: { input_tokens?: number; output_tokens?: number } }
     if (!Array.isArray(answer.content)) return undefined
+    let text = ''
+    for (const item of answer.content) {
+      if (!isObject(item)) return undefined
+      if (item.type !== 'text') continue
+      if (item.text != null && typeof item.text !== 'string') return undefined
+      text += item.text ?? ''
+    }
     return {
-      text: answer.content.filter(item => item?.type === 'text').map(item => item.text ?? '').join(''),
+      text,
       refused: answer.stop_reason === 'refusal',
       truncated: answer.stop_reason === 'max_tokens',
       inputTokens: count(answer.usage?.input_tokens), outputTokens: count(answer.usage?.output_tokens),
     }
   }
   if (family === 'gemini') {
-    const answer = json as { candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] }; finishReason?: string }[]; usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number } }
+    const answer = json as { candidates?: unknown; promptFeedback?: unknown; usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number } }
+    const used = { inputTokens: count(answer.usageMetadata?.promptTokenCount), outputTokens: count(answer.usageMetadata?.candidatesTokenCount) }
+    // A prompt Gemini will not answer comes back without any candidate, the
+    // reason only in promptFeedback: a block, whatever else the body holds.
+    if (isObject(answer.promptFeedback) && answer.promptFeedback.blockReason != null) return { text: '', refused: true, truncated: false, ...used }
     if (!Array.isArray(answer.candidates)) return undefined
     const first = answer.candidates[0]
-    // Parts marked as thought are the model thinking, not its answer.
-    const parts = (first?.content?.parts ?? []).filter(part => part && part.thought !== true)
+    if (first !== undefined && !isObject(first)) return undefined
+    const content = first?.content
+    if (content != null && !isObject(content)) return undefined
+    const parts = content?.parts
+    if (parts != null && !Array.isArray(parts)) return undefined
+    let text = ''
+    for (const part of parts ?? []) {
+      if (!isObject(part)) return undefined
+      // Parts marked as thought are the model thinking, not its answer.
+      if (part.thought === true) continue
+      if (part.text != null && typeof part.text !== 'string') return undefined
+      text += part.text ?? ''
+    }
     return {
-      text: parts.map(part => part.text ?? '').join(''),
-      refused: first?.finishReason === 'SAFETY' || first?.finishReason === 'PROHIBITED_CONTENT',
+      text,
+      // Often with some text: what a filter let through before it stopped is no answer to paste.
+      refused: typeof first?.finishReason === 'string' && geminiBlocks.has(first.finishReason),
       truncated: first?.finishReason === 'MAX_TOKENS',
-      inputTokens: count(answer.usageMetadata?.promptTokenCount), outputTokens: count(answer.usageMetadata?.candidatesTokenCount),
+      ...used,
     }
   }
-  const answer = json as { choices?: { message?: { content?: unknown; refusal?: unknown }; finish_reason?: string }[]; usage?: { prompt_tokens?: number; completion_tokens?: number; cost?: number } }
+  const answer = json as { choices?: unknown; usage?: { prompt_tokens?: number; completion_tokens?: number; cost?: number } }
   if (!Array.isArray(answer.choices)) return undefined
-  const message = answer.choices[0]?.message
+  const choice = answer.choices[0]
+  if (choice !== undefined && !isObject(choice)) return undefined
+  const message = choice?.message
+  if (message != null && !isObject(message)) return undefined
+  const text = joinText(message?.content)
+  if (text === undefined) return undefined
   return {
-    text: joinText(message?.content),
+    text,
     refused: typeof message?.refusal === 'string' && message.refusal.trim() !== '',
-    truncated: answer.choices[0]?.finish_reason === 'length',
+    truncated: choice?.finish_reason === 'length',
     inputTokens: count(answer.usage?.prompt_tokens), outputTokens: count(answer.usage?.completion_tokens),
     dollars: count(answer.usage?.cost),
   }
@@ -249,13 +302,56 @@ export function reasonForStatus(status: number, body = ''): CleanupReason {
   return 'refused'
 }
 
-/** The provider's own short words for what went wrong, for the log only: never the body itself. */
+/**
+ * The provider's own words for what went wrong, to read the request it
+ * refused (which field it named). Only read here, never logged or returned:
+ * they can echo the dictation and the key back.
+ */
 export function providerMessage(body: string): string {
   try {
     const json = JSON.parse(body)
     const message = json?.error?.message ?? json?.message ?? json?.error
     return typeof message === 'string' ? message.slice(0, 200) : ''
   } catch { return '' }
+}
+
+/**
+ * What of an error answer may go into the log: its `type`, `code` and
+ * `status`, as `type=…, code=…`, and only when each is a short token (no
+ * spaces, so no sentence that echoes the dictation) that does not contain the
+ * key. The message, params and details are left out whatever they hold.
+ */
+export function providerDetail(body: string, key: string | null = null): string {
+  let error: unknown
+  try { error = (JSON.parse(body) as { error?: unknown } | null)?.error } catch { return '' }
+  if (!isObject(error)) return ''
+  const fields: string[] = []
+  for (const name of ['type', 'code', 'status']) {
+    const value = error[name]
+    if (typeof value !== 'string' && typeof value !== 'number') continue
+    const token = String(value)
+    if (!/^[A-Za-z0-9_.:-]{1,64}$/.test(token)) continue
+    if (key && key.length >= 8 && token.includes(key)) continue
+    fields.push(`${name}=${token}`)
+  }
+  return fields.join(', ')
+}
+
+/**
+ * What of a failed request may go into the log: the kind of error and its
+ * system code (ECONNREFUSED …), never its message. fetch quotes the header
+ * it refused, key included, and a proxy's error page may say anything. A
+ * refused redirect says why in words of its own (core/redirect.ts).
+ */
+export function transportDetail(error: unknown): string {
+  if (error instanceof RedirectRefused) return error.message
+  const name = error instanceof Error && /^[A-Za-z]{1,40}$/.test(error.name) ? error.name : 'Error'
+  const codeOf = (value: unknown) => {
+    const code = (value as { code?: unknown } | null)?.code
+    return typeof code === 'string' && /^[A-Z0-9_]{2,40}$/.test(code) ? code : ''
+  }
+  const code = codeOf(error) || codeOf((error as { cause?: unknown } | null)?.cause)
+  return code ? `${name} ${code}` : name
 }
 
 // MARK: - Running it
@@ -276,7 +372,8 @@ export function cleanupTimeout(job: Pick<CleanupJob, 'provider' | 'base' | 'mode
 
 export type CleanupResult =
   | { kind: 'cleaned'; text: string; answer: string; changed: boolean; seconds: number; inputTokens?: number; outputTokens?: number; dollars?: number }
-  | { kind: 'failed'; reason: CleanupReason; status?: number; message?: string; answer?: string; seconds?: number }
+  /** `detail`: for the log only, never free text from the network or the provider (providerDetail, transportDetail). */
+  | { kind: 'failed'; reason: CleanupReason; status?: number; detail?: string; answer?: string; seconds?: number }
 
 type Fetch = (url: string, init: { method: string; headers: Record<string, string>; body: string; signal: AbortSignal }) => Promise<Response>
 
@@ -287,7 +384,7 @@ type Fetch = (url: string, init: { method: string; headers: Record<string, strin
  */
 export async function runCleanup(job: CleanupJob, fetcher: Fetch, options: { timeout?: number; signal?: AbortSignal; now?: () => number } = {}): Promise<CleanupResult> {
   // Cancelled before it started (a Try cancelled while Ollama listed its models): an abort listener never fires for that.
-  if (options.signal?.aborted) return { kind: 'failed', reason: 'unreachable', message: 'cancelled' }
+  if (options.signal?.aborted) return { kind: 'failed', reason: 'unreachable', detail: 'cancelled' }
   // The model gets the text without the line breaks and spaces at its ends and
   // the guard judges that; the breaks the dictation began or ended with come
   // back on the answer (cleanAnswer). The Mac does the same.
@@ -303,12 +400,14 @@ export async function runCleanup(job: CleanupJob, fetcher: Fetch, options: { tim
   options.signal?.addEventListener('abort', cancel)
   const broken = (error: unknown): CleanupResult => {
     if (timedOut) return { kind: 'failed', reason: 'tooSlow' }
-    return { kind: 'failed', reason: 'unreachable', message: (error as Error)?.message?.slice(0, 200) }
+    return { kind: 'failed', reason: 'unreachable', detail: transportDetail(error) }
   }
   try {
     let request = buildRequest(sent)
     const dropped = new Set<string>()
     for (;;) {
+      // Cancelled while a 400 was being read: the request it asks for is not sent.
+      if (options.signal?.aborted) return { kind: 'failed', reason: 'unreachable', detail: 'cancelled' }
       let response: Response, body: string
       try {
         response = await fetcher(request.url, { method: 'POST', headers: request.headers, body: JSON.stringify(request.body), signal: deadline.signal })
@@ -319,11 +418,13 @@ export async function runCleanup(job: CleanupJob, fetcher: Fetch, options: { tim
         const next = withoutRefused(request, message, dropped, sent.text)
         if (next) { request = next; continue }
       }
-      if (response.status < 200 || response.status >= 300) return { kind: 'failed', reason: reasonForStatus(response.status, body), status: response.status, message: providerMessage(body) }
+      if (response.status < 200 || response.status >= 300) return { kind: 'failed', reason: reasonForStatus(response.status, body), status: response.status, detail: providerDetail(body, job.key) }
       let json: unknown
-      try { json = JSON.parse(body) } catch { return { kind: 'failed', reason: 'providerError', status: response.status, message: 'unreadable answer' } }
-      const parsed = parseAnswer(job.provider, json)
-      if (!parsed) return { kind: 'failed', reason: 'providerError', status: response.status, message: 'unreadable answer' }
+      try { json = JSON.parse(body) } catch { return { kind: 'failed', reason: 'providerError', status: response.status, detail: 'unreadable answer' } }
+      // Never throws: a shape the checks missed is an unreadable answer, and the dictation goes on as it was said.
+      let parsed: Parsed | undefined
+      try { parsed = parseAnswer(job.provider, json) } catch { parsed = undefined }
+      if (!parsed) return { kind: 'failed', reason: 'providerError', status: response.status, detail: 'unreadable answer' }
       const seconds = elapsed()
       if (parsed.refused) return { kind: 'failed', reason: 'answerRefused', seconds }
       const answer = cleanAnswer(parsed.text, original)

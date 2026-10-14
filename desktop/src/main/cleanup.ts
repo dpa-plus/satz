@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { reasonCode, reasonText, worthCleaning, type CleanupLevel, type CleanupReason } from '../core/cleanup'
+import { de } from '../core/language'
 import { addSample, measurementKey, runDollars, modelFacts, type Price, type Sample } from '../core/cleanupEstimate'
 import { catalogModel, chosenModel, cleanupBase, cleanupProviders, isOnThisComputer, type CleanupProviderId } from '../core/cleanupProviders'
 import { runCleanup, type CleanupJob, type ReasoningFacts } from '../core/cleanupRequest'
@@ -44,7 +45,7 @@ export interface CleanupRun {
   text: string
   /** "ok" or the short reason in the language of the page, as the history keeps it. */
   outcome: 'ok' | string
-  /** "ok" or the stable word for the reason (no-key, too-slow, refused-422 …): the same list as the Mac, for the test mode's state. */
+  /** "ok" or the stable word for the reason (no-key, too-slow, refused-422 …): the same list as the Mac, for the test mode's state. "aborted": the caller cancelled it. */
   code: 'ok' | string
   reason?: CleanupReason
   /** The model's answer, also when the guard threw it out ("Ausprobieren" shows it). */
@@ -103,14 +104,21 @@ export class Cleaner {
    * One cleanup, for a dictation or for "Ausprobieren" (`provider` is then
    * the one Settings shows). Never throws: whatever fails, the original
    * comes back with the reason. Never logs the text or the key.
+   *
+   * With a `signal` that is aborted, before or during the run, nothing more is
+   * sent, no measurement is kept, and the original comes back with the code
+   * "aborted": the dictation it belonged to was thrown away, and a late
+   * answer is neither used nor timed.
    */
   async run(text: string, options: { provider?: CleanupProviderId; signal?: AbortSignal; trying?: boolean } = {}): Promise<CleanupRun> {
     const settings = this.deps.settings(options.provider)
     const { provider } = settings
     const entry = cleanupProviders[provider]
     const base = cleanupBase(provider, settings.address)
+    // Before anything is asked for: choosing the model of Ollama or LM Studio starts a list request.
+    if (options.signal?.aborted) return this.aborted(text, provider, settings.model, options.trying === true)
     let model = chosenModel(provider, settings.model, base && entry.lists ? this.installedAt(provider, base).models : [])
-    const finish = (run: CleanupRun) => this.finish(run, text, options.trying === true)
+    const finish = (run: CleanupRun) => options.signal?.aborted ? this.aborted(text, provider, model, options.trying === true) : this.finish(run, text, options.trying === true)
     const failed = (reason: CleanupReason): CleanupRun => ({ text, outcome: reasonText(reason), code: reasonCode(reason), reason, rejected: false, provider, model })
     if (!worthCleaning(text)) return finish({ text, outcome: 'ok', code: 'ok', rejected: false, provider, model })
     // What is missing, in the Mac's order: the prompt, the key, the address, the model.
@@ -120,6 +128,7 @@ export class Cleaner {
     if (!base) return finish(failed('noAddress'))
     // Ollama and LM Studio without a model chosen: the first one there, asked now if not known yet.
     if (!model && entry.lists) model = (await this.listInstalled(provider, base))[0] ?? ''
+    if (options.signal?.aborted) return finish(failed('unreachable'))
     if (!model) return finish(failed('noModel'))
     if (this.deps.onlyThisComputer && !isOnThisComputer(base)) {
       this.deps.log(`cleanup: test mode sends nothing to ${provider}`)
@@ -136,12 +145,20 @@ export class Cleaner {
       run = { text: result.text, outcome: 'ok', code: 'ok', answer: result.answer, rejected: false, seconds: result.seconds, dollars: runDollars(result, price), provider, model }
     } else {
       run = { ...failed(result.reason), outcome: reasonText(result.reason, result.status), code: reasonCode(result.reason, result.status), answer: result.answer, rejected: result.reason === 'rejected', seconds: result.seconds }
-      // The status and the provider's own short words; never the text or the key.
-      if (result.status || result.message) this.deps.log(`cleanup: ${provider} answered ${result.status ?? 'nothing'}${result.message ? `: ${result.message}` : ''}`)
+      // The status and the error's type and code; never the provider's message, which can echo the text or the key (providerDetail).
+      if (result.status || result.detail) this.deps.log(`cleanup: ${provider} answered ${result.status ?? 'nothing'}${result.detail ? `: ${result.detail}` : ''}`)
     }
+    // Cancelled while it ran: whatever came back is not used, and says nothing about how long the model takes.
+    if (options.signal?.aborted) return finish(run)
     // Only a run that got an answer says how long the model takes.
-    if (run.seconds !== undefined && !options.signal?.aborted) this.record(provider, model, { seconds: run.seconds, ...(run.dollars !== undefined ? { dollars: run.dollars } : {}), date: new Date(this.now).toISOString() })
+    if (run.seconds !== undefined) this.record(provider, model, { seconds: run.seconds, ...(run.dollars !== undefined ? { dollars: run.dollars } : {}), date: new Date(this.now).toISOString() })
     return finish(run)
+  }
+
+  /** A cancelled run: the original, nothing kept (not the dictation's `latest`, no time), the lengths in the log. */
+  private aborted(original: string, provider: CleanupProviderId, model: string, trying: boolean): CleanupRun {
+    this.deps.log(`cleanup${trying ? ' (try)' : ''}: ${provider} ${model || '-'}, aborted, ${original.length} characters`)
+    return { text: original, outcome: de('Abgebrochen', 'Cancelled'), code: 'aborted', rejected: false, provider, model }
   }
 
   /** Lengths and times only in the log. */

@@ -6,7 +6,7 @@
  * lists against the channels main.ts and card.ts handle, listen to and send;
  * names only, it does not run a handler).
  */
-export const send = new Set(['card:ready', 'card:button', 'card:caret', 'card:rect', 'card:pointer-inside', 'card:drag', 'rec:started', 'rec:chunk'])
+export const send = new Set(['card:ready', 'card:button', 'card:caret', 'card:rect', 'card:pointer-inside', 'card:drag', 'rec:started', 'rec:chunk', 'rec:lost'])
 export const receive = new Set(['card:state', 'rec:start', 'rec:stop', 'history:changed', 'models:changed', 'local:changed', 'window:page'])
 export const invoke = new Set(['settings:get', 'settings:update', 'settings:store-key', 'settings:open-key-page', 'settings:clear-history', 'settings:start-at-login', 'settings:open-log',
   'history:get', 'history:remove', 'history:copy', 'history:set-limit', 'history:open-settings', 'history:open', 'local:download', 'local:cancel', 'local:measure', 'local:remove',

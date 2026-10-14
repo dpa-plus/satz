@@ -111,6 +111,10 @@ async function start() {
     else waiting.resolve()
   })
   ipcMain.on('rec:chunk', (_e, chunk: Float32Array) => hub.push(chunk))
+  // The card's microphone went away by itself. Told with the start it last
+  // answered: a loss that arrives after a new microphone was asked for is the
+  // old one's, and the new recording goes on.
+  ipcMain.on('rec:lost', (_e, id: number) => { if (id === recordingRequest) hub.lost() })
 
   const delivered: string[] = []
   // The window the text is for: noted when the dictation starts.
@@ -202,7 +206,8 @@ async function start() {
     // `cleanup` is there when the dictation went through the model: the state then shows that run, else none.
     deliver: (text, cleanup) => { cleaner.delivered(cleanup !== undefined); return deliverInto(text, target, cleanup) },
     cleansText: () => store.prefs.cleansText,
-    cleanup: async text => { const run = await cleaner.run(text); return { text: run.text, outcome: run.outcome } },
+    // `signal`: thrown away while cleaning up, so the request stops and its late answer is no measurement.
+    cleanup: async (text, signal) => { const run = await cleaner.run(text, { signal }); return { text: run.text, outcome: run.outcome } },
   })
 
   // The speed of a local model, measured on this computer with a 10 s public
@@ -505,7 +510,8 @@ async function start() {
   ipcMain.handle('cleanup:try', async (_e, text: unknown, asked: unknown) => {
     if (typeof text !== 'string' || !isCleanupProvider(asked)) return null
     const { run, cancelled } = await tryCleanup(text, asked)
-    return { outcome: run.outcome, answer: run.answer ?? (run.outcome === 'ok' ? run.text : undefined), rejected: run.rejected, seconds: run.seconds, dollars: run.dollars, cancelled }
+    // The provider and the model that answered, as the run resolved them (Ollama's first installed model is only known here): the page labels the result with these.
+    return { outcome: run.outcome, answer: run.answer ?? (run.outcome === 'ok' ? run.text : undefined), rejected: run.rejected, seconds: run.seconds, dollars: run.dollars, cancelled, provider: run.provider, model: run.model }
   })
   ipcMain.handle('cleanup:cancel-try', () => { tryRun?.abort(); tryRun = null })
   ipcMain.handle('settings:clear-history', () => { store.clearHistory(); historyChanged() })

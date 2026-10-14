@@ -4,15 +4,16 @@ import type { Foreground } from './foreground'
 
 /**
  * A finished text on its way to where the user was typing: back to the
- * window the dictation started in, then the paste. It lives apart from
- * main.ts so a test can run it (unit tests do not reach main.ts).
+ * window the dictation started in and, where it is known, the text field in
+ * it, then the paste. It lives apart from main.ts so a test can run it (unit
+ * tests do not reach main.ts).
  */
 export interface Outcome { pasted: boolean; reason?: string }
 
 export interface DeliveryDeps {
   /** Test mode: texts are recorded instead of pasted. */
   records: boolean
-  windows: Pick<Foreground, 'restore' | 'isTerminal'>
+  windows: Pick<Foreground, 'restore' | 'restoreField' | 'isTerminal'>
   /** paste.ts: the clipboard, the keystroke, the clipboard back. */
   paste(text: string, keyTap: () => void, keepsOnClipboard: boolean, log: (message: string) => void): Promise<Outcome>
   keyTap(terminal: boolean): void
@@ -59,6 +60,16 @@ export function makeDelivery(deps: DeliveryDeps) {
       deps.log('paste: the window the dictation started in is gone or would not come back')
       done(text, false, cleanup)
       return { pasted: false, reason: de('Auf der Zwischenablage, das Fenster ist nicht mehr da.', 'On the clipboard, the window is gone.') }
+    }
+    // The right window says nothing about the field in it: the user may have
+    // clicked into another one while the text was on its way, or the page
+    // removed it. Ctrl+V then went into the other field, or to a button and
+    // counted as pasted (Codex VM-02). The Mac does the same (Paster.swift).
+    if (window && deps.windows.restoreField && !(await deps.windows.restoreField(window))) {
+      await deps.writeClipboard(text)
+      deps.log('paste: the text field the dictation started in is gone or would not take the keyboard back')
+      done(text, false, cleanup)
+      return { pasted: false, reason: de('Auf der Zwischenablage, das Textfeld ließ sich nicht mehr auswählen.', 'On the clipboard, the text field could not be selected again.') }
     }
     const terminal = window ? await deps.windows.isTerminal(window) : false
     const outcome = await deps.paste(text, () => deps.keyTap(terminal), deps.keepsOnClipboard(), deps.log)
