@@ -109,7 +109,9 @@ public struct CleanupClient: Sendable {
     }
 
     private func send(_ request: URLRequest) async throws -> (Data, Int) {
-        let (data, response) = try await session.data(for: request)
+        // A key travels with it: a redirect to another origin is not followed,
+        // the same as for the transcription (`Transcriber.StaysOnOrigin`).
+        let (data, response) = try await session.data(for: request, delegate: Transcriber.StaysOnOrigin())
         return (data, (response as? HTTPURLResponse)?.statusCode ?? 0)
     }
 

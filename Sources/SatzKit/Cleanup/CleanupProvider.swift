@@ -231,7 +231,9 @@ public enum CleanupAddress {
               let host = parts.host?.lowercased(), !host.isEmpty else { return nil }
         switch scheme {
         case "https": break
-        case "http": guard isThisComputer(host: host) else { return nil }
+        // http only on this computer or the own network, like every address
+        // a key travels to (`ProviderAddress`): an Ollama on the NAS is fine.
+        case "http": guard ProviderAddress.allows(scheme: "http", host: host) else { return nil }
         default: return nil
         }
         var path = parts.percentEncodedPath

@@ -647,14 +647,16 @@ private func plain(_ text: String) -> String { text.replacingOccurrences(of: "\u
         #expect(CleanupCatalog.model("qwen-3.8-27b", for: .cerebras).note(in: .english) == "The fastest.")
     }
 
-    @Test func addressesAreHttpsOrThisComputer() {
+    @Test func addressesAreHttpsOrTheOwnNetwork() {
         #expect(CleanupAddress.url("https://llm.example.org/v1/")?.absoluteString == "https://llm.example.org/v1")
         #expect(CleanupAddress.url("llm.example.org/v1")?.absoluteString == "https://llm.example.org/v1")
         #expect(CleanupAddress.isUsable("http://localhost:11434/v1"))
         #expect(CleanupAddress.isUsable("http://127.0.0.1:8080"))
         #expect(CleanupAddress.isUsable("http://[::1]:1234/v1"))
         #expect(!CleanupAddress.isUsable("http://llm.example.org/v1"))
-        #expect(!CleanupAddress.isUsable("http://192.168.1.20:11434/v1"))
+        // An Ollama on the NAS: http on the own network, like every address a key travels to.
+        #expect(CleanupAddress.isUsable("http://192.168.1.20:11434/v1"))
+        #expect(CleanupAddress.isUsable("http://nas.local:11434/v1"))
         #expect(!CleanupAddress.isUsable("ftp://example.org"))
         #expect(!CleanupAddress.isUsable("   "))
         #expect(CleanupAddress.azureOrigin("https://satz.cognitiveservices.azure.com/openai/deployments/x")?.absoluteString == "https://satz.cognitiveservices.azure.com")
@@ -669,7 +671,8 @@ private func plain(_ text: String) -> String { text.replacingOccurrences(of: "\u
         #expect(CleanupReadiness.missing(.ollama, hasKey: false, address: " ", model: "gemma").isEmpty)
         #expect(CleanupJob(provider: .ollama, model: CleanupCatalog.model("gemma", for: .ollama), address: " ", level: .light)
             .baseURL?.absoluteString == "http://localhost:11434/v1")
-        #expect(CleanupReadiness.missing(.ollama, hasKey: false, address: "http://192.168.1.20:11434/v1", model: "gemma") == [.address])
+        #expect(CleanupReadiness.missing(.ollama, hasKey: false, address: "http://192.168.1.20:11434/v1", model: "gemma").isEmpty)
+        #expect(CleanupReadiness.missing(.ollama, hasKey: false, address: "http://llm.example.org/v1", model: "gemma") == [.address])
         #expect(CleanupReadiness.missing(.ollama, hasKey: false, address: "http://localhost:11434/v1", model: "gemma").isEmpty)
         #expect(CleanupReadiness.missing(.custom, hasKey: false, address: " ", model: "m") == [.address])
         #expect(CleanupReadiness.missing(.apple, hasKey: false, address: "", model: "apple", apple: .notEnabled) == [.apple(.notEnabled)])
@@ -1059,7 +1062,8 @@ func applesModelCleansUpOnThisMac() async {
             ("https://example.com/v1#frag", "https://example.com/v1"),
             ("https://user:pw@example.com/v1", "https://example.com/v1"),
             ("http://llm.example.org/v1", nil),
-            ("http://192.168.1.20:11434/v1", nil),
+            ("http://192.168.1.20:11434/v1", "http://192.168.1.20:11434/v1"),
+            ("http://llm.example.org/v1", nil),
             ("ftp://example.org", nil),
             ("   ", nil),
             ("", nil),
