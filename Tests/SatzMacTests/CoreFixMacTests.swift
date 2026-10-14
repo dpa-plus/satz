@@ -435,7 +435,9 @@ private final class SessionStub: URLProtocol, @unchecked Sendable {
     private let lock = NSLock()
     private var cancelled = false
 
-    override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "provider.test" }
+    /// "mac-mini.local" stands for a model server on the home network: the
+    /// stub answers it, so no test ever sends anything to a real address.
+    override class func canInit(with request: URLRequest) -> Bool { ["provider.test", "mac-mini.local"].contains(request.url?.host) }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
@@ -483,7 +485,7 @@ private final class Dictation {
     var delivered: [String] = []
 
     /// - Parameter clips: what the microphone plays, one per recording.
-    init(clips: [URL], mode: TriggerMode = .tap, model: String = "m", address: String = "http://provider.test/v1",
+    init(clips: [URL], mode: TriggerMode = .tap, model: String = "m", address: String = "https://provider.test/v1",
          script: [(TimeInterval, Int, String)] = []) {
         _ = NSApplication.shared
         // Never the real keys.
@@ -618,6 +620,40 @@ struct SessionTests {
         // next test sets up its own script.
         #expect(await eventually { d.session.inFlight.isEmpty && SessionStub.requests > 0 })
         d.session.discard()
+    }
+
+    @Test func aRedirectThatWasNotFollowedShowsAddressRedirectsOnTheCard() async {
+        // What a refused redirect comes back as (`Transcriber.StaysOnOrigin`):
+        // the 3xx answer. The card reads "Provider error (307)" in no language.
+        let d = Dictation(clips: [clip("redirect1", seconds: 2)], script: [(0, 307, "")])
+        await d.dictate()
+        #expect(await eventually(8) { d.isFailed })
+        guard case .failed(let reason, let canRetry) = d.session.phase else { Issue.record("\(d.session.phase)"); return }
+        #expect(["Adresse leitet um", "Address redirects"].contains(reason), "\(reason)")
+        // Once the address is changed, asking again works.
+        #expect(canRetry)
+    }
+
+    @Test(arguments: [("", ["Adresse fehlt", "Address missing"]), ("http://example.com/v1", ["Adresse geht nicht", "Address won't work"]),
+                      ("ftp://nas/v1", ["Adresse geht nicht", "Address won't work"])])
+    func anAddressThatIsTypedButRefusedIsNotCalledMissingOnTheCard(address: String, words: [String]) async {
+        let d = Dictation(clips: [clip("address2", seconds: 2)], address: address)
+        d.session.press()
+        #expect(await eventually(8) { d.isFailed })
+        guard case .failed(let reason, _) = d.session.phase else { Issue.record("\(d.session.phase)"); return }
+        #expect(words.contains(reason), "\(reason)")
+        // The microphone was never asked for, and nothing was sent.
+        #expect(SessionStub.requests == 0)
+    }
+
+    @Test func aModelServerOnTheHomeNetworkIsAcceptedAndRecordingStarts() async {
+        // Plain http to a name on the home network used to be refused as "address missing".
+        let d = Dictation(clips: [clip("home1", seconds: 2)], address: "http://mac-mini.local:11434/v1",
+                          script: [(0, 200, #"{"text":"Zuhause."}"#)])
+        await d.dictate()
+        #expect(await eventually(8) { !d.delivered.isEmpty }, "\(d.session.phase) after \(SessionStub.requests) requests")
+        #expect(d.delivered == ["Zuhause."])
+        #expect(SessionStub.requests == 1)
     }
 
     @Test func aFailureThatMayPassStillOffersRetry() async {

@@ -281,7 +281,7 @@ final class Preferences {
     var isEndpointMissing: Bool {
         switch provider {
         case .custom: !ProviderReadiness.hasUsableAddress(customBaseURL)
-        case .microsoft: missing(.microsoft, hasKey: true).contains(.address)
+        case .microsoft: missing(.microsoft, hasKey: true).contains { $0.concernsAddress }
         default: false
         }
     }

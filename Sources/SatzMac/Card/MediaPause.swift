@@ -23,6 +23,9 @@ final class MediaPause {
     /// before every Play.
     private var pausedPlayer: Int32?
     private var pausing: Task<Void, Never>?
+    /// Kept until the resume has sent its Play, not only through the grace:
+    /// reading what is current takes a subprocess, and a dictation that starts
+    /// meanwhile has to be able to call the Play off.
     private var resuming: Task<Void, Never>?
 
     func dictationStarted() {
@@ -51,12 +54,15 @@ final class MediaPause {
             // A moment's grace: two dictations in a row did play-pause between them.
             try? await Task.sleep(for: .milliseconds(800))
             guard !Task.isCancelled, let player = pausedPlayer else { return }
+            let read = nowPlaying
+            let current = await Task.detached(priority: .userInitiated) { read() }.value
+            // Back on the main actor, where a dictation starts: a new one
+            // began while the read ran (cancelled), and the music has to stay
+            // paused for it. Nothing can start between this check and the Play.
+            guard !Task.isCancelled else { return }
             pausedPlayer = nil
             resuming = nil
-            let read = nowPlaying, send = send
-            await Task.detached(priority: .userInitiated) {
-                Self.play(player, read: read, send: send)
-            }.value
+            Self.play(player, current: current, send: send)
         }
     }
 
@@ -65,19 +71,19 @@ final class MediaPause {
         resuming?.cancel()
         guard let player = pausedPlayer else { return }
         pausedPlayer = nil
-        guard Self.play(player, read: nowPlaying, send: send) else { return }
+        guard Self.play(player, current: nowPlaying(), send: send) else { return }
         // The command is delivered after the call returns; a process that
         // exits at once never sends it.
         Thread.sleep(forTimeInterval: 0.3)
     }
 
-    /// Plays `player` again if it is still what the system shows, paused. True
-    /// when the command went out.
+    /// Plays `player` again if `state`, what the system showed, says it is
+    /// still current and paused. True when the command went out.
     @discardableResult
-    nonisolated private static func play(_ player: Int32, read: () -> NowPlaying.State?, send: (MediaCommand) -> Void) -> Bool {
+    nonisolated private static func play(_ player: Int32, current state: NowPlaying.State?, send: (MediaCommand) -> Void) -> Bool {
         // Not knowing what is current is not a reason to play: Play goes to
         // whatever is, and that may be something else.
-        guard let state = read() else {
+        guard let state else {
             Log.note("media not resumed, could not read what is current")
             return false
         }

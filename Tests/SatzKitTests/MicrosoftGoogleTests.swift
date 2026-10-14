@@ -120,8 +120,9 @@ private func transcriber(_ settings: Transcriber.Settings, against server: Stand
     #expect(missing(false, "") == [.key])
     #expect(missing(true, "   ") == [])
     #expect(missing(true, "https://mine.cognitiveservices.azure.com") == [])
-    #expect(missing(true, "http://mine.cognitiveservices.azure.com") == [.address])
-    #expect(missing(false, "not an address") == [.key, .address])
+    // Typed and refused is told apart from nothing typed (`.address`): the message says why.
+    #expect(missing(true, "http://mine.cognitiveservices.azure.com") == [.addressRefused])
+    #expect(missing(false, "not an address") == [.key, .addressRefused])
     // Google wants its key and nothing else.
     #expect(ProviderReadiness.missing(.google, hasKey: false, customBaseURL: "", model: "") == [.key])
     #expect(ProviderReadiness.missing(.google, hasKey: true, customBaseURL: "", model: "") == [])
@@ -378,7 +379,8 @@ struct MicrosoftStandInTests {
 
     let httpBody = try #require(request.httpBody)
     let body = try json(httpBody)
-    #expect(Set(body.keys) == ["model", "input", "generation_config"])
+    // `store: false` keeps Google from keeping the recording as an interaction.
+    #expect(Set(body.keys) == ["model", "input", "generation_config", "store"])
     #expect(body["model"] as? String == "gemini-3.5-transcribe")
     let input = try #require(body["input"] as? [[String: Any]])
     #expect(input.count == 1)

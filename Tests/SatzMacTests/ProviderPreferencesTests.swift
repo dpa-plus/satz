@@ -82,8 +82,8 @@ struct ProviderPreferencesTests {
         #expect(!preferences.isEndpointMissing)
         preferences.microsoftEndpoint = "http://insecure.example.org"
         #expect(preferences.isEndpointMissing)
-        #expect(preferences.missing(.microsoft, hasKey: true) == [.address])
-        #expect(preferences.missing(.microsoft, hasKey: false) == [.key, .address])
+        #expect(preferences.missing(.microsoft, hasKey: true) == [.addressRefused])
+        #expect(preferences.missing(.microsoft, hasKey: false) == [.key, .addressRefused])
         preferences.microsoftEndpoint = ""
         #expect(!preferences.isEndpointMissing && preferences.missing(.microsoft, hasKey: true).isEmpty)
         // Google has nothing but its key to miss.
@@ -101,5 +101,17 @@ struct ProviderPreferencesTests {
 
     @Test func aFailedRequestIsSaidInTwoOrThreeWordsForTheNewKeyError() {
         #expect(["Schlüssel oder Region falsch", "Key or region wrong"].contains(Transcriber.Failure.keyOrRegionWrong.short))
+    }
+
+    @Test func aRefusedRedirectIsSaidOnTheCardAsTheAddressAndExplainedInTheLog() {
+        // The card shows `short`; the log gets the explanation (`message`, which
+        // Session writes with "transcription failed").
+        let failure = Transcriber.Failure.redirected
+        #expect(["Adresse leitet um", "Address redirects"].contains(failure.short))
+        #expect(failure.short != failure.message)
+        #expect(failure.message.count > failure.short.count * 2)
+        #expect(!failure.short.contains("\u{2014}") && !failure.message.contains("\u{2014}"))
+        // Not the generic "Provider error (307)" it used to be.
+        #expect(!failure.short.contains("307"))
     }
 }

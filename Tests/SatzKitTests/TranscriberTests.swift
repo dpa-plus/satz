@@ -141,5 +141,7 @@ private func azure(_ json: [String: Any]) -> [String: Any]? {
     let fiveMinutes = Data(count: 44 + 300 * 32_000)
     let request = Transcriber(settings: settings).makeRequest(wav: fiveMinutes, apiKey: "k")
 
-    #expect(request.timeoutInterval == 30 + 75)
+    // A second per two seconds of audio, not per four (F13): the call is held to
+    // this in total, so it has to cover the upload on a slow line.
+    #expect(request.timeoutInterval == 30 + 150)
 }

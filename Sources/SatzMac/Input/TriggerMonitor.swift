@@ -16,25 +16,53 @@ final class TriggerMonitor {
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
 
+    /// What the system says is held down right now, apart from the events the
+    /// tap has seen: the only way to find out about a release that happened
+    /// while the tap was off. Tests replace it.
+    struct Held {
+        var rightCommand: () -> Bool = {
+            // NX_DEVICERCMDKEYMASK, as in `modifierChanged`.
+            CGEventSource.flagsState(.combinedSessionState).rawValue & 0x10 != 0
+        }
+        var mouseButton: (Int) -> Bool = { number in
+            guard let button = CGMouseButton(rawValue: UInt32(number)) else { return false }
+            return CGEventSource.buttonState(.combinedSessionState, button: button)
+        }
+    }
+    private let held: Held
+
     // Double-tap state. Only touched on the main run loop, where the tap runs.
     private var rightCommandDownAt: Date?
     private var lastTapUpAt: Date?
     private var interrupted = false
     private var holding = false
+    /// The trigger's mouse button went down and its release was not seen yet.
+    private var mouseHolding = false
 
     /// A tap is quick. A second tap has to follow the first within this.
     private static let tapLength: TimeInterval = 0.35
     private static let tapGap: TimeInterval = 0.4
 
-    init?(
+    /// Without a tap: events reach `handle` only when the caller passes them.
+    init(
+        trigger: Trigger,
+        held: Held,
+        onPress: @escaping @MainActor () -> Void,
+        onRelease: @escaping @MainActor () -> Void
+    ) {
+        self.trigger = trigger
+        self.held = held
+        self.onPress = onPress
+        self.onRelease = onRelease
+    }
+
+    convenience init?(
         trigger: Trigger,
         onPress: @escaping @MainActor () -> Void,
         onRelease: @escaping @MainActor () -> Void
     ) {
         guard trigger.needsEventTap else { return nil }
-        self.trigger = trigger
-        self.onPress = onPress
-        self.onRelease = onRelease
+        self.init(trigger: trigger, held: Held(), onPress: onPress, onRelease: onRelease)
 
         // Clicks too: two quick ⌘-clicks with the right command key read as two taps.
         let types: [CGEventType] = [.flagsChanged, .keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown, .otherMouseUp]
@@ -67,7 +95,7 @@ final class TriggerMonitor {
     }
 
     /// Runs on the main thread: the tap's source is on the main run loop.
-    private func handle(_ type: CGEventType, _ event: CGEvent) -> Unmanaged<CGEvent>? {
+    func handle(_ type: CGEventType, _ event: CGEvent) -> Unmanaged<CGEvent>? {
         switch type {
         case .tapDisabledByTimeout, .tapDisabledByUserInput:
             // macOS switches a tap off if it is ever slow. Switch it back on.
@@ -76,8 +104,14 @@ final class TriggerMonitor {
             // dictation ran on until some later right-⌘ shortcut ended it.
             lastTapUpAt = nil
             interrupted = true
-            if holding, CGEventSource.flagsState(.combinedSessionState).rawValue & 0x10 == 0 {
+            if holding, !held.rightCommand() {
                 holding = false
+                fire(onRelease)
+            }
+            // The same for a mouse button held to talk: its release is not
+            // coming either, and a click on it would only start a new press.
+            if mouseHolding, case .mouseButton(let number) = trigger, !held.mouseButton(number) {
+                mouseHolding = false
                 fire(onRelease)
             }
         case .flagsChanged:
@@ -90,6 +124,7 @@ final class TriggerMonitor {
             if type == .otherMouseDown { interrupted = true; lastTapUpAt = nil }
             if case .mouseButton(let number) = trigger,
                event.getIntegerValueField(.mouseEventButtonNumber) == Int64(number) {
+                mouseHolding = type == .otherMouseDown
                 fire(type == .otherMouseDown ? onPress : onRelease)
                 return nil  // swallowed: the button belongs to satz now
             }

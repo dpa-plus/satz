@@ -29,6 +29,17 @@ final class Shortcut {
     @ObservationIgnored private var hotKey: HotKey?
     @ObservationIgnored private var monitor: TriggerMonitor?
     @ObservationIgnored private var waiting: Task<Void, Never>?
+    /// The settings window is recording a replacement. Nothing may arm the old
+    /// trigger until `resume`: not the waiter for Accessibility, not a change
+    /// of the preference.
+    @ObservationIgnored private var paused = false
+    /// What the checks need from the system. Tests replace them: the real ones
+    /// want the permission and an event tap.
+    @ObservationIgnored var isTrusted: () -> Bool = { AXIsProcessTrusted() }
+    @ObservationIgnored var makeMonitor: (Trigger, @escaping @MainActor () -> Void, @escaping @MainActor () -> Void) -> TriggerMonitor? = {
+        TriggerMonitor(trigger: $0, onPress: $1, onRelease: $2)
+    }
+    @ObservationIgnored var recheckInterval: Duration = .seconds(2)
     /// The test copy never starts it; recording a trigger in its settings
     /// must not arm one there either.
     @ObservationIgnored private var started = false
@@ -49,12 +60,15 @@ final class Shortcut {
     /// Disarms without forgetting, while the settings window records a new
     /// trigger: pressing the old one there must not start a dictation.
     func pause() {
+        paused = true
         hotKey = nil
         monitor = nil
         waiting?.cancel()
+        waiting = nil
     }
 
     func resume() {
+        paused = false
         guard started else { return }
         arm()
     }
@@ -62,6 +76,7 @@ final class Shortcut {
     // MARK: - Private
 
     private func arm() {
+        guard !paused else { return }
         hotKey = nil
         monitor = nil
         waiting?.cancel()
@@ -83,10 +98,10 @@ final class Shortcut {
                 status = .taken
             }
         case .doubleRightCommand, .mouseButton:
-            monitor = TriggerMonitor(
-                trigger: trigger,
-                onPress: { [weak self] in self?.onPress() },
-                onRelease: { [weak self] in self?.onRelease() }
+            monitor = makeMonitor(
+                trigger,
+                { [weak self] in self?.onPress() },
+                { [weak self] in self?.onRelease() }
             )
             if monitor != nil {
                 status = .armed
@@ -99,10 +114,14 @@ final class Shortcut {
     }
 
     private func waitForAccessibility() {
+        let interval = recheckInterval, isTrusted = isTrusted
         waiting = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(2))
-                if AXIsProcessTrusted() {
+                // A cancelled sleep ends the wait. Carrying on after it armed
+                // the old trigger while the settings window was recording a
+                // replacement, once the permission had come in.
+                do { try await Task.sleep(for: interval) } catch { return }
+                if !Task.isCancelled, isTrusted() {
                     self?.arm()
                     return
                 }

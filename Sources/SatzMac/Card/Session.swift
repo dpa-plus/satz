@@ -405,7 +405,12 @@ final class Session {
         if provider.needsKey {
             guard Secrets.exists(for: provider) else { return Transcriber.Failure.noKey.short }
             // A custom endpoint has neither a default address nor a default model.
-            if preferences.isEndpointMissing { return de("Adresse fehlt", en: "Address missing") }
+            if preferences.isEndpointMissing {
+                // One that is typed is not "missing": it is refused, and the
+                // card should not send the user to type it again.
+                return preferences.missing(provider, hasKey: true).contains(.addressRefused)
+                    ? de("Adresse geht nicht", en: "Address won't work") : de("Adresse fehlt", en: "Address missing")
+            }
             if preferences.isModelMissing { return de("Modell fehlt", en: "Model missing") }
             return nil
         }
@@ -1094,6 +1099,9 @@ extension Transcriber.Failure {
         // With the status: a wrong model (404) and a server fault (500) read alike.
         case .server(let status, _) where status > 0: de("Fehler beim Anbieter (\(status))", en: "Provider error (\(status))")
         case .server: de("Fehler beim Anbieter", en: "Provider error")
+        // The address sent us elsewhere and satz did not follow: the reason is
+        // the address, said as such. The long version is in the log.
+        case .redirected: de("Adresse leitet um", en: "Address redirects")
         case .unreadableResponse: de("Antwort unlesbar", en: "Unreadable answer")
         case .tooLarge: de("Zu lang für den Anbieter", en: "Too long for the provider")
         case .noCredit: de("Kein Guthaben beim Anbieter", en: "No credit left")

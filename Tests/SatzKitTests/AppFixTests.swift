@@ -150,7 +150,8 @@ import Testing
             #expect(!SwitchWording.button(provider, in: language).contains("—"))
         }
     }
-    let needs: [[ProviderReadiness.Need]] = [[.key], [.address], [.model], [.localModel], [.key, .address, .model]]
+    let needs: [[ProviderReadiness.Need]] = [[.key], [.address], [.addressRefused], [.model], [.localModel], [.key, .address, .model],
+                                              [.key, .addressRefused, .model]]
     for list in needs {
         for language in Language.allCases {
             #expect(ProviderReadiness.message(list, in: language)?.contains("—") == false)

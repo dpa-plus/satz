@@ -57,16 +57,24 @@ public enum MicrosoftSpeech {
     }
 
     /// A resource address as Azure shows it (`https://name.cognitiveservices.azure.com`),
-    /// with or without the scheme, reduced to scheme, host and port. https
-    /// only: the key travels in a header.
+    /// with or without the scheme, reduced to scheme, host and port. https,
+    /// because the key travels in a header; http only to an address on one's
+    /// own network (`ProviderAddress`: a stand-in server in a test, a gateway
+    /// at home), as on Windows and Linux. The one reading of the text for
+    /// checking it and for sending to it.
     public static func endpointURL(_ text: String) -> URL? {
         var typed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // No scheme typed: https. "//host" becomes "https:////host", which
+        // has no host and is refused below, like "ftp://host" (its own scheme).
         if !typed.contains("://") { typed = "https://" + typed }
-        guard let url = URL(string: typed), url.scheme?.lowercased() == "https",
-              let host = url.host, host.contains(".") else { return nil }
+        guard let url = URL(string: typed), let scheme = url.scheme?.lowercased(),
+              let host = url.host, !host.isEmpty, ProviderAddress.allows(scheme: scheme, host: host),
+              // A resource has a dotted name; a bare "localhost" over https is a typo.
+              scheme == "http" || host.contains(".") else { return nil }
         var base = URLComponents()
-        base.scheme = "https"
-        base.host = host
+        base.scheme = scheme
+        // URLComponents wants an IPv6 address in its brackets.
+        base.host = host.contains(":") ? "[\(host)]" : host
         base.port = url.port
         return base.url
     }

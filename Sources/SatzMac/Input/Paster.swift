@@ -60,8 +60,12 @@ enum Paster {
         guard bringForward(origin) else {
             return abandon(ours, .clipboardOnly(de("Auf der Zwischenablage, die App ließ sich nicht aktivieren.", en: "On the clipboard, the app could not be brought forward.")))
         }
-        guard bringBack(window: window, field: field, in: origin) else {
+        switch restoreKeyboard(window: window, field: field, in: AppKeyboard(origin)) {
+        case .restored: break
+        case .windowGone:
             return abandon(ours, .clipboardOnly(de("Auf der Zwischenablage, das Fenster ist nicht mehr da.", en: "On the clipboard, the window is gone.")))
+        case .fieldRefused:
+            return abandon(ours, .clipboardOnly(de("Auf der Zwischenablage, das Textfeld ließ sich nicht mehr auswählen.", en: "On the clipboard, the text field could not be selected again.")))
         }
         sendCommandV()
         if keepsOnClipboard {
@@ -181,31 +185,49 @@ enum Paster {
         return true
     }
 
-    /// The window and field the dictation started in, if the user went to
-    /// another window or field of the same app meanwhile. False only when that
-    /// window is gone or will not come forward; apps that do not say where
-    /// their keyboard is are left as they are.
-    private static func bringBack(window: AXUIElement?, field: AXUIElement?, in origin: NSRunningApplication) -> Bool {
-        bringBack(window: window, field: field, in: AppKeyboard(origin))
+    /// What bringing the keyboard back came to.
+    enum Restoration: Equatable {
+        /// The keyboard is where the dictation started, or the app does not say
+        /// where it is and is left as it is.
+        case restored
+        /// The window was closed or will not come forward.
+        case windowGone
+        /// The field would not take the keyboard back, or the app still puts
+        /// it somewhere else. ⌘V would type into the wrong field.
+        case fieldRefused
     }
 
+    /// Whether the keyboard is back in the window and field the dictation
+    /// started in. Apps that do not say where their keyboard is are left as
+    /// they are.
     static func bringBack(window: AXUIElement?, field: AXUIElement?, in keyboard: some KeyboardPlace) -> Bool {
-        guard let window else { return true }
-        guard let now = keyboard.focusedWindow else { return true }
+        restoreKeyboard(window: window, field: field, in: keyboard) == .restored
+    }
+
+    /// Brings the window and field the dictation started in back, if the user
+    /// went to another window or field of the same app meanwhile.
+    static func restoreKeyboard(window: AXUIElement?, field: AXUIElement?, in keyboard: some KeyboardPlace) -> Restoration {
+        guard let window else { return .restored }
+        guard let now = keyboard.focusedWindow else { return .restored }
         if !CFEqual(now, window) {
             // Still there? A closed window answers no more.
-            guard keyboard.exists(window) else { return false }
+            guard keyboard.exists(window) else { return .windowGone }
             keyboard.bringForward(window)
             waitUntil(timeout: 0.5) { keyboard.focusedWindow.map { CFEqual($0, window) } ?? false }
-            guard keyboard.focusedWindow.map({ CFEqual($0, window) }) ?? false else { return false }
+            guard keyboard.focusedWindow.map({ CFEqual($0, window) }) ?? false else { return .windowGone }
         }
         // The right window says nothing about the field in it: the user may
         // have clicked into another one while the text was on its way.
-        if let field, !(keyboard.focusedField.map { CFEqual($0, field) } ?? false) {
-            keyboard.focus(field)
-            waitUntil(timeout: 0.05) { false }
-        }
-        return true
+        guard let field, !(keyboard.focusedField.map { CFEqual($0, field) } ?? false) else { return .restored }
+        // A page that redrew its form has no such field any more, and the
+        // request fails while another field has the keyboard. Asking is not
+        // enough: ⌘V followed into the wrong field.
+        let accepted = keyboard.requestFocus(field)
+        waitUntil(timeout: 0.2) { keyboard.focusedField.map { CFEqual($0, field) } ?? false }
+        if let focused = keyboard.focusedField { return CFEqual(focused, field) ? .restored : .fieldRefused }
+        // The app names no focused field to check against: its answer is all
+        // there is.
+        return accepted ? .restored : .fieldRefused
     }
 
     /// Lets the main run loop go on (activation and window changes arrive on
@@ -289,6 +311,17 @@ protocol KeyboardPlace {
     func exists(_ window: AXUIElement) -> Bool
     func bringForward(_ window: AXUIElement)
     func focus(_ field: AXUIElement)
+    /// `focus`, saying whether the app took the request.
+    func requestFocus(_ field: AXUIElement) -> Bool
+}
+
+extension KeyboardPlace {
+    /// A place that cannot tell is taken at its word; `Paster` looks at the
+    /// focused field afterwards either way.
+    func requestFocus(_ field: AXUIElement) -> Bool {
+        focus(field)
+        return true
+    }
 }
 
 /// The keyboard of a running app, through Accessibility.
@@ -317,8 +350,12 @@ struct AppKeyboard: KeyboardPlace {
     }
 
     func focus(_ field: AXUIElement) {
+        _ = requestFocus(field)
+    }
+
+    func requestFocus(_ field: AXUIElement) -> Bool {
         AXUIElementSetMessagingTimeout(field, 0.25)
-        AXUIElementSetAttributeValue(field, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        return AXUIElementSetAttributeValue(field, kAXFocusedAttribute as CFString, kCFBooleanTrue) == .success
     }
 
     private func element(_ attribute: String) -> AXUIElement? {

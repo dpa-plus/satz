@@ -17,13 +17,25 @@ public enum GeminiTranscribe {
     /// The custom vocabulary takes up to 1000 terms.
     public static let vocabularyLimit = 1_000
 
-    /// Whether the request for `wav` would be over the limit. Counted before
-    /// anything is encoded: base64 makes four bytes of every three, and the
-    /// vocabulary and the JSON around it ride along.
-    static func isTooLarge(wav: Data, vocabulary: [String]) -> Bool {
-        let audio = (wav.count + 2) / 3 * 4
-        let words = vocabulary.prefix(vocabularyLimit).reduce(0) { $0 + $1.utf8.count + 4 }
-        return audio + words + 1_024 > requestLimit
+    /// Whether the request for `wav` would be over the limit.
+    static func isTooLarge(wav: Data, vocabulary: [String], model: String = GeminiTranscribe.model, removesFillers: Bool = true) -> Bool {
+        requestSize(wav: wav, model: model, vocabulary: vocabulary, removesFillers: removesFillers) > requestLimit
+    }
+
+    /// The bytes the request body will have, to the byte. Counted before the
+    /// audio is encoded, but not guessed: everything around the audio is
+    /// encoded as it will be sent, so the escaping is in it (a quote or a
+    /// backslash in a vocabulary term takes two bytes, a control character
+    /// six, and 5 000 backslashes had put 3 500 bytes past the limit). The
+    /// audio is base64, four bytes for every three, with nothing to escape.
+    static func requestSize(wav: Data, model: String, vocabulary: [String], removesFillers: Bool) -> Int {
+        let frame = encode(body(wav: Data(), model: model, vocabulary: vocabulary, removesFillers: removesFillers))
+        return (frame?.count ?? 0) + (wav.count + 2) / 3 * 4
+    }
+
+    /// The body as it goes over the wire, and as `requestSize` counts it.
+    static func encode(_ body: [String: Any]) -> Data? {
+        try? JSONSerialization.data(withJSONObject: body, options: [.sortedKeys, .withoutEscapingSlashes])
     }
 
     /// The model id as the API wants it: Google's own lists spell it
@@ -45,6 +57,11 @@ public enum GeminiTranscribe {
             "model": apiModel(id),
             "input": [["type": "audio", "data": wav.base64EncodedString(), "mime_type": "audio/wav"]],
             "generation_config": ["transcription_config": config],
+            // An interaction is kept by Google (a day on the free tier, 55
+            // days on the paid one) unless the request says not to. Satz
+            // never asks for one again, so the recording has no reason to
+            // stay there.
+            "store": false,
         ]
     }
 
@@ -55,27 +72,25 @@ public enum GeminiTranscribe {
     /// `candidates[].content.parts[]` are read too. A well-formed answer
     /// with no words in it (silence, a blocked answer) is "", anything else
     /// nil.
+    ///
+    /// The words are taken from one shape, the first of those in that order
+    /// that has any: an answer carrying them twice (the SDKs' `output_text`
+    /// is the `steps` text again) would otherwise be said twice.
     static func text(in data: Data) -> String? {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-        var found: [String] = []
-        var understood = false
+        var shapes: [[String]] = []
 
-        if let text = object["output_text"] as? String {
-            understood = true
-            found.append(text)
-        }
         if let steps = object["steps"] as? [[String: Any]] {
-            understood = true
-            for step in steps where (step["type"] as? String).map({ $0 == "model_output" }) ?? true {
-                found += textItems(step["content"])
-            }
+            shapes.append(steps.filter { ($0["type"] as? String).map { $0 == "model_output" } ?? true }.flatMap { textItems($0["content"]) })
+        }
+        if let text = object["output_text"] as? String {
+            shapes.append([text])
         }
         if let outputs = object["outputs"] as? [[String: Any]] {
-            understood = true
-            found += textItems(outputs)
+            shapes.append(textItems(outputs))
         }
         if let candidates = object["candidates"] as? [[String: Any]] {
-            understood = true
+            var found: [String] = []
             for candidate in candidates {
                 let parts = (candidate["content"] as? [String: Any])?["parts"] as? [[String: Any]] ?? []
                 for part in parts {
@@ -90,9 +105,14 @@ public enum GeminiTranscribe {
                 // Only the first candidate is the answer.
                 if !found.isEmpty { break }
             }
+            shapes.append(found)
         }
-        guard understood else { return nil }
-        return found.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.joined(separator: " ")
+        guard !shapes.isEmpty else { return nil }
+        for shape in shapes {
+            let words = shape.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+            if !words.isEmpty { return words.joined(separator: " ") }
+        }
+        return ""
     }
 
     /// The `{type: "text", text}` items of a content list.

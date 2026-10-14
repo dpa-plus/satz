@@ -29,9 +29,10 @@ public struct Transcriber: Sendable {
         public var model: String = Provider.openAI.defaultModel
         public var baseURL: URL = Provider.openAI.baseURL!
         public var format: Format = .multipart
-        /// Every request is bounded. A dictation tool that can hang is worse
-        /// than one that fails, because you cannot tell hung from slow. Long
-        /// recordings get more on top, see `timeout(for:)`.
+        /// Every request is bounded, in total: headers and the whole answer.
+        /// A dictation tool that can hang is worse than one that fails,
+        /// because you cannot tell hung from slow. Long recordings get more
+        /// on top, see `timeout(for:)`.
         public var timeout: TimeInterval = 30
         /// Names, jargon and spellings to bias recognition towards. Sent as the
         /// endpoint's own hint (`prompt`, MAI's phrase list or Gemini's custom
@@ -66,10 +67,13 @@ public struct Transcriber: Sendable {
                 // Never the region's host when an address was typed and is
                 // unusable: the key would go somewhere the user did not point.
                 baseURL = MicrosoftSpeech.baseURL(region: microsoftRegion, endpoint: microsoftEndpoint) ?? Self.missingAddress
-            } else if let url = provider.baseURL ?? customBaseURL {
+            } else if let url = provider.baseURL {
                 baseURL = url
             } else if provider == .custom {
-                baseURL = Self.missingAddress
+                // The same reading of the text that let Custom be chosen
+                // (`ProviderReadiness.sendableAddress`): what the audio and
+                // the key go to is what was checked, and nothing else.
+                baseURL = customBaseURL.flatMap { ProviderReadiness.sendableAddress($0.absoluteString) } ?? Self.missingAddress
             }
             let chosen = model.trimmingCharacters(in: .whitespaces)
             self.model = chosen.isEmpty ? provider.defaultModel : chosen
@@ -85,10 +89,15 @@ public struct Transcriber: Sendable {
         /// when the address was cleared. This host cannot exist.
         private static let missingAddress = URL(string: "https://address-missing.invalid")!
 
-        /// The base timeout plus a second per four seconds of audio: a five
-        /// minute ramble is a 10 MB upload and should not fail at 30 seconds.
+        /// The base timeout plus a second per two seconds of audio: a five
+        /// minute ramble is a 9.6 MB upload and should not fail at 30 seconds.
+        /// This is also the total the call is held to (`send`), upload
+        /// included, so it has to cover a slow uplink: a quarter (a second
+        /// per four seconds) gave five minutes 105 s, which a line under
+        /// 0.7 Mbit/s cannot carry them in; half gives 180 s, enough down to
+        /// about 0.5 Mbit/s with the answer still to come.
         func timeout(for wav: Data) -> TimeInterval {
-            timeout + Double(max(0, wav.count - 44)) / 32_000 / 4
+            timeout + Double(max(0, wav.count - 44)) / 32_000 / 2
         }
     }
 
@@ -103,6 +112,11 @@ public struct Transcriber: Sendable {
         case offline
         case timedOut
         case server(status: Int, message: String?)
+        /// The address answered with a redirect that was not followed: to
+        /// another origin (the key stays where it was sent), or past the
+        /// third hop (`StaysOnOrigin`). A wrong address, which Retry cannot fix
+        /// until it is changed.
+        case redirected
         case unreadableResponse
         /// The provider's upload limit (OpenAI and Groq take 25 MB, about 13
         /// minutes): Retry would fail the same way, until another provider is
@@ -127,6 +141,8 @@ public struct Transcriber: Sendable {
             case .offline: de("Keine Verbindung zum Anbieter.", en: "No connection to the provider.")
             case .timedOut: de("Der Anbieter hat nicht rechtzeitig geantwortet.", en: "The provider did not answer in time.")
             case .server(let status, let message): message ?? de("Der Anbieter antwortete mit \(status).", en: "The provider answered with \(status).")
+            // The long version, for the log; the card has `short`.
+            case .redirected: de("Der Anbieter verweist auf eine andere Adresse. Die Adresse prüfen.", en: "The provider points to another address. Check the address.")
             case .unreadableResponse: de("Antwort des Anbieters nicht lesbar.", en: "Could not read the provider's answer.")
             // The audio is still there: another provider takes it with the
             // shortcut, no need to say it again. There is no text to copy.
@@ -151,7 +167,8 @@ public struct Transcriber: Sendable {
         guard !apiKey.isEmpty else { throw Failure.noKey }
         // Gemini takes the audio inline up to 20 MB: past that, say so now
         // instead of uploading 20 MB to be refused.
-        if settings.format == .gemini, GeminiTranscribe.isTooLarge(wav: wav, vocabulary: settings.vocabulary) {
+        if settings.format == .gemini, GeminiTranscribe.isTooLarge(wav: wav, vocabulary: settings.vocabulary, model: settings.model,
+                                                                   removesFillers: settings.removesFillers) {
             throw Failure.tooLarge
         }
         // Counted from the start of the upload, so a long recording, whose
@@ -233,12 +250,102 @@ public struct Transcriber: Sendable {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session.data(for: request)
+            // `timeoutInterval` is the longest silence, not the longest wait:
+            // every chunk of a slowly dripping answer starts it again (34 s
+            // went by under a 30 s limit). The same number is the total
+            // here, headers and body.
+            (data, response) = try await Self.within(request.timeoutInterval) { [session] in
+                try await session.data(for: request, delegate: StaysOnOrigin())
+            }
         } catch let error as URLError {
             throw Self.translate(error)
         }
         guard let http = response as? HTTPURLResponse else { throw Failure.unreadableResponse }
         return (data, http)
+    }
+
+    private enum Race<T: Sendable>: Sendable {
+        case done(T)
+        case expired
+        // The clock was cancelled with everything else: not an expiry.
+        case stopped
+    }
+
+    /// `work` against a clock. When the clock wins, `work` is cancelled,
+    /// which for a URLSession call drops the connection, and the caller gets
+    /// `timedOut` (the recording stays for Retry like for any failure).
+    private static func within<T: Sendable>(_ seconds: TimeInterval, _ work: @escaping @Sendable () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: Race<T>.self) { group in
+            // Cancelled on the way out whichever way it goes: the group
+            // would otherwise wait for the one still running.
+            defer { group.cancelAll() }
+            group.addTask { .done(try await work()) }
+            group.addTask {
+                do { try await Task.sleep(for: .seconds(seconds)) } catch { return .stopped }
+                return .expired
+            }
+            while let outcome = try await group.next() {
+                switch outcome {
+                case .done(let value): return value
+                case .expired: throw Failure.timedOut
+                case .stopped: continue
+                }
+            }
+            throw URLError(.cancelled)
+        }
+    }
+
+    /// Keeps a request where it was sent. Every request carries a key and the
+    /// recording, and URLSession hands any header except `Authorization` on
+    /// to a redirect target (Microsoft's and Google's key headers went to
+    /// another host that way), so a redirect to another origin is not
+    /// followed: the 3xx answer comes back and is reported
+    /// (`Failure.redirected`). A redirect within the origin (a trailing slash,
+    /// a moved path) is followed, but only three times: a loop is not a
+    /// route, and the fourth answer comes back like a refused one.
+    final class StaysOnOrigin: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+        static let hops = 3
+
+        // One instance per request. URLSession calls a task's delegate one
+        // call at a time, the lock is for the compiler's sake.
+        private let lock = NSLock()
+        private var followed = 0
+
+        func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                        newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
+            // Against where the request started, not against the last hop.
+            guard Self.sameOrigin(task.originalRequest?.url, request.url), follow() else { return completionHandler(nil) }
+            var next = request
+            // URLSession leaves `Authorization` behind on every redirect, this
+            // one too; the Bearer providers (OpenAI, Groq, most custom
+            // endpoints) would answer the second request with a 401. It stays
+            // on the origin the key was meant for, so the key goes along.
+            if next.value(forHTTPHeaderField: "Authorization") == nil,
+               let key = task.originalRequest?.value(forHTTPHeaderField: "Authorization") {
+                next.setValue(key, forHTTPHeaderField: "Authorization")
+            }
+            completionHandler(next)
+        }
+
+        /// Whether one more hop is allowed; counts it.
+        private func follow() -> Bool {
+            lock.withLock {
+                guard followed < Self.hops else { return false }
+                followed += 1
+                return true
+            }
+        }
+
+        static func sameOrigin(_ first: URL?, _ second: URL?) -> Bool {
+            guard let first, let second, let from = origin(first) else { return false }
+            return from == origin(second)
+        }
+
+        private static func origin(_ url: URL) -> String? {
+            guard let scheme = url.scheme?.lowercased(), let host = url.host?.lowercased() else { return nil }
+            let port = url.port ?? (scheme == "https" ? 443 : scheme == "http" ? 80 : 0)
+            return "\(scheme)://\(host):\(port)"
+        }
     }
 
     // MARK: - Private
@@ -279,7 +386,7 @@ public struct Transcriber: Sendable {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             let body = GeminiTranscribe.body(wav: wav, model: settings.model, vocabulary: settings.vocabulary,
                                              removesFillers: settings.removesFillers)
-            request.httpBody = try? JSONSerialization.data(withJSONObject: body, options: [.sortedKeys, .withoutEscapingSlashes])
+            request.httpBody = GeminiTranscribe.encode(body)
         }
         return request
     }
@@ -347,6 +454,10 @@ public struct Transcriber: Sendable {
         case 401, 403: return format == .azureSpeech ? .keyOrRegionWrong : .unauthorized
         case 429: return .rateLimited
         case 413: return .tooLarge
+        // A redirect that is not followed (`StaysOnOrigin`) comes back as it
+        // is: the key stays where it was sent. What is left is a wrong address.
+        case 300 ..< 400:
+            return .redirected
         case 400 where format == .gemini && (said.map(namesTheKey) == true || String(decoding: body, as: UTF8.self).contains("API_KEY_INVALID")):
             // Google answers a key it does not know with 400 INVALID_ARGUMENT.
             return .unauthorized
