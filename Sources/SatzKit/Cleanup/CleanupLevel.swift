@@ -103,17 +103,23 @@ public enum CleanupLevel: String, CaseIterable, Codable, Sendable, Identifiable 
         }
     }
 
-    /// The guard's limits (`CleanupGuard`): the share of the answer's words
-    /// that were said, the share of the words said that are still there, and
-    /// how much longer the answer may be. nil for the user's own prompt, which
-    /// may ask for a translation or a summary.
+    /// The guard's limits (`CleanupGuard`) for the three levels it judges by
+    /// shares of words: the share of the answer's words that were said, the
+    /// share of the words said that are still there, and how much longer the
+    /// answer may be.
+    ///
+    /// nil for the other two, which have no shares: "Nur Zeichensetzung"
+    /// promises that every word stays, so the guard compares the words one by
+    /// one, in order (`CleanupGuard.sameWordsInOrder`), and the user's own
+    /// prompt may ask for a translation or a summary, so only an empty answer
+    /// fails it. `CleanupGuard.accepts` decides both before it asks for limits,
+    /// and turns down a level that has neither.
     var guardLimits: (said: Double, kept: Double, growth: Double)? {
         switch self {
-        case .punctuation: (0.85, 0.85, 1.3)
+        case .punctuation, .custom: nil
         case .light: (0.60, 0.55, 1.4)
         case .smooth: (0.55, 0.50, 1.5)
         case .polished: (0.45, 0.45, 1.8)
-        case .custom: nil
         }
     }
 }

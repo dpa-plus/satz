@@ -241,8 +241,8 @@ interface Case { level: CleanupLevel; input: string; output: string | null; voca
 const fixture = path.join(__dirname, '..', '..', 'Tests', 'Fixtures', 'cleanup-guard-cases.json')
 const cases = JSON.parse(fs.readFileSync(fixture, 'utf8')) as Case[]
 
-test('the guard decides all 75 real cases of the shared fixture as the Mac does', () => {
-  assert.equal(cases.length, 75)
+test('the guard decides all 343 cases of the shared fixture (67 real answers, 8 hand-made for Apple on-device, 116 for Codex CC-2, 152 for Codex R4) as the Mac does', () => {
+  assert.equal(cases.length, 343)
   const wrong = cases.filter(c => guard(c.input, c.output ?? '', c.level, c.vocabulary) !== c.accept)
     .map(c => `${c.level} ${c.accept ? 'should accept' : 'should reject'}: ${c.note}`)
   assert.deepEqual(wrong, [])

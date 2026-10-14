@@ -600,8 +600,8 @@
   "input": "ok danke",
   "output": "Okay, danke.",
   "vocabulary": [],
-  "accept": true,
-  "note": "hand-made / Apple on-device"
+  "accept": false,
+  "note": "hand-made / Apple on-device; Codex CC-2: \"Okay\" is a word the dictation did not have (\"ok\" is under four letters, so no spelling fix); the original \"ok danke\" is pasted instead"
  },
  {
   "level": "polished",
@@ -618,5 +618,2176 @@
   "vocabulary": [],
   "accept": false,
   "note": "hand-made / Apple on-device"
+ },
+ {
+  "level": "punctuation",
+  "input": "ich möchte die rechnung morgen nicht überweisen",
+  "output": "Ich möchte die Rechnung morgen überweisen.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2: \"nicht\" dropped"
+ },
+ {
+  "level": "punctuation",
+  "input": "bitte überweise 1000 euro an max",
+  "output": "Bitte überweise 9000 Euro an Max.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2: amount changed, one digit"
+ },
+ {
+  "level": "light",
+  "input": "bitte überweise 1000 euro an max",
+  "output": "Bitte überweise 9000 Euro an Max.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2: amount changed, one digit"
+ },
+ {
+  "level": "punctuation",
+  "input": "nein danke",
+  "output": "Ja bitte.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2: short answer reversed"
+ },
+ {
+  "level": "light",
+  "input": "nein danke",
+  "output": "Ja bitte.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2: short answer reversed, words that were not said"
+ },
+ {
+  "level": "punctuation",
+  "input": "bitte nicht senden bitte nicht senden bitte nicht senden",
+  "output": "Bitte nicht senden.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2: two of three repetitions dropped"
+ },
+ {
+  "level": "light",
+  "input": "please do not send the invoice before we checked it",
+  "output": "Please send the invoice before we checked it.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2: \"not\" dropped"
+ },
+ {
+  "level": "polished",
+  "input": "please do not send the invoice before we checked it",
+  "output": "Please send the invoice before we checked it.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2: \"not\" dropped"
+ },
+ {
+  "level": "smooth",
+  "input": "die nummer ist 12345678",
+  "output": "Die Nummer ist 12345679.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2: long number changed by one digit (the spelling rule let it through)"
+ },
+ {
+  "level": "punctuation",
+  "input": "ähm ich komme morgen um 10 uhr",
+  "output": "Ähm, ich komme morgen um 10 Uhr.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2: every word stays, the filler too"
+ },
+ {
+  "level": "punctuation",
+  "input": "das ist ein tset",
+  "output": "Das ist ein Test.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2: spelling fix: two neighbouring letters swapped"
+ },
+ {
+  "level": "light",
+  "input": "wir treffen uns um 3 nein um 4",
+  "output": "Wir treffen uns um 4.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2: self-correction: the 3 may go, the 4 was said"
+ },
+ {
+  "level": "light",
+  "input": "ich kann das nicht machen",
+  "output": "Ich kann das nicht machen.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2: negation kept"
+ },
+ {
+  "level": "light",
+  "input": "i don't think so",
+  "output": "I don't think so.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2: contraction kept"
+ },
+ {
+  "level": "punctuation",
+  "input": "ähm ich komme morgen um 10 uhr",
+  "output": "Ich komme morgen um 10 Uhr.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2: the filler is gone, but every word stays here"
+ },
+ {
+  "level": "punctuation",
+  "input": "wir sind sind morgen da",
+  "output": "Wir sind morgen da.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2: a stutter is a word, and every word stays here"
+ },
+ {
+  "level": "light",
+  "input": "wir sind sind morgen da",
+  "output": "Wir sind morgen da.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2: the stutter may go at Leicht"
+ },
+ {
+  "level": "punctuation",
+  "input": "ich gehe morgen nach hause",
+  "output": "Morgen gehe ich nach Hause.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2: same words, other order"
+ },
+ {
+  "level": "punctuation",
+  "input": "wir kommen morgen zu euch nach hause und bringen das essen mit",
+  "output": "Wir kommen morgen zu euch nach Hause und bringen das Essen alle mit.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2: a word added"
+ },
+ {
+  "level": "punctuation",
+  "input": "ich habe kein auto",
+  "output": "Ich habe dein Auto.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2: one letter apart, but \"kein\" is a negation"
+ },
+ {
+  "level": "punctuation",
+  "input": "不要发送",
+  "output": "请发送",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2: one word without spaces, changed"
+ },
+ {
+  "level": "light",
+  "input": "不要发送",
+  "output": "请发送",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2: one word without spaces, changed"
+ },
+ {
+  "level": "light",
+  "input": "ich will 5 euro",
+  "output": "Ich will 15 Euro.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2: a digit added to a number"
+ },
+ {
+  "level": "polished",
+  "input": "treffen wir uns um drei",
+  "output": "Wir treffen uns um 15 Uhr.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3.1: back to reject. A number word counts only for its own value: \"drei\" is 3, not 15 (the first v3 let it through because the dictation had a number word to spare)"
+ },
+ {
+  "level": "light",
+  "input": "wir brauchen noch 3,5 stunden für das projekt",
+  "output": "Wir brauchen noch 3,5 Stunden für das Projekt.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2: numbers kept"
+ },
+ {
+  "level": "smooth",
+  "input": "wir treffen uns um 3 nein um 4",
+  "output": "Wir treffen uns um 4.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2: self-correction: the 3 may go, the 4 was said"
+ },
+ {
+  "level": "polished",
+  "input": "wir brauchen äpfel birnen und bananen",
+  "output": "Wir brauchen:\n\n1. Äpfel\n2. Birnen\n3. Bananen",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3: flipped. The digits of a numbered list are list markers (a digit run at the start of a line followed by \".\" or \")\"), not numbers added"
+ },
+ {
+  "level": "light",
+  "input": "i don't want that",
+  "output": "I want that.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2: contraction dropped"
+ },
+ {
+  "level": "smooth",
+  "input": "ich habe keine zeit heute",
+  "output": "Ich habe Zeit heute.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2: \"keine\" dropped"
+ },
+ {
+  "level": "light",
+  "input": "ich habe keine zeit",
+  "output": "Ich habe keine Zeit.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2: negation kept"
+ },
+ {
+  "level": "light",
+  "input": "i don't know",
+  "output": "I don’t know.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2: typographic apostrophe counts as the plain one"
+ },
+ {
+  "level": "punctuation",
+  "input": "i don't know",
+  "output": "I don’t know.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2: typographic apostrophe, same words"
+ },
+ {
+  "level": "polished",
+  "input": "please do not send the invoice before we checked it",
+  "output": "Please don't send the invoice before we have checked it.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2: \"not\" became \"don't\", still one negation"
+ },
+ {
+  "level": "light",
+  "input": "nein danke",
+  "output": "Nein, danke.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2: \"nein\" is no negation, and the words are the ones said"
+ },
+ {
+  "level": "punctuation",
+  "input": "ok danke",
+  "output": "Ok, danke.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2: every word stays"
+ },
+ {
+  "level": "light",
+  "input": "um acht",
+  "output": "Um neun.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2: a short dictation, a word that was not said"
+ },
+ {
+  "level": "punctuation",
+  "input": "ich komme morgen",
+  "output": "Ich komme morgen nicht.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3: a negation added"
+ },
+ {
+  "level": "light",
+  "input": "ich komme morgen zum treffen im büro vorbei",
+  "output": "Ich komme morgen nicht zum Treffen im Büro vorbei.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3: a negation added"
+ },
+ {
+  "level": "smooth",
+  "input": "please send the invoice to the customer today",
+  "output": "Please do not send the invoice to the customer today.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3: a negation added"
+ },
+ {
+  "level": "polished",
+  "input": "wir liefern die ware am freitag",
+  "output": "Wir liefern die Ware am Freitag nicht.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3: a negation added"
+ },
+ {
+  "level": "punctuation",
+  "input": "i dont think so",
+  "output": "I don't think so.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3: the apostrophe-less contraction is one negation, as the apostrophe one"
+ },
+ {
+  "level": "light",
+  "input": "i dont think so",
+  "output": "I don't think so.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3: the apostrophe-less contraction is one negation, as the apostrophe one"
+ },
+ {
+  "level": "light",
+  "input": "i dont think so",
+  "output": "I think so.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3: the negation lost, written without the apostrophe"
+ },
+ {
+  "level": "light",
+  "input": "she wasnt there when we arrived",
+  "output": "She wasn't there when we arrived.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3: wasnt is one negation"
+ },
+ {
+  "level": "smooth",
+  "input": "they havent called us back yet",
+  "output": "They haven't called us back yet.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3: havent is one negation"
+ },
+ {
+  "level": "light",
+  "input": "treffen wir uns nicht am montag nein am dienstag",
+  "output": "Treffen wir uns am Dienstag.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3: known cost: the negation of a clause the speaker takes back still counts, the original is pasted"
+ },
+ {
+  "level": "light",
+  "input": "die summe ist 1000 euro für die rechnung danke",
+  "output": "Die Summe ist 1.000 Euro für die Rechnung, danke.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3: 1.000 is the number 1000"
+ },
+ {
+  "level": "smooth",
+  "input": "ich habe 2500 euro für das auto bezahlt",
+  "output": "Ich habe 2.500 Euro für das Auto bezahlt.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3: 2.500 is the number 2500"
+ },
+ {
+  "level": "polished",
+  "input": "the price is 2,500 dollars for the whole thing",
+  "output": "The price is 2500 dollars for the whole thing.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3: the separator may go as well"
+ },
+ {
+  "level": "light",
+  "input": "es kostet 1 000 000 euro im monat",
+  "output": "Es kostet 1.000.000 Euro im Monat.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3: 1 000 000 and 1.000.000 are one number"
+ },
+ {
+  "level": "light",
+  "input": "es kostet 1000 euro im monat",
+  "output": "Es kostet 9.000 Euro im Monat.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3: grouped, but another number"
+ },
+ {
+  "level": "light",
+  "input": "es kostet 1000 euro im monat",
+  "output": "Es kostet 1 000 Euro im Monat.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3: a thin space is a separator"
+ },
+ {
+  "level": "light",
+  "input": "es kostet 1000 euro im monat",
+  "output": "Es kostet 1’000 Euro im Monat.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3: the Swiss apostrophe is a separator"
+ },
+ {
+  "level": "light",
+  "input": "es kostet 1000 euro im monat",
+  "output": "Es kostet 1.000.000 Euro im Monat.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3: one group more is another number"
+ },
+ {
+  "level": "polished",
+  "input": "ich brauche milch brot und eier",
+  "output": "Ich brauche:\n1) Milch\n2) Brot\n3) Eier",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3: the numbers of a list are markers, not numbers"
+ },
+ {
+  "level": "punctuation",
+  "input": "wir brauchen äpfel birnen und bananen",
+  "output": "Wir brauchen:\n\n1. Äpfel\n2. Birnen\n3. Bananen",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3: a list is words added at \"Nur Zeichensetzung\""
+ },
+ {
+  "level": "polished",
+  "input": "wir sehen uns am montag",
+  "output": "Wir sehen uns am Montag, 5. Mai.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3: a number inside a line is a number, not a marker"
+ },
+ {
+  "level": "polished",
+  "input": "wir brauchen äpfel und birnen",
+  "output": "Wir brauchen:\n\n1. Äpfel\n2. 5 Birnen",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3: the marker is left out, the 5 after it is not"
+ },
+ {
+  "level": "light",
+  "input": "drei exemplare bitte",
+  "output": "3 Exemplare, bitte.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3: a number said in words may be written in digits"
+ },
+ {
+  "level": "smooth",
+  "input": "ich zahle tausend euro für das auto",
+  "output": "Ich zahle 1.000 Euro für das Auto.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3: tausend, written with its separator"
+ },
+ {
+  "level": "light",
+  "input": "wir treffen uns um fünfzehn uhr",
+  "output": "Wir treffen uns um 15 Uhr.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3: fünfzehn is a number word"
+ },
+ {
+  "level": "light",
+  "input": "am fünften märz kommt er",
+  "output": "Am 5. März kommt er.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3: an ordinal is a number word"
+ },
+ {
+  "level": "light",
+  "input": "we need twenty copies by friday",
+  "output": "We need 20 copies by Friday.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3: twenty is a number word"
+ },
+ {
+  "level": "polished",
+  "input": "wir treffen uns im büro",
+  "output": "Wir treffen uns um 15 Uhr im Büro.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3: a number out of nowhere: the dictation has no number word"
+ },
+ {
+  "level": "polished",
+  "input": "um drei oder vier uhr",
+  "output": "Um 3, 4 oder 5 Uhr.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3: three new numbers, two number words"
+ },
+ {
+  "level": "punctuation",
+  "input": "wie gehts dir heute",
+  "output": "Wie geht's dir heute?",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3: an apostrophe inside a word is no change: geht's is gehts"
+ },
+ {
+  "level": "punctuation",
+  "input": "wie gehts dir heute",
+  "output": "Wie geht’s dir heute?",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3: the typographic apostrophe, too"
+ },
+ {
+  "level": "punctuation",
+  "input": "wie geht es dir",
+  "output": "Wie geht's dir?",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3: a contraction of two said words merges them"
+ },
+ {
+  "level": "punctuation",
+  "input": "ich habe nichts uebersehen",
+  "output": "Ich habe nichts übersehen.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3: ue and ü are the same letter"
+ },
+ {
+  "level": "punctuation",
+  "input": "wir freuen uns auf die gruesse",
+  "output": "Wir freuen uns auf die Grüße.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3: ue and ü, ss and ß"
+ },
+ {
+  "level": "punctuation",
+  "input": "hallo yannick wie gehts",
+  "output": "Hallo Jannik, wie geht's?",
+  "vocabulary": [
+   "Jannik"
+  ],
+  "accept": true,
+  "note": "Codex CC-2 v3: the name misheard by the transcription, spelled as in the word list"
+ },
+ {
+  "level": "punctuation",
+  "input": "hallo yannick wie gehts",
+  "output": "Hallo Jannik, wie geht's?",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3: another name without a word list: two letters off"
+ },
+ {
+  "level": "punctuation",
+  "input": "hallo yannick",
+  "output": "Hallo Jannik Daniel.",
+  "vocabulary": [
+   "Jannik",
+   "Daniel"
+  ],
+  "accept": false,
+  "note": "Codex CC-2 v3: a word list does not allow a word added"
+ },
+ {
+  "level": "light",
+  "input": "ja gerne",
+  "output": "👍",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3: no word left of a dictation that had words"
+ },
+ {
+  "level": "light",
+  "input": "ja gerne",
+  "output": ".",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3: no word left of a dictation that had words"
+ },
+ {
+  "level": "smooth",
+  "input": "ja",
+  "output": ".",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3: no word left of a dictation that had a word"
+ },
+ {
+  "level": "light",
+  "input": "ähm",
+  "output": ".",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3: no word left, a filler was a word"
+ },
+ {
+  "level": "light",
+  "input": "hallo yannick",
+  "output": "Hallo Jannik.",
+  "vocabulary": [
+   "Jannik"
+  ],
+  "accept": true,
+  "note": "Codex CC-2 v3: a vocabulary word counts as the word of the dictation"
+ },
+ {
+  "level": "polished",
+  "input": "danke yannick",
+  "output": "Danke, Jannik.",
+  "vocabulary": [
+   "Jannik"
+  ],
+  "accept": true,
+  "note": "Codex CC-2 v3: a vocabulary word counts as the word of the dictation"
+ },
+ {
+  "level": "light",
+  "input": "hallo yannick",
+  "output": "Hallo Jannik.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3: another name without a word list"
+ },
+ {
+  "level": "light",
+  "input": "ein kunde zahlt 1000 euro",
+  "output": "Ein Kunde zahlt 9000 Euro.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3.1: \"ein\" is 1: 1000 cannot become 9000 where a number word is spare"
+ },
+ {
+  "level": "smooth",
+  "input": "ein kunde zahlt 1000 euro",
+  "output": "Ein Kunde zahlt 9000 Euro.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3.1: \"ein\" is 1: 1000 cannot become 9000 where a number word is spare"
+ },
+ {
+  "level": "light",
+  "input": "ein kunde zahlt 1000 euro",
+  "output": "Ein Kunde zahlt 1000 Euro.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3.1: the number said, kept"
+ },
+ {
+  "level": "light",
+  "input": "ein kunde zahlt 1000 euro",
+  "output": "1 Kunde zahlt 1000 Euro.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3.1: \"ein\" may come back as 1"
+ },
+ {
+  "level": "light",
+  "input": "ein kunde zahlt 1000 euro",
+  "output": "2 Kunden zahlen 1000 Euro.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3.1: \"ein\" is 1, not 2"
+ },
+ {
+  "level": "light",
+  "input": "one customer pays 1000 dollars",
+  "output": "One customer pays 9000 dollars.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3.1: \"one\" is 1: 1000 cannot become 9000"
+ },
+ {
+  "level": "light",
+  "input": "one customer pays 1000 dollars",
+  "output": "1 customer pays 1000 dollars.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3.1: \"one\" may come back as 1"
+ },
+ {
+  "level": "light",
+  "input": "tausend euro",
+  "output": "1.000 Euro",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3.1: a short dictation: tausend is 1000, and the digits are no word to find"
+ },
+ {
+  "level": "smooth",
+  "input": "tausend euro",
+  "output": "1.000 Euro",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3.1: a short dictation: tausend is 1000, and the digits are no word to find"
+ },
+ {
+  "level": "light",
+  "input": "tausend euro",
+  "output": "9.000 Euro",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3.1: tausend is 1000, not 9000"
+ },
+ {
+  "level": "light",
+  "input": "tausend euro",
+  "output": "1.000 Euro, danke.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3.1: a short dictation may not gain a word"
+ },
+ {
+  "level": "light",
+  "input": "1000 euro",
+  "output": "1.000 Euro",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3.1: a short dictation, the number said in digits with a separator"
+ },
+ {
+  "level": "light",
+  "input": "drei exemplare",
+  "output": "3 Exemplare",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3.1: a number said in words, in digits"
+ },
+ {
+  "level": "polished",
+  "input": "drei exemplare",
+  "output": "4 Exemplare",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3.1: drei is 3, not 4"
+ },
+ {
+  "level": "punctuation",
+  "input": "drei exemplare bitte",
+  "output": "3 Exemplare, bitte.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3.1: \"Nur Zeichensetzung\" keeps every word: drei stays drei"
+ },
+ {
+  "level": "light",
+  "input": "am fünften märz",
+  "output": "Am 5. März",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3.1: an ordinal is its number"
+ },
+ {
+  "level": "light",
+  "input": "am fünften märz kommt er",
+  "output": "Am 6. März kommt er.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3.1: fünften is 5, not 6"
+ },
+ {
+  "level": "light",
+  "input": "einundzwanzig",
+  "output": "21",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3.1: a compound written as one word is its value"
+ },
+ {
+  "level": "light",
+  "input": "einundzwanzig",
+  "output": "12",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3.1: einundzwanzig is 21, not 12"
+ },
+ {
+  "level": "smooth",
+  "input": "ich zahle dreihundertfünfzig euro für das auto",
+  "output": "Ich zahle 350 Euro für das Auto.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3.1: dreihundertfünfzig is 350"
+ },
+ {
+  "level": "smooth",
+  "input": "ich zahle dreihundertfünfzig euro für das auto",
+  "output": "Ich zahle 351 Euro für das Auto.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3.1: dreihundertfünfzig is 350, not 351 (it ends in \"zig\", which was enough in the first v3)"
+ },
+ {
+  "level": "polished",
+  "input": "das kostet zweitausendfünfhundert euro im monat",
+  "output": "Das kostet 2.500 Euro im Monat.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3.1: zweitausendfünfhundert is 2500, written with its separator"
+ },
+ {
+  "level": "polished",
+  "input": "das kostet zweitausendfünfhundert euro im monat",
+  "output": "Das kostet 2.600 Euro im Monat.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3.1: zweitausendfünfhundert is 2500, not 2600"
+ },
+ {
+  "level": "light",
+  "input": "ich zahle zwei millionen euro für das haus",
+  "output": "Ich zahle 2.000.000 Euro für das Haus.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3.1: \"zwei millionen\" is 2000000"
+ },
+ {
+  "level": "light",
+  "input": "ich zahle zwei millionen euro für das haus",
+  "output": "Ich zahle 3.000.000 Euro für das Haus.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3.1: \"zwei millionen\" is 2000000, not 3000000"
+ },
+ {
+  "level": "light",
+  "input": "wir treffen uns um sieben uhr im büro",
+  "output": "Wir treffen uns um 07 Uhr im Büro.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3.1: zeros in front do not change the value"
+ },
+ {
+  "level": "light",
+  "input": "wir treffen uns um halb drei",
+  "output": "Wir treffen uns um 2:30.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3.1: \"halb\" gives no allowance, and drei is 3"
+ },
+ {
+  "level": "light",
+  "input": "wir treffen uns um halb drei",
+  "output": "Wir treffen uns um halb drei.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3.1: nothing new, nothing to check"
+ },
+ {
+  "level": "light",
+  "input": "we need twenty copies by friday",
+  "output": "We need 30 copies by Friday.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3.1: twenty is 20, not 30"
+ },
+ {
+  "level": "light",
+  "input": "the third of may is a holiday for us",
+  "output": "The 3rd of May is a holiday for us.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3.1: third is 3"
+ },
+ {
+  "level": "light",
+  "input": "the third of may is a holiday for us",
+  "output": "The 4th of May is a holiday for us.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3.1: third is 3, not 4"
+ },
+ {
+  "level": "polished",
+  "input": "wir brauchen drei exemplare für die kunden",
+  "output": "Wir brauchen 3 Exemplare für 3 Kunden.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3.1: each number word once: one drei, one 3"
+ },
+ {
+  "level": "polished",
+  "input": "um drei oder vier uhr",
+  "output": "Um 4 oder 3 Uhr.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3.1: two number words, two numbers, in either order"
+ },
+ {
+  "level": "polished",
+  "input": "um drei oder vier uhr",
+  "output": "Um 3 oder 5 Uhr.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3.1: vier is 4, not 5"
+ },
+ {
+  "level": "polished",
+  "input": "milch brot",
+  "output": "1. Milch\n2. Brot",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex CC-2 v3.1: a short dictation: list markers are still words that were not said"
+ },
+ {
+  "level": "custom",
+  "input": "treffen wir uns um drei",
+  "output": "Wir treffen uns um 15 Uhr.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex CC-2 v3.1: the own prompt is not judged by the dictation"
+ },
+ {
+  "level": "punctuation",
+  "input": "der saldo beträgt -1000 euro",
+  "output": "Der Saldo beträgt 1000 Euro.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: the sign dropped: -1000 is not 1000 (Codex R4-B, at every preset)"
+ },
+ {
+  "level": "light",
+  "input": "der saldo beträgt -1000 euro",
+  "output": "Der Saldo beträgt 1000 Euro.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: the sign dropped: -1000 is not 1000 (Codex R4-B, at every preset)"
+ },
+ {
+  "level": "smooth",
+  "input": "der saldo beträgt -1000 euro",
+  "output": "Der Saldo beträgt 1000 Euro.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: the sign dropped: -1000 is not 1000 (Codex R4-B, at every preset)"
+ },
+ {
+  "level": "polished",
+  "input": "der saldo beträgt -1000 euro",
+  "output": "Der Saldo beträgt 1000 Euro.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: the sign dropped: -1000 is not 1000 (Codex R4-B, at every preset)"
+ },
+ {
+  "level": "punctuation",
+  "input": "der saldo beträgt 1000 euro",
+  "output": "Der Saldo beträgt -1000 Euro.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: the sign added: 1000 is not -1000 (Codex R4-B)"
+ },
+ {
+  "level": "light",
+  "input": "der saldo beträgt 1000 euro",
+  "output": "Der Saldo beträgt -1000 Euro.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: the sign added: 1000 is not -1000 (Codex R4-B)"
+ },
+ {
+  "level": "smooth",
+  "input": "der saldo beträgt 1000 euro",
+  "output": "Der Saldo beträgt -1000 Euro.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: the sign added: 1000 is not -1000 (Codex R4-B)"
+ },
+ {
+  "level": "polished",
+  "input": "der saldo beträgt 1000 euro",
+  "output": "Der Saldo beträgt -1000 Euro.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: the sign added: 1000 is not -1000 (Codex R4-B)"
+ },
+ {
+  "level": "punctuation",
+  "input": "der saldo beträgt -1000 euro",
+  "output": "Der Saldo beträgt -1000 Euro.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the sign kept"
+ },
+ {
+  "level": "light",
+  "input": "der saldo beträgt -1000 euro",
+  "output": "Der Saldo beträgt -1000 Euro.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the sign kept"
+ },
+ {
+  "level": "smooth",
+  "input": "der saldo beträgt -1000 euro",
+  "output": "Der Saldo beträgt -1000 Euro.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the sign kept"
+ },
+ {
+  "level": "polished",
+  "input": "der saldo beträgt -1000 euro",
+  "output": "Der Saldo beträgt -1000 Euro.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the sign kept"
+ },
+ {
+  "level": "light",
+  "input": "der saldo beträgt -1000 euro",
+  "output": "Der Saldo beträgt −1000 Euro.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the real minus sign (U+2212) is the same sign"
+ },
+ {
+  "level": "punctuation",
+  "input": "der saldo beträgt -1000 euro",
+  "output": "Der Saldo beträgt −1000 Euro.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the real minus sign (U+2212) is the same sign"
+ },
+ {
+  "level": "light",
+  "input": "der saldo beträgt -1000 euro",
+  "output": "Der Saldo beträgt –1000 Euro.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the en dash is the same sign"
+ },
+ {
+  "level": "punctuation",
+  "input": "der saldo beträgt -1000 euro",
+  "output": "Der Saldo beträgt –1000 Euro.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the en dash is the same sign"
+ },
+ {
+  "level": "light",
+  "input": "der saldo beträgt -1000 euro",
+  "output": "Der Saldo beträgt - 1000 Euro.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: one space between the sign and the digits is still a sign"
+ },
+ {
+  "level": "punctuation",
+  "input": "der saldo beträgt -1000 euro",
+  "output": "Der Saldo beträgt - 1000 Euro.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: one space between the sign and the digits is still a sign"
+ },
+ {
+  "level": "light",
+  "input": "der saldo beträgt -1000 euro",
+  "output": "Der Saldo beträgt −1.000 Euro.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: \"-1000\" and \"−1.000\" are the same number"
+ },
+ {
+  "level": "smooth",
+  "input": "der saldo beträgt -1000 euro",
+  "output": "Der Saldo beträgt −1.000 Euro.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: \"-1000\" and \"−1.000\" are the same number"
+ },
+ {
+  "level": "polished",
+  "input": "der saldo beträgt -1000 euro",
+  "output": "Der Saldo beträgt −1.000 Euro.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: \"-1000\" and \"−1.000\" are the same number"
+ },
+ {
+  "level": "punctuation",
+  "input": "der saldo beträgt -1000 euro",
+  "output": "Der Saldo beträgt −1.000 Euro.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: \"Nur Zeichensetzung\": regrouping 1000 as 1.000 splits one word in two"
+ },
+ {
+  "level": "light",
+  "input": "der saldo beträgt -1000 euro",
+  "output": "Der Saldo beträgt +1000 Euro.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: a plus is not a minus"
+ },
+ {
+  "level": "light",
+  "input": "der saldo beträgt 1000 euro",
+  "output": "Der Saldo beträgt 1000 Euro.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: nothing changed, no sign on either side"
+ },
+ {
+  "level": "punctuation",
+  "input": "der saldo beträgt 1000 euro",
+  "output": "Der Saldo beträgt 1000 Euro.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: nothing changed, no sign on either side"
+ },
+ {
+  "level": "punctuation",
+  "input": "die temperatur beträgt -20 grad",
+  "output": "Die Temperatur beträgt 20 Grad.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: the sign dropped: -20 is not 20 (Codex R4-B)"
+ },
+ {
+  "level": "light",
+  "input": "die temperatur beträgt -20 grad",
+  "output": "Die Temperatur beträgt 20 Grad.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: the sign dropped: -20 is not 20 (Codex R4-B)"
+ },
+ {
+  "level": "smooth",
+  "input": "die temperatur beträgt -20 grad",
+  "output": "Die Temperatur beträgt 20 Grad.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: the sign dropped: -20 is not 20 (Codex R4-B)"
+ },
+ {
+  "level": "polished",
+  "input": "die temperatur beträgt -20 grad",
+  "output": "Die Temperatur beträgt 20 Grad.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: the sign dropped: -20 is not 20 (Codex R4-B)"
+ },
+ {
+  "level": "punctuation",
+  "input": "die temperatur beträgt -20 grad",
+  "output": "Die Temperatur beträgt -20 Grad.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the sign kept"
+ },
+ {
+  "level": "light",
+  "input": "die temperatur beträgt -20 grad",
+  "output": "Die Temperatur beträgt -20 Grad.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the sign kept"
+ },
+ {
+  "level": "smooth",
+  "input": "die temperatur beträgt -20 grad",
+  "output": "Die Temperatur beträgt -20 Grad.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the sign kept"
+ },
+ {
+  "level": "polished",
+  "input": "die temperatur beträgt -20 grad",
+  "output": "Die Temperatur beträgt -20 Grad.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the sign kept"
+ },
+ {
+  "level": "punctuation",
+  "input": "die temperatur beträgt minus 20 grad",
+  "output": "Die Temperatur beträgt 20 Grad.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: the word \"minus\" gives the digits its sign: -20 is not 20"
+ },
+ {
+  "level": "light",
+  "input": "die temperatur beträgt minus 20 grad",
+  "output": "Die Temperatur beträgt 20 Grad.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: the word \"minus\" gives the digits its sign: -20 is not 20"
+ },
+ {
+  "level": "smooth",
+  "input": "die temperatur beträgt minus 20 grad",
+  "output": "Die Temperatur beträgt 20 Grad.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: the word \"minus\" gives the digits its sign: -20 is not 20"
+ },
+ {
+  "level": "polished",
+  "input": "die temperatur beträgt minus 20 grad",
+  "output": "Die Temperatur beträgt 20 Grad.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: the word \"minus\" gives the digits its sign: -20 is not 20"
+ },
+ {
+  "level": "punctuation",
+  "input": "die temperatur beträgt minus 20 grad",
+  "output": "Die Temperatur beträgt minus 20 Grad.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the word kept"
+ },
+ {
+  "level": "light",
+  "input": "die temperatur beträgt minus 20 grad",
+  "output": "Die Temperatur beträgt minus 20 Grad.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the word kept"
+ },
+ {
+  "level": "smooth",
+  "input": "die temperatur beträgt minus 20 grad",
+  "output": "Die Temperatur beträgt minus 20 Grad.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the word kept"
+ },
+ {
+  "level": "polished",
+  "input": "die temperatur beträgt minus 20 grad",
+  "output": "Die Temperatur beträgt minus 20 Grad.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the word kept"
+ },
+ {
+  "level": "light",
+  "input": "die temperatur beträgt minus 20 grad",
+  "output": "Die Temperatur beträgt -20 Grad.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: \"minus 20\" written as -20 is the same number"
+ },
+ {
+  "level": "smooth",
+  "input": "die temperatur beträgt minus 20 grad",
+  "output": "Die Temperatur beträgt -20 Grad.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: \"minus 20\" written as -20 is the same number"
+ },
+ {
+  "level": "polished",
+  "input": "die temperatur beträgt minus 20 grad",
+  "output": "Die Temperatur beträgt -20 Grad.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: \"minus 20\" written as -20 is the same number"
+ },
+ {
+  "level": "punctuation",
+  "input": "die temperatur beträgt minus 20 grad",
+  "output": "Die Temperatur beträgt -20 Grad.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: \"Nur Zeichensetzung\": the word \"minus\" is gone"
+ },
+ {
+  "level": "light",
+  "input": "die temperatur beträgt minus zwanzig grad",
+  "output": "Die Temperatur beträgt 20 Grad.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: \"minus zwanzig\" is -20, and the answer says 20"
+ },
+ {
+  "level": "smooth",
+  "input": "die temperatur beträgt minus zwanzig grad",
+  "output": "Die Temperatur beträgt 20 Grad.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: \"minus zwanzig\" is -20, and the answer says 20"
+ },
+ {
+  "level": "polished",
+  "input": "die temperatur beträgt minus zwanzig grad",
+  "output": "Die Temperatur beträgt 20 Grad.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: \"minus zwanzig\" is -20, and the answer says 20"
+ },
+ {
+  "level": "light",
+  "input": "die temperatur beträgt minus zwanzig grad",
+  "output": "Die Temperatur beträgt -20 Grad.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: \"minus zwanzig\" is -20"
+ },
+ {
+  "level": "smooth",
+  "input": "die temperatur beträgt minus zwanzig grad",
+  "output": "Die Temperatur beträgt -20 Grad.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: \"minus zwanzig\" is -20"
+ },
+ {
+  "level": "polished",
+  "input": "die temperatur beträgt minus zwanzig grad",
+  "output": "Die Temperatur beträgt -20 Grad.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: \"minus zwanzig\" is -20"
+ },
+ {
+  "level": "light",
+  "input": "die temperatur beträgt minus zwanzig grad",
+  "output": "Die Temperatur beträgt +20 Grad.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: \"minus zwanzig\" is -20, not +20"
+ },
+ {
+  "level": "light",
+  "input": "die temperatur beträgt minus zwanzig grad",
+  "output": "Die Temperatur beträgt −21 Grad.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: \"minus zwanzig\" is -20, not -21"
+ },
+ {
+  "level": "punctuation",
+  "input": "die temperatur beträgt minus zwanzig grad",
+  "output": "Die Temperatur beträgt minus zwanzig Grad.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the words kept"
+ },
+ {
+  "level": "light",
+  "input": "die temperatur beträgt minus zwanzig grad",
+  "output": "Die Temperatur beträgt minus zwanzig Grad.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the words kept"
+ },
+ {
+  "level": "smooth",
+  "input": "die temperatur beträgt minus zwanzig grad",
+  "output": "Die Temperatur beträgt minus zwanzig Grad.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the words kept"
+ },
+ {
+  "level": "polished",
+  "input": "die temperatur beträgt minus zwanzig grad",
+  "output": "Die Temperatur beträgt minus zwanzig Grad.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the words kept"
+ },
+ {
+  "level": "light",
+  "input": "die temperatur beträgt zwanzig grad",
+  "output": "Die Temperatur beträgt -20 Grad.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: zwanzig is 20: a minus was not said"
+ },
+ {
+  "level": "light",
+  "input": "die temperatur beträgt zwanzig grad",
+  "output": "Die Temperatur beträgt 20 Grad.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: zwanzig is 20"
+ },
+ {
+  "level": "light",
+  "input": "das konto steht bei plus 50 euro",
+  "output": "Das Konto steht bei 50 Euro.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: \"plus\" gives the digits their sign: +50 is not 50"
+ },
+ {
+  "level": "light",
+  "input": "das konto steht bei plus 50 euro",
+  "output": "Das Konto steht bei +50 Euro.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: \"plus 50\" written as +50"
+ },
+ {
+  "level": "light",
+  "input": "das konto steht bei 50 euro",
+  "output": "Das Konto steht bei +50 Euro.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: a plus sign was not said"
+ },
+ {
+  "level": "light",
+  "input": "die nummer ist +49 170 1234567",
+  "output": "Die Nummer ist 49 170 1234567.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: the plus of a phone number is part of it"
+ },
+ {
+  "level": "punctuation",
+  "input": "die nummer ist +49 170 1234567",
+  "output": "Die Nummer ist 49 170 1234567.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: the plus of a phone number is part of it"
+ },
+ {
+  "level": "light",
+  "input": "die nummer ist +49 170 1234567",
+  "output": "Die Nummer ist +49 170 1234567.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the plus kept"
+ },
+ {
+  "level": "punctuation",
+  "input": "die nummer ist +49 170 1234567",
+  "output": "Die Nummer ist +49 170 1234567.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the plus kept"
+ },
+ {
+  "level": "punctuation",
+  "input": "das steht auf seite 3-5",
+  "output": "Das steht auf Seite 3–5.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: a hyphen behind a digit is a range, not a sign"
+ },
+ {
+  "level": "light",
+  "input": "das steht auf seite 3-5",
+  "output": "Das steht auf Seite 3–5.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: a hyphen behind a digit is a range, not a sign"
+ },
+ {
+  "level": "smooth",
+  "input": "das steht auf seite 3-5",
+  "output": "Das steht auf Seite 3–5.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: a hyphen behind a digit is a range, not a sign"
+ },
+ {
+  "level": "polished",
+  "input": "das steht auf seite 3-5",
+  "output": "Das steht auf Seite 3–5.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: a hyphen behind a digit is a range, not a sign"
+ },
+ {
+  "level": "punctuation",
+  "input": "das ist modell a-1 mit 5 teilen",
+  "output": "Das ist Modell A-1 mit 5 Teilen.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: a hyphen behind a letter is a code, not a sign"
+ },
+ {
+  "level": "light",
+  "input": "das ist modell a-1 mit 5 teilen",
+  "output": "Das ist Modell A-1 mit 5 Teilen.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: a hyphen behind a letter is a code, not a sign"
+ },
+ {
+  "level": "smooth",
+  "input": "das ist modell a-1 mit 5 teilen",
+  "output": "Das ist Modell A-1 mit 5 Teilen.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: a hyphen behind a letter is a code, not a sign"
+ },
+ {
+  "level": "polished",
+  "input": "das ist modell a-1 mit 5 teilen",
+  "output": "Das ist Modell A-1 mit 5 Teilen.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: a hyphen behind a letter is a code, not a sign"
+ },
+ {
+  "level": "light",
+  "input": "das ist modell a-1 mit 5 teilen",
+  "output": "Das ist Modell A-1 mit -5 Teilen.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: a sign added to the 5 (the hyphen in A-1 is no sign)"
+ },
+ {
+  "level": "punctuation",
+  "input": "das saldo ist -5 und das limit ist 5",
+  "output": "Das Saldo ist 5 und das Limit ist 5.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: \"Nur Zeichensetzung\": the sign of the first number is gone, the set of numbers is the same"
+ },
+ {
+  "level": "punctuation",
+  "input": "nein danke",
+  "output": "Danke.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: \"nein\" dropped: the denial is gone (Codex R4-A)"
+ },
+ {
+  "level": "light",
+  "input": "nein danke",
+  "output": "Danke.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: \"nein\" dropped: the denial is gone (Codex R4-A)"
+ },
+ {
+  "level": "smooth",
+  "input": "nein danke",
+  "output": "Danke.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: \"nein\" dropped: the denial is gone (Codex R4-A)"
+ },
+ {
+  "level": "polished",
+  "input": "nein danke",
+  "output": "Danke.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: \"nein\" dropped: the denial is gone (Codex R4-A)"
+ },
+ {
+  "level": "light",
+  "input": "nein danke",
+  "output": "Nein.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: \"danke\" dropped"
+ },
+ {
+  "level": "smooth",
+  "input": "nein danke",
+  "output": "Nein.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: \"danke\" dropped"
+ },
+ {
+  "level": "punctuation",
+  "input": "nein danke",
+  "output": "!",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: no word left (Codex R4-A)"
+ },
+ {
+  "level": "light",
+  "input": "nein danke",
+  "output": "!",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: no word left (Codex R4-A)"
+ },
+ {
+  "level": "smooth",
+  "input": "nein danke",
+  "output": "!",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: no word left (Codex R4-A)"
+ },
+ {
+  "level": "polished",
+  "input": "nein danke",
+  "output": "!",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: no word left (Codex R4-A)"
+ },
+ {
+  "level": "punctuation",
+  "input": "nein danke",
+  "output": "👍",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: no word left, an emoji (Codex R4-A)"
+ },
+ {
+  "level": "light",
+  "input": "nein danke",
+  "output": "👍",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: no word left, an emoji (Codex R4-A)"
+ },
+ {
+  "level": "smooth",
+  "input": "nein danke",
+  "output": "👍",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: no word left, an emoji (Codex R4-A)"
+ },
+ {
+  "level": "polished",
+  "input": "nein danke",
+  "output": "👍",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: no word left, an emoji (Codex R4-A)"
+ },
+ {
+  "level": "punctuation",
+  "input": "ja danke",
+  "output": "👍",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: no word left, an emoji (Codex R4-A)"
+ },
+ {
+  "level": "light",
+  "input": "ja danke",
+  "output": "👍",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: no word left, an emoji (Codex R4-A)"
+ },
+ {
+  "level": "smooth",
+  "input": "ja danke",
+  "output": "👍",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: no word left, an emoji (Codex R4-A)"
+ },
+ {
+  "level": "polished",
+  "input": "ja danke",
+  "output": "👍",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: no word left, an emoji (Codex R4-A)"
+ },
+ {
+  "level": "punctuation",
+  "input": "ja",
+  "output": "...",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: no word left (Codex R4-A)"
+ },
+ {
+  "level": "light",
+  "input": "ja",
+  "output": "...",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: no word left (Codex R4-A)"
+ },
+ {
+  "level": "smooth",
+  "input": "ja",
+  "output": "...",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: no word left (Codex R4-A)"
+ },
+ {
+  "level": "polished",
+  "input": "ja",
+  "output": "...",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: no word left (Codex R4-A)"
+ },
+ {
+  "level": "punctuation",
+  "input": "nein danke",
+  "output": "Nein, danke.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: every word kept"
+ },
+ {
+  "level": "light",
+  "input": "nein danke",
+  "output": "Nein, danke.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: every word kept"
+ },
+ {
+  "level": "smooth",
+  "input": "nein danke",
+  "output": "Nein, danke.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: every word kept"
+ },
+ {
+  "level": "polished",
+  "input": "nein danke",
+  "output": "Nein, danke.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: every word kept"
+ },
+ {
+  "level": "punctuation",
+  "input": "ja",
+  "output": "Ja.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: every word kept"
+ },
+ {
+  "level": "light",
+  "input": "ja",
+  "output": "Ja.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: every word kept"
+ },
+ {
+  "level": "smooth",
+  "input": "ja",
+  "output": "Ja.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: every word kept"
+ },
+ {
+  "level": "polished",
+  "input": "ja",
+  "output": "Ja.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: every word kept"
+ },
+ {
+  "level": "light",
+  "input": "ähm ja",
+  "output": "Ja.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the filler is no word: dropping it is fine"
+ },
+ {
+  "level": "smooth",
+  "input": "ähm ja",
+  "output": "Ja.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the filler is no word: dropping it is fine"
+ },
+ {
+  "level": "polished",
+  "input": "ähm ja",
+  "output": "Ja.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the filler is no word: dropping it is fine"
+ },
+ {
+  "level": "punctuation",
+  "input": "ähm ja",
+  "output": "Ja.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: \"Nur Zeichensetzung\": the filler is a word there"
+ },
+ {
+  "level": "light",
+  "input": "ja gerne",
+  "output": "Gerne.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: \"ja\" dropped"
+ },
+ {
+  "level": "smooth",
+  "input": "ja gerne",
+  "output": "Gerne.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: \"ja\" dropped"
+ },
+ {
+  "level": "light",
+  "input": "ja gerne",
+  "output": "Ja, gerne.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: every word kept"
+ },
+ {
+  "level": "light",
+  "input": "ja nein",
+  "output": "Nein, ja.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: every word kept, in the other order (the share levels do not read the order)"
+ },
+ {
+  "level": "punctuation",
+  "input": "ok",
+  "output": "Okay.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: ok and okay are not `similar` (two letters): rejected at every preset, as before the short-reply rule"
+ },
+ {
+  "level": "light",
+  "input": "ok",
+  "output": "Okay.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: ok and okay are not `similar` (two letters): rejected at every preset, as before the short-reply rule"
+ },
+ {
+  "level": "smooth",
+  "input": "ok",
+  "output": "Okay.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: ok and okay are not `similar` (two letters): rejected at every preset, as before the short-reply rule"
+ },
+ {
+  "level": "polished",
+  "input": "ok",
+  "output": "Okay.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: ok and okay are not `similar` (two letters): rejected at every preset, as before the short-reply rule"
+ },
+ {
+  "level": "light",
+  "input": "hallo yannick",
+  "output": "Jannik.",
+  "vocabulary": [
+   "Jannik"
+  ],
+  "accept": false,
+  "note": "Codex R4 v4: \"hallo\" is gone, and the one vocabulary word stands for \"yannick\""
+ },
+ {
+  "level": "smooth",
+  "input": "hallo yannick",
+  "output": "Jannik.",
+  "vocabulary": [
+   "Jannik"
+  ],
+  "accept": false,
+  "note": "Codex R4 v4: \"hallo\" is gone, and the one vocabulary word stands for \"yannick\""
+ },
+ {
+  "level": "polished",
+  "input": "hallo yannick",
+  "output": "Jannik.",
+  "vocabulary": [
+   "Jannik"
+  ],
+  "accept": false,
+  "note": "Codex R4 v4: \"hallo\" is gone, and the one vocabulary word stands for \"yannick\""
+ },
+ {
+  "level": "light",
+  "input": "ja jannik",
+  "output": "Jannik.",
+  "vocabulary": [
+   "Jannik"
+  ],
+  "accept": false,
+  "note": "Codex R4 v4: a name that was said stands for nothing else: \"ja\" is gone"
+ },
+ {
+  "level": "light",
+  "input": "ja jannik",
+  "output": "Ja, Jannik.",
+  "vocabulary": [
+   "Jannik"
+  ],
+  "accept": true,
+  "note": "Codex R4 v4: every word kept"
+ },
+ {
+  "level": "light",
+  "input": "kuber netes",
+  "output": "Kubernetes.",
+  "vocabulary": [
+   "Kubernetes"
+  ],
+  "accept": true,
+  "note": "Codex R4 v4: one vocabulary word for the name the transcription split in two"
+ },
+ {
+  "level": "smooth",
+  "input": "kuber netes",
+  "output": "Kubernetes.",
+  "vocabulary": [
+   "Kubernetes"
+  ],
+  "accept": true,
+  "note": "Codex R4 v4: one vocabulary word for the name the transcription split in two"
+ },
+ {
+  "level": "polished",
+  "input": "kuber netes",
+  "output": "Kubernetes.",
+  "vocabulary": [
+   "Kubernetes"
+  ],
+  "accept": true,
+  "note": "Codex R4 v4: one vocabulary word for the name the transcription split in two"
+ },
+ {
+  "level": "punctuation",
+  "input": "kuber netes",
+  "output": "Kubernetes.",
+  "vocabulary": [
+   "Kubernetes"
+  ],
+  "accept": false,
+  "note": "Codex R4 v4: \"Nur Zeichensetzung\": two words became one"
+ },
+ {
+  "level": "light",
+  "input": "kuber netes",
+  "output": "Kubernetes.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: without the word list \"netes\" is gone"
+ },
+ {
+  "level": "light",
+  "input": "tausend euro",
+  "output": "Euro.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: the number said in words is gone"
+ },
+ {
+  "level": "light",
+  "input": "tausend euro",
+  "output": "Tausend Euro.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the words kept"
+ },
+ {
+  "level": "light",
+  "input": "1000 euro",
+  "output": "Euro.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: the number said in digits is gone"
+ },
+ {
+  "level": "light",
+  "input": "1000 euro",
+  "output": "1000 Euro.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the number kept"
+ },
+ {
+  "level": "light",
+  "input": "minus zwanzig",
+  "output": "-20",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the sign and the digits are \"minus zwanzig\""
+ },
+ {
+  "level": "light",
+  "input": "minus zwanzig",
+  "output": "−20",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the real minus sign is the same"
+ },
+ {
+  "level": "light",
+  "input": "minus zwanzig",
+  "output": "Minus zwanzig.",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the words kept"
+ },
+ {
+  "level": "light",
+  "input": "minus zwanzig",
+  "output": "20",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: the sign is gone: 20 is not -20"
+ },
+ {
+  "level": "light",
+  "input": "minus zwanzig",
+  "output": "+20",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: +20 is not -20"
+ },
+ {
+  "level": "light",
+  "input": "minus zwanzig",
+  "output": "Zwanzig.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: the \"minus\" is gone, and no digits carry it"
+ },
+ {
+  "level": "light",
+  "input": "plus fünf",
+  "output": "+5",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the sign and the digits are \"plus fünf\""
+ },
+ {
+  "level": "light",
+  "input": "plus fünf",
+  "output": "5",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: the plus is gone"
+ },
+ {
+  "level": "light",
+  "input": "fünf",
+  "output": "+5",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: a plus was not said"
+ },
+ {
+  "level": "light",
+  "input": "drei vier",
+  "output": "3, 4",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: both numbers said in words, both in digits"
+ },
+ {
+  "level": "light",
+  "input": "drei vier",
+  "output": "3",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: \"vier\" is gone"
+ },
+ {
+  "level": "light",
+  "input": "drei vier",
+  "output": "Drei.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: \"vier\" is gone"
+ },
+ {
+  "level": "light",
+  "input": "zwei millionen",
+  "output": "2.000.000",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: \"zwei millionen\" is 2000000 (the \"zwei\" is in it)"
+ },
+ {
+  "level": "light",
+  "input": "zwei millionen",
+  "output": "2 Millionen",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the \"zwei\" as a digit, the word \"millionen\" kept"
+ },
+ {
+  "level": "light",
+  "input": "zwei millionen",
+  "output": "Millionen.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: the \"zwei\" is gone"
+ },
+ {
+  "level": "light",
+  "input": "-20 grad",
+  "output": "-20 Grad",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the sign kept, the number said in digits"
+ },
+ {
+  "level": "punctuation",
+  "input": "-20 grad",
+  "output": "-20 Grad",
+  "vocabulary": [],
+  "accept": true,
+  "note": "Codex R4 v4: the sign kept, the number said in digits"
+ },
+ {
+  "level": "light",
+  "input": "-20 grad",
+  "output": "20 Grad",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: the sign dropped in a short dictation"
+ },
+ {
+  "level": "punctuation",
+  "input": "-20 grad",
+  "output": "20 Grad",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: the sign dropped in a short dictation"
+ },
+ {
+  "level": "light",
+  "input": "-20 grad",
+  "output": "Grad.",
+  "vocabulary": [],
+  "accept": false,
+  "note": "Codex R4 v4: the number is gone"
  }
 ]

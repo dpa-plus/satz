@@ -248,12 +248,17 @@ private func plain(_ text: String) -> String { text.replacingOccurrences(of: "\u
         let note: String
     }
 
-    /// The 75 real answers both platforms must judge alike.
+    /// The 67 real answers, the 8 hand-made ones for Apple's on-device model,
+    /// the 116 added for Codex CC-2 (changed numbers, lost and added
+    /// negations, dropped repetitions, list markers, number words and their
+    /// values, short dictations) and the 152 for Codex R4 (a sign belongs to
+    /// its number, a short reply keeps every word) both platforms must judge
+    /// alike.
     @Test func theSharedCasesAreJudgedAsCalibrated() throws {
         let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("Fixtures/cleanup-guard-cases.json")
         let cases = try JSONDecoder().decode([Case].self, from: Data(contentsOf: file))
-        #expect(cases.count == 75)
+        #expect(cases.count == 343)
         var wrong: [String] = []
         for item in cases {
             let level = try #require(CleanupLevel(rawValue: item.level))
@@ -805,7 +810,7 @@ private func plain(_ text: String) -> String { text.replacingOccurrences(of: "\u
         defer { server.stop() }
         let result = await CleanupClient().run(custom(server), text: "hallo welt wie geht es dir")
         #expect(result.failure == .providerError && result.text == "hallo welt wie geht es dir" && result.cleaned == nil)
-        #expect(result.detail == "status 500: boom")
+        #expect(result.detail == "status 500")
         #expect(!result.answered)
     }
 
