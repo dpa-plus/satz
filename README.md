@@ -81,6 +81,7 @@ Talk, tap twice again, and the text is pasted. satz starts by itself when you lo
 - **Replacements:** say "open bracket" and get `(`, say "new line" for a line break. Add your own trigger words.
 - **Spoken in:** German or English, separately from the app's language.
 - **Shortcut:** tap to start and stop, or hold while you talk. On the Mac also your own key combination or a mouse button.
+- **Clean up the text** (off until you switch it on): a language model removes the "um"s or rewrites your text before it is pasted, at the strength you choose. See [Cleaning up the text](#cleaning-up-the-text).
 - **Keep text on the clipboard:** off by default, so whatever you had copied comes back after pasting. On, the dictated text stays there to paste again.
 - **Look** (Mac): four colours, light and dark, Liquid Glass on macOS 26.
 
@@ -165,10 +166,51 @@ Whisper tells German from English by itself. The first time after the download, 
 
 **Speed.** MAI-Transcribe usually answers in one or two seconds, but now and then a request hangs for ten. When no answer has come after 2.5 seconds, satz asks a second time and takes whichever answer comes first, for a fraction of a cent.
 
+## Cleaning up the text
+
+Off until you switch it on. With *Clean up the text* in Settings, a language model edits what you said before satz pastes it. You choose how much:
+
+| | What changes |
+|---|---|
+| **Punctuation only** | Punctuation and capitals. Every word stays. |
+| **Light** (the default) | Also no "um", stutters or words you took back: "Monday, no, Tuesday" becomes "Tuesday". |
+| **Smooth** | Also grammar and clumsy sentences. |
+| **Polished** | Rewritten as if you had typed it, with paragraphs and lists. |
+| **Own prompt** | Your own instruction, for example "translate into English" or "write it as a bullet list". |
+
+*Show prompt* shows exactly what satz sends. Your vocabulary goes with it, so names stay spelled your way. English words in German sentences stay English.
+
+**What you dictate is never answered.** "What time is it?" stays a question, and "write a mail to Jonas" stays a sentence. satz checks every answer against what you said: if it looks like a reply, a translation you did not ask for or a comment, or the model fails or is too slow, satz pastes what you said and the card says *Not cleaned up*. The history keeps what you said next to the cleaned text (*Original* on the row).
+
+**What it adds.** Every model in the menu shows the seconds it adds to a dictation and what it costs per hour of talking, estimated for the length of your own dictations and measured once you have used it or clicked *Try*. *Try* runs a sample (or your own text) through the model you are looking at before you switch to it.
+
+| Provider | Default model | Adds per dictation | Per hour of talking |
+|---|---|---|---|
+| **OpenRouter** (your existing key) | Gemini 3.5 Flash-Lite | about 0.8 s | about $0.05 |
+| OpenAI | GPT-6 Luna | about 1.5 s | about $0.01 |
+| Anthropic | Claude Haiku 5.5 | about 1.6 s | about $0.02 |
+| Google (your Gemini key) | Gemini 3.5 Flash-Lite | about 0.8 s | about $0.05 |
+| Groq | gpt-oss-120b | about 0.7 s | about $0.02 |
+| Cerebras | Qwen3.8 27B | about 0.5 s | about $0.08 |
+| Mistral | Mistral Small | about 0.9 s | about $0.02 |
+| DeepSeek | DeepSeek V4.1 Flash | about 1.1 s | about $0.03 |
+| xAI | Grok 4.7 | about 4.6 s | about $0.20 |
+| Microsoft Azure | your deployment | | as at OpenAI |
+| Apple (Mac) | Apple Intelligence, on your Mac | measured | free |
+| Ollama, LM Studio | the models you installed | measured | free |
+| Custom | any OpenAI-compatible address | measured | |
+
+Through OpenRouter you can also pick Qwen3.8 27B (the fastest, 0.6 s), DeepSeek V4.1 Flash, Claude Haiku 5.5 (rewrites best for the price), GPT-6 Luna, GLM-5.3, MiniMax M3, Mistral Large 4, Gemini 3.8 Flash, Kimi K3, DeepSeek V4 Pro, and for the best quality Claude Sonnet 5.5, GPT-6 Sol, GPT-6.1 Sol, Gemini 4 Argon, Claude Opus 5.5 or Grok 4.7. All of them were run through satz's own test set (questions, "ignore your instructions", mixed German and English, self-corrections, lists) before they made the list; models that answered, translated or wrote their reasoning into the text were left out.
+
+Apple's model is free and never leaves your Mac (macOS 26 with Apple Intelligence on), but it is small: in the test it answered a question in the text and translated English into German. satz then mostly pastes the original, so it is best for *Punctuation only* and *Light*. Small models in Ollama or LM Studio behave the same way.
+
+The times were measured from Germany through OpenRouter in October 2026; the prices are the providers' list prices, and OpenRouter's are fetched live.
+
 ## Your key and your data
 
 - Your audio goes straight from your computer to the provider you chose. There is no satz server. With *Local*, it never leaves your computer.
 - The key is stored on your computer only: on the Mac in `~/Library/Application Support/satz/keys`, readable only by your user. satz never shows it again after you save it.
+- With *Clean up the text* on, the text (never the audio) also goes to the model you chose for it, with your vocabulary; with Apple's model it stays on your Mac.
 - The history keeps the last few dictations, in a file only you can read. *Clear* in Settings deletes it.
 
 ## Questions
