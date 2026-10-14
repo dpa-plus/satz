@@ -18,6 +18,8 @@ import { deliver, isWayland } from './paste'
 import { FileSource, MicHub, MicRecorder } from './recorder'
 import { Store } from './store'
 import { MediaPause, systemPlayers } from './media'
+import { makeManualFetch } from './manualFetch'
+import { fetchWithinOrigin } from '../core/redirect'
 import { ModelLists } from './modelLists'
 import { LocalModels } from './local'
 import { GermanErrors } from './localBenchmarks'
@@ -25,6 +27,7 @@ import { machineName } from './localFiles'
 import { SpeedTests } from './speedTests'
 import { foreground } from './foreground'
 import { Cleaner, cleanupState, cleanupTryState, cleanupView, type CleanupRun, type CleanupSettings } from './cleanup'
+import { flushHandback } from './clipboardHandback'
 
 /**
  * satz for Windows and Linux. Double-tap right Ctrl, talk, double-tap again:
@@ -68,8 +71,10 @@ function log(message: string) {
 
 async function start() {
   app.setAppUserModelId('plus.dpa.satz')
-  const store = new Store()
+  const store = new Store(log)
   setLanguage(store.prefs.language)
+  // Requests that carry a key: Electron's network stack, but a redirect is handed back to be judged, not followed (manualFetch.ts).
+  const manualFetch = makeManualFetch(options => net.request(options))
   log(`satz ${app.getVersion()} on ${process.platform} ${process.arch}, ${isWayland() ? 'Wayland' : 'X11/Windows'}${testMode ? ', test mode' : ''}`)
 
   electronSession.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => callback(permission === 'media'))
@@ -91,7 +96,10 @@ async function start() {
       // An answer that never comes fails the start instead of hanging it.
       const timer = setTimeout(() => { if (pending.delete(id)) reject(new Error(de('Das Mikrofon antwortet nicht.', 'The microphone does not answer.'))) }, 15_000)
       pending.set(id, { resolve: () => { clearTimeout(timer); resolve() }, reject: error => { clearTimeout(timer); reject(error) } })
-      void cardIsReady.then(() => card.send('rec:start', id))
+      // Only while still asked for: a request that timed out before the card
+      // was ready had been told to stop, and starting it then left the
+      // microphone open with nobody recording.
+      void cardIsReady.then(() => { if (pending.has(id)) card.send('rec:start', id) })
     }),
     stop: () => card.send('rec:stop', null),
   })
@@ -162,7 +170,8 @@ async function start() {
     dir: app.getPath('userData'),
     settings: cleanupSettings,
     readAccount: account => store.readAccount(account),
-    fetcher: net.fetch as never,
+    // Keys travel with these too: same-origin redirects only, like the transcription (core/redirect.ts).
+    fetcher: ((url: string, init?: RequestInit) => fetchWithinOrigin(manualFetch, url, (init ?? {}) as never)) as never,
     log,
     changed: () => tellWindow('models:changed'),
     onlyThisComputer: testMode && !realCleanupInTest,
@@ -177,10 +186,12 @@ async function start() {
   const session = new Session({
     // In test mode silence once the files run out: a test never records the room.
     makeSource: (): AudioSource => (testMode && flag('--test-audio') !== undefined ? new FileSource(testAudio.shift() ?? null) : new MicRecorder(hub)),
-    transcribe: samples => store.prefs.provider === 'local'
-      ? local.transcribe(samples, localModel(), store.transcriberSettings().vocabulary, store.spokenLanguage, toldLanguage(localModel(), store.prefs.toldLanguage, store.spokenLanguage))
-      // Electron's fetch: the system proxy and certificate store, which Node's ignores.
-      : transcribe(store.transcriberSettings(), encodeWAV(samples), store.readKey() ?? '', net.fetch as never),
+    // `signal`: thrown away, so the upload and its retries stop, and a local
+    // model skips what of it is still queued.
+    transcribe: (samples, signal) => store.prefs.provider === 'local'
+      ? local.transcribe(samples, localModel(), store.transcriberSettings().vocabulary, store.spokenLanguage, toldLanguage(localModel(), store.prefs.toldLanguage, store.spokenLanguage), signal)
+      // Electron's network stack: the system proxy and certificate store, which Node's ignores.
+      : transcribe(store.transcriberSettings(), encodeWAV(samples), store.readKey() ?? '', manualFetch, signal),
     replacements: () => store.activeReplacements,
     missing,
     endpointMissing: () => store.endpointMissing,
@@ -360,7 +371,7 @@ async function start() {
   ipcMain.handle('history:open', () => openHistory())
 
   // The model menu: the provider's live list, the shipped one until it arrives.
-  const modelLists = new ModelLists(app.getPath('userData'), provider => store.readKey(provider), log, () => tellWindow('models:changed'), net.fetch as never)
+  const modelLists = new ModelLists(app.getPath('userData'), provider => store.readKey(provider), log, () => tellWindow('models:changed'), manualFetch)
   const germanErrors = new GermanErrors(app.getPath('userData'), log, () => tellWindow('local:changed'), net.fetch as never)
   /**
    * `shown`: the provider the settings page shows, which may not be the one
@@ -431,20 +442,28 @@ async function start() {
     refreshTray()
     return store.prefs
   })
-  // Quitting in the middle of a dictation plays the paused music again.
+  // Quitting in the middle of a dictation plays the paused music again, and
+  // a clipboard still due back after a paste comes back now: quit within
+  // that second, the transcript stayed on it in place of what was copied.
   let quitting = false
   app.on('before-quit', event => {
     if (quitting) return
     quitting = true
     event.preventDefault()
     keyboard?.stop()
-    mediaPause.quitting().finally(() => app.quit())
+    void Promise.allSettled([mediaPause.quitting(), flushHandback()]).finally(() => app.quit())
   })
   // For the provider shown, which need not be the one in use.
   ipcMain.handle('settings:store-key', (_e, key: string, asked: unknown) => {
     const provider = asked === undefined ? store.prefs.provider : asked
     if (!isProvider(provider) || !needsKey(provider)) return false
-    store.storeKey(key, provider)
+    try {
+      store.storeKey(key, provider)
+    } catch (error) {
+      // Why, never the key: the page says so (core/browse.ts, keyRefusal).
+      log(`key for ${provider} not saved: ${(error as Error).message}`)
+      return false
+    }
     return store.hasKey(provider)
   })
   // Only the addresses in keyPages, never one the page names: the page asks for a provider.

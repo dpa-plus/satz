@@ -37,11 +37,13 @@ const modelFiles = (id: string) => localModel(id)?.sherpa?.files.map(file => fil
 /**
  * Downloaded and still there. The marker alone said "on this computer" after
  * the folder was cleaned up, and every dictation then failed with "Error".
+ * @param tidy the marker of a model whose files are gone goes too; false
+ *   where the folder is not satz's to change (a test copy on the user's models).
  */
-export function isDownloaded(dir: string, id: string): boolean {
+export function isDownloaded(dir: string, id: string, tidy = true): boolean {
   if (!fs.existsSync(markerPath(dir, id))) return false
   if (modelFiles(id).every(file => fs.existsSync(path.join(dir, id, file)))) return true
-  fs.rmSync(markerPath(dir, id), { force: true })
+  if (tidy) fs.rmSync(markerPath(dir, id), { force: true })
   return false
 }
 

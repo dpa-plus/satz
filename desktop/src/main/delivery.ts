@@ -30,6 +30,15 @@ export interface DeliveryDeps {
 export function makeDelivery(deps: DeliveryDeps) {
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)))
   /**
+   * After the paste, whatever the history does: a history that could not be
+   * written (a full disk) made a pasted text "Nicht eingefügt", and its
+   * restore pasted it a second time.
+   */
+  const done = (text: string, pasted: boolean, cleanup?: CleanupOutcome) => {
+    try { deps.addHistory(text, pasted, cleanup) } catch (error) { deps.log(`history: not saved (${(error as Error)?.message ?? error})`) }
+    deps.delivered(text)
+  }
+  /**
    * @param target where this dictation started, noted when it began. Handed
    *   in with the text, not read from a variable once the 120 ms are over: a
    *   dictation started meanwhile replaced it, and the text went to the
@@ -38,8 +47,7 @@ export function makeDelivery(deps: DeliveryDeps) {
    */
   return async function deliver(text: string, target: Promise<string | null>, cleanup?: CleanupOutcome): Promise<Outcome> {
     if (deps.records) {
-      deps.addHistory(text, true, cleanup)
-      deps.delivered(text)
+      done(text, true, cleanup)
       return { pasted: true }
     }
     await sleep(120)
@@ -49,15 +57,13 @@ export function makeDelivery(deps: DeliveryDeps) {
     if (window && !(await deps.windows.restore(window))) {
       await deps.writeClipboard(text)
       deps.log('paste: the window the dictation started in is gone or would not come back')
-      deps.addHistory(text, false, cleanup)
-      deps.delivered(text)
+      done(text, false, cleanup)
       return { pasted: false, reason: de('Auf der Zwischenablage, das Fenster ist nicht mehr da.', 'On the clipboard, the window is gone.') }
     }
     const terminal = window ? await deps.windows.isTerminal(window) : false
     const outcome = await deps.paste(text, () => deps.keyTap(terminal), deps.keepsOnClipboard(), deps.log)
     deps.log(`paste: ${outcome.pasted ? 'sent Ctrl+V' : 'clipboard only'}, ${text.length} characters`)
-    deps.addHistory(text, outcome.pasted, cleanup)
-    deps.delivered(text)
+    done(text, outcome.pasted, cleanup)
     return outcome
   }
 }

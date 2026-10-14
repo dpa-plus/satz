@@ -26,6 +26,8 @@ export class MediaPause {
   private paused: string[] = []
   private pausing: Promise<void> | null = null
   private resuming: ReturnType<typeof setTimeout> | null = null
+  /** The Play command that is on its way: it can land after the next dictation began (see dictationStarted). */
+  private playing: Promise<void> | null = null
   /** Recordings begun so far: a dictation that ends while a pause is still running only plays the music if no other began meanwhile. */
   private started = 0
 
@@ -41,7 +43,12 @@ export class MediaPause {
     // The next dictation right after the last one: the music stays paused.
     if (this.resuming) { clearTimeout(this.resuming); this.resuming = null }
     if (!this.players || !this.isOn() || this.paused.length > 0 || this.pausing) return
-    this.pausing = this.players.pause()
+    // The music is being played again from the dictation before, and a Play
+    // that is on its way takes effect after the player still reported paused:
+    // asked now, nothing would be paused and the music would start inside this
+    // recording. Paused once that Play has landed.
+    const players = this.players
+    this.pausing = (this.playing ? this.playing.then(() => players.pause()) : players.pause())
       .then(ids => { this.paused = ids; if (ids.length) this.log(`media paused: ${ids.join(', ')}`) })
       .catch(error => this.log(`media: ${(error as Error).message}`))
       .finally(() => { this.pausing = null })
@@ -65,14 +72,20 @@ export class MediaPause {
     if (this.resuming) { clearTimeout(this.resuming); this.resuming = null }
     await this.pausing
     await this.resume()
+    // A Play sent a moment ago is still on its way: satz leaving now would not wait for it.
+    await this.playing
   }
 
-  private async resume() {
+  private resume(): Promise<void> {
     const ids = this.paused
     this.paused = []
-    if (ids.length === 0 || !this.players) return
-    const resumed = await this.players.play(ids).catch(error => { this.log(`media: ${(error as Error).message}`); return [] as string[] })
-    this.log(resumed.length ? `media resumed: ${resumed.join(', ')}` : 'media left as the user set it')
+    if (ids.length === 0 || !this.players) return Promise.resolve()
+    const run: Promise<void> = this.players.play(ids)
+      .catch(error => { this.log(`media: ${(error as Error).message}`); return [] as string[] })
+      .then(resumed => { this.log(resumed.length ? `media resumed: ${resumed.join(', ')}` : 'media left as the user set it') })
+      .finally(() => { if (this.playing === run) this.playing = null })
+    this.playing = run
+    return run
   }
 }
 

@@ -157,7 +157,7 @@ export class WhisperEngine extends LocalEngine<Loaded> {
 
   // MARK: - Transcribing
 
-  protected async run(samples: Float32Array, { id, processor, tokenizer, model }: Loaded, vocabulary: string[], spoken: Language): Promise<string> {
+  protected async run(samples: Float32Array, { id, processor, tokenizer, model }: Loaded, vocabulary: string[], spoken: Language, _told?: string, signal?: AbortSignal): Promise<string> {
     const only = onlyLanguage(id)
     const config = model.generation_config
     const token = (name: string) => tokenizer.convert_tokens_to_ids(name) as number
@@ -178,6 +178,7 @@ export class WhisperEngine extends LocalEngine<Loaded> {
     // timestamp rules it often wrote none and a whole window went by, and
     // with them it translated English sentences into German.
     for (const audio of windows(samples, rate, 30 * rate - lead)) {
+      signal?.throwIfAborted()
       if (!hasSpeech(audio, rate, pieceThreshold(audio, whole, rate))) continue
       const piece = new Float32Array(lead + audio.length)
       piece.set(audio, lead)

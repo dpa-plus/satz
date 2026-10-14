@@ -1,7 +1,7 @@
 import { satz } from './bridge'
 import { formatSize, languageLine, languageName, localModel, measuredHere, modelBars, toldLanguage, type Speed } from '../core/localModels'
 import { choiceFor, type ModelChoice } from '../core/models'
-import { localRowAction, providerLabel, providerNeeds, providerOrder, shortcutHint, switchRow, useLocalModel } from '../core/browse'
+import { addressRefusal, customAddress, keyRefusal, localRowAction, providerLabel, providerNeeds, providerOrder, shortcutHint, switchRow, useLocalModel } from '../core/browse'
 import { hasCleanMode, keyPages, microsoftHost, microsoftRegions, providers, type Provider } from '../core/transcriber'
 import { HISTORY_LIMITS, KEEP_ALL } from '../core/historyLimits'
 import { cleanupLevels, levelChange, levelTexts, systemPrompt, trySample, type CleanupLevel } from '../core/cleanup'
@@ -148,6 +148,9 @@ function render() {
     const save = el('button', { className: 'accent', textContent: t('Sichern', 'Save') })
     const commit = async () => {
       if (!input.value.trim()) return
+      // Said here, with the reason, before the app is asked: its answer is only yes or no.
+      const refusal = keyRefusal(input.value, p.language)
+      if (refusal) { keyProblem = refusal; wantsKeyFocus = true; render(); return }
       const ok = await satz.invoke('settings:store-key', input.value, provider)
       keyProblem = ok ? '' : t('Konnte nicht gesichert werden.', 'Could not be saved.')
       editingKey = false
@@ -185,9 +188,9 @@ function render() {
     const own = el('input', { type: 'text', id: 'microsoft-endpoint', className: 'grow', value: p.microsoftEndpoint, placeholder: 'https://….cognitiveservices.azure.com' })
     own.onchange = () => update({ microsoftEndpoint: own.value.trim() })
     microsoftRows.push(el('div', { className: 'row' }, el('span', { textContent: t('Eigene Adresse', 'Own address') }), own))
-    microsoftRows.push(el('div', { className: p.microsoftEndpoint.trim() && !microsoftHost(p.microsoftRegion, p.microsoftEndpoint) ? 'error' : 'hint',
-      textContent: p.microsoftEndpoint.trim() && !microsoftHost(p.microsoftRegion, p.microsoftEndpoint) ? t('Das ist keine gültige Adresse (https://…).', 'That is not a valid address (https://…).')
-        : t('Optional. Wenn gesetzt, gilt sie statt der Region.', 'Optional. If set, it is used instead of the region.') }))
+    const ownRefused = p.microsoftEndpoint.trim() !== '' && !microsoftHost(p.microsoftRegion, p.microsoftEndpoint)
+    microsoftRows.push(el('div', { className: ownRefused ? 'error' : 'hint',
+      textContent: ownRefused ? addressRefusal(p.language) : t('Optional. Wenn gesetzt, gilt sie statt der Region.', 'Optional. If set, it is used instead of the region.') }))
   }
   // A menu of what the provider offers now, best first, with how many words
   // each gets wrong and what an hour costs, and "Other" for one typed in by
@@ -274,6 +277,8 @@ function render() {
     const url = el('input', { type: 'text', id: 'custom-url', className: 'grow', value: p.customBaseURL, placeholder: 'https://…/v1' })
     url.onchange = () => update({ customBaseURL: url.value.trim() })
     providerBox.append(el('div', { className: 'row' }, el('span', { textContent: t('Adresse', 'Address') }), url))
+    // Typed and refused: said why, wherever the page stands (the row under the menu only shows while another provider is looked at).
+    if (p.customBaseURL.trim() !== '' && customAddress(p.customBaseURL) === null) providerBox.append(el('div', { className: 'error', textContent: addressRefusal(p.language) }))
   }
   // Only MAI-Transcribe 2 (1.5 refused the whole request with it) and Gemini have a clean mode; elsewhere the switch would do nothing.
   if (hasCleanMode(provider, currentModel)) {

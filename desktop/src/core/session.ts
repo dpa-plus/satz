@@ -45,8 +45,13 @@ export interface AudioSource {
 
 export interface SessionDeps {
   makeSource(): AudioSource
-  /** The transcript of 16 kHz mono samples. Throws TranscriptionFailure. */
-  transcribe(samples: Float32Array): Promise<string>
+  /**
+   * The transcript of 16 kHz mono samples. Throws TranscriptionFailure.
+   * `signal` aborts once nobody waits for the answer (thrown away, or the
+   * recording grew and went again): the upload, its retries and the local
+   * pieces still to decode stop there.
+   */
+  transcribe(samples: Float32Array, signal: AbortSignal): Promise<string>
   replacements(): Replacement[]
   /** What keeps the provider from working, in two or three words: no key,
    *  or a local model not downloaded yet. null when it is ready. */
@@ -94,6 +99,14 @@ export class Session {
   readonly doc = new Doc()
   /** The last dictation thrown away, for Rückgängig and the tray's restore. */
   discarded: Snapshot | null = null
+  /** The dictation `discarded` came from (`generation`). */
+  private discardedGeneration = 0
+  /**
+   * A second text to bring back, next in line once `discarded` is taken: a
+   * paste that failed while a newer dictation held that place. Either one
+   * written over the other was lost.
+   */
+  private behind: { snapshot: Snapshot; generation: number } | null = null
 
   onChange: () => void = () => {}
   onOpen: () => void = () => {}
@@ -110,7 +123,7 @@ export class Session {
   private source: AudioSource | null = null
   private liveStart = 0
   private caret: number | null = null
-  private sends = new Map<number, { promise: Promise<void>; covers: number; gen: number }>()
+  private sends = new Map<number, { promise: Promise<void>; covers: number; gen: number; controller: AbortController }>()
   private sendGen = 0
   private tailing = new Set<number>()
   private tails: Promise<void>[] = []
@@ -240,7 +253,7 @@ export class Session {
     this.reset()
     const hasContent = snapshot.preview.trim() !== '' || [...kept.values()].some(s => s.audio.length > 0)
     if (!hasContent) return this.close()
-    this.discarded = snapshot
+    this.keepDiscarded(snapshot, this.generation)
     this.phase = { kind: 'discarded' }
     this.changed()
     this.closeLater(5000)
@@ -249,17 +262,27 @@ export class Session {
   /** "Rückgängig", while the card says "Verworfen". */
   undoDiscard() {
     if (this.phase.kind !== 'discarded' || !this.discarded) return
-    const snapshot = this.discarded
-    this.discarded = null
-    this.restore(snapshot)
+    this.restore(this.takeDiscarded())
   }
 
   /** The tray's restore: only takes the snapshot when it can come back. */
   restoreLast() {
     if (!this.canRestore || !this.discarded) return
-    const snapshot = this.discarded
-    this.discarded = null
-    this.restore(snapshot)
+    this.restore(this.takeDiscarded())
+  }
+
+  private keepDiscarded(snapshot: Snapshot, generation: number) {
+    this.discarded = snapshot
+    this.discardedGeneration = generation
+  }
+
+  /** The snapshot to bring back; the one waiting behind it moves up, for the tray. */
+  private takeDiscarded(): Snapshot {
+    const snapshot = this.discarded!
+    this.discarded = this.behind?.snapshot ?? null
+    this.discardedGeneration = this.behind?.generation ?? 0
+    this.behind = null
+    return snapshot
   }
 
   restore(snapshot: Snapshot) {
@@ -478,6 +501,7 @@ export class Session {
   }
 
   private async deliverText(output: string, cleaned: { text: string; cleanup: CleanupOutcome } | null) {
+    const generation = this.generation
     if (output === '') {
       const seconds = [...this.segments.values()].reduce((sum, s) => sum + s.audio.length, 0) / this.rate
       this.log(`nothing heard in ${seconds.toFixed(1)} s of audio`)
@@ -496,8 +520,19 @@ export class Session {
       outcome = cleaned ? await this.deps.deliver(cleaned.text, cleaned.cleanup) : await this.deps.deliver(output)
     } catch (error) {
       this.log(`delivery failed: ${(error as Error)?.message ?? error}`)
-      this.discarded = snapshot
-      if (this.phase.kind !== 'idle') return
+      // A dictation begun and thrown away while this one was being pasted
+      // keeps its place: Rückgängig on the card is for it. Written over, Undo
+      // brought back this older text instead and the newer one was gone.
+      const newer = this.discarded !== null && this.discardedGeneration > generation
+      if (this.phase.kind !== 'idle') {
+        if (newer) this.behind = { snapshot, generation }
+        else this.keepDiscarded(snapshot, generation)
+        return
+      }
+      // The card shows this failure and its restore button, which brings back
+      // `discarded`: this text goes in front, the newer one waits behind it.
+      if (newer) this.behind = { snapshot: this.discarded!, generation: this.discardedGeneration }
+      this.keepDiscarded(snapshot, generation)
       // The text is safe in `discarded`: the card offers it back right here
       // (the tray's entry is there too), and closes like every other failure.
       this.phase = { kind: 'failed', message: de('Nicht eingefügt', 'Not pasted'), canRetry: false, canRestore: true }
@@ -549,16 +584,20 @@ export class Session {
     segment.failure = undefined
     segment.futile = undefined
     const audio = segment.audio, covered = audio.length, token = this.sessionToken, gen = ++this.sendGen
+    // On its way with less audio: replaced below, its answer would be ignored, so it need not come.
+    running?.controller.abort()
     const rules = this.deps.replacements()
     const started = Date.now()
+    const controller = new AbortController()
     const promise = (async () => {
       let raw: string | null = null, failure: string | null = null, futile = false
       try {
-        raw = await this.deps.transcribe(audio)
+        raw = await this.deps.transcribe(audio, controller.signal)
       } catch (error) {
         failure = error instanceof TranscriptionFailure ? error.short : de('Fehler', 'Error')
         futile = error instanceof TranscriptionFailure && error.kind === 'tooLarge'
-        this.log(`transcription failed: ${(error as Error).message}`)
+        // Called off here (thrown away, or sent again with more audio): no failure to tell of.
+        if (!controller.signal.aborted) this.log(`transcription failed: ${(error as Error).message}`)
       }
       if (token !== this.sessionToken || this.sends.get(id)?.gen !== gen) return
       this.sends.delete(id)
@@ -575,7 +614,7 @@ export class Session {
       } else { const s = this.segments.get(id); if (s) { s.failure = failure ?? undefined; s.futile = futile } }
       this.changed()
     })()
-    this.sends.set(id, { promise, covers: covered, gen })
+    this.sends.set(id, { promise, covers: covered, gen, controller })
     this.changed()
   }
 
@@ -619,6 +658,7 @@ export class Session {
     segment.audio = segment.audio.subarray(segment.transcribed)
     segment.transcribed = 0
     if (this.sends.has(id)) {
+      this.sends.get(id)!.controller.abort()
       this.sends.delete(id)
       if (!(id === this.activeID && this.phase.kind === 'listening')) this.send(id)
     }
@@ -650,7 +690,15 @@ export class Session {
   /** A click between two letters goes to the nearer end of the word. */
   private wordEdge(location: number) {
     const text = this.doc.text()
-    const word = (i: number) => i >= 0 && i < text.length && /[\p{L}\p{N}]/u.test(text[i])
+    // By the character each UTF-16 unit belongs to: an accent written as its
+    // own mark ("e" + U+0301) and both halves of a letter beyond U+FFFF are
+    // part of the word. Read unit by unit they were not, and "Cafe\u0301s"
+    // took speech between "é" and "s".
+    const word = (i: number) => {
+      if (i < 0 || i >= text.length) return false
+      const low = /[\uDC00-\uDFFF]/.test(text[i]) && i > 0 && /[\uD800-\uDBFF]/.test(text[i - 1])
+      return /[\p{L}\p{N}\p{M}]/u.test(String.fromCodePoint(text.codePointAt(low ? i - 1 : i)!))
+    }
     if (!word(location - 1) || !word(location)) return location
     let start = location, end = location
     while (word(start - 1)) start--
@@ -698,6 +746,7 @@ export class Session {
     this.startToken++
     this.source?.cancel()
     this.source = null
+    for (const running of this.sends.values()) running.controller.abort()
     this.sends.clear()
     this.tails = []
     this.tailing.clear()

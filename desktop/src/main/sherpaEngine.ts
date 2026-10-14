@@ -213,7 +213,7 @@ export class SherpaEngine extends LocalEngine<SherpaLoaded> {
    * stand for the whole recording, and the lost words would never be asked
    * for again.
    */
-  protected async run(samples: Float32Array, loaded: SherpaLoaded, vocabulary: string[], spoken: Language, told?: string): Promise<string> {
+  protected async run(samples: Float32Array, loaded: SherpaLoaded, vocabulary: string[], spoken: Language, told?: string, signal?: AbortSignal): Promise<string> {
     const source = this.source(loaded.id)
     const language = told ?? spoken
     if (source.kind === 'canary' && loaded.language !== language) {
@@ -232,6 +232,7 @@ export class SherpaEngine extends LocalEngine<SherpaLoaded> {
     const whole = speechThreshold(samples, rate)
     const said: string[] = []
     for (const piece of pieces) {
+      signal?.throwIfAborted()
       const threshold = pieceThreshold(piece, whole, rate)
       // The recording as a whole has speech (transcribe checked); a quiet piece of it is skipped.
       if (!hasSpeech(piece, rate, threshold)) continue

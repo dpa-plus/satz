@@ -51,8 +51,10 @@ export abstract class LocalEngine<Model> {
   /**
    * @param spoken the language set in Settings (German or English), for clips too short to tell.
    * @param told the language a model that cannot tell (Canary) listens for; `spoken` where not given.
+   * @param signal checked before each piece of a long recording: a dictation
+   *   thrown away stops after the piece being decoded (that native call runs to its end).
    */
-  protected abstract run(samples: Float32Array, model: Model, vocabulary: string[], spoken: Language, told?: string): Promise<string>
+  protected abstract run(samples: Float32Array, model: Model, vocabulary: string[], spoken: Language, told?: string, signal?: AbortSignal): Promise<string>
   protected abstract free(model: Model): Promise<void>
 
   // MARK: - Download
@@ -248,11 +250,17 @@ export abstract class LocalEngine<Model> {
    * @param samples 16 kHz mono, as recorded.
    * @param spoken the language set in Settings, used where a clip is too short to tell.
    * @param told the language a model that cannot tell (Canary) listens for.
+   * @param signal aborted when the dictation was thrown away: what of it is
+   *   still in the queue is skipped, so the next dictation does not wait for
+   *   the rest of a long one nobody wants.
    */
-  transcribe(samples: Float32Array, id: string, vocabulary: string[], spoken: Language = 'de', told?: string): Promise<string> {
+  transcribe(samples: Float32Array, id: string, vocabulary: string[], spoken: Language = 'de', told?: string, signal?: AbortSignal): Promise<string> {
     // Every model makes something up for silence ("you", "Thank you.").
     this.dictationWaiting = true
-    const job = this.queue.then(async () => (hasSpeech(samples) ? this.run(samples, await this.model(id), vocabulary, spoken, told) : ''))
+    const job = this.queue.then(async () => {
+      signal?.throwIfAborted()
+      return hasSpeech(samples) ? this.run(samples, await this.model(id), vocabulary, spoken, told, signal) : ''
+    })
     this.queue = job.catch(() => {})
     return job
   }

@@ -1,4 +1,6 @@
+import { allowsAddress } from './address'
 import { de } from './language'
+import { fetchWithinOrigin, RedirectRefused, type ManualFetch } from './redirect'
 
 /**
  * Where the audio goes to become text. OpenAI, Groq and Custom take
@@ -51,18 +53,18 @@ export const defaultMicrosoftRegion = microsoftRegions[0].id
 /**
  * Where Microsoft's requests go: the resource's own address when the user
  * gave one (it wins over the region), else the regional host. Only https, or
- * http to this computer (a stand-in server in a test): the key travels with
- * it. Only the origin is kept, so a pasted address with a path still works.
+ * http on the user's own network (core/address.ts): the key travels with it.
+ * Only the origin is kept, so a pasted address with a path still works.
  * Null for an address that is none, or a region that cannot be one.
  */
 export function microsoftHost(region?: string, endpoint?: string): string | null {
   const own = endpoint?.trim()
   if (own) {
+    // Without a scheme it is https; "//host" is no address, not a host that gets one.
+    if (!own.includes('://') && /^[\\/]/.test(own)) return null
     let url: URL
     try { url = new URL(own.includes('://') ? own : `https://${own}`) } catch { return null }
-    const here = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
-    if (url.protocol !== 'https:' && !(url.protocol === 'http:' && here)) return null
-    return url.origin
+    return allowsAddress(url) ? url.origin : null
   }
   const id = (region?.trim() || defaultMicrosoftRegion).toLowerCase()
   return /^[a-z0-9]+$/.test(id) ? `https://${id}.api.cognitive.microsoft.com` : null
@@ -86,7 +88,7 @@ export interface TranscriberSettings {
   vocabulary: string[]
   removesFillers: boolean
   language?: string
-  /** Seconds before the first byte; one more second per four of audio. */
+  /** Seconds before the first byte, and the whole request's budget: one more second per two seconds of audio (see `requestTimeout`). */
   timeout?: number
   attempts?: number
   /** Seconds to wait before asking a second time with the same audio; null
@@ -100,8 +102,10 @@ export interface TranscriberSettings {
  * tooLarge: the provider's upload limit (25 MB, about 13 minutes at OpenAI and
  * Groq); Retry would fail the same way. noCredit: the account is empty
  * (OpenRouter 402, OpenAI 429 insufficient_quota), not a busy provider.
+ * redirected: the address answered with a redirect that is not followed: to
+ * another origin, or too many (core/redirect.ts).
  */
-export type FailureKind = 'noKey' | 'unauthorized' | 'keyOrRegion' | 'rateLimited' | 'offline' | 'timedOut' | 'server' | 'unreadableResponse' | 'tooLarge' | 'noCredit'
+export type FailureKind = 'noKey' | 'unauthorized' | 'keyOrRegion' | 'rateLimited' | 'offline' | 'timedOut' | 'server' | 'unreadableResponse' | 'tooLarge' | 'noCredit' | 'redirected'
 
 export class TranscriptionFailure extends Error {
   constructor(readonly kind: FailureKind, readonly status?: number, readonly detail?: string) {
@@ -123,11 +127,40 @@ export class TranscriptionFailure extends Error {
       case 'unreadableResponse': return de('Antwort unlesbar', 'Unreadable answer')
       case 'tooLarge': return de('Zu lang für den Anbieter', 'Too long for the provider')
       case 'noCredit': return de('Kein Guthaben beim Anbieter', 'No credit left')
+      case 'redirected': return de('Adresse leitet um', 'Address redirects')
     }
   }
 }
 
-type Fetch = (url: string, init: { method: string; headers: Record<string, string>; body: BodyInit; signal: AbortSignal }) => Promise<Response>
+/** A fetch that hands a redirect back instead of following it (core/redirect.ts). */
+type Fetch = ManualFetch
+
+/** Waits `ms`; ends early, without failing, when `signal` aborts, so a discarded dictation does not sit out a Retry-After. */
+type Sleep = (ms: number, signal?: AbortSignal) => Promise<unknown>
+
+const pause: Sleep = (ms, signal) => new Promise<void>(resolve => {
+  const done = () => { clearTimeout(timer); signal?.removeEventListener('abort', done); resolve() }
+  const timer = setTimeout(done, ms)
+  signal?.addEventListener('abort', done, { once: true })
+})
+
+/** What a canceled call rejects with: the name every fetch uses, so a discard reads differently from a failure. */
+export const abortError = () => new DOMException('The transcription was canceled', 'AbortError')
+const isAbort = (error: unknown) => (error as Error | undefined)?.name === 'AbortError'
+
+/**
+ * Whether a key can travel in a header at all. A control character (a
+ * newline from a pasted line break, a NUL) or a character above 0xFF makes
+ * fetch refuse the header, and its error then quotes the whole value.
+ */
+export const keyIsUsable = (key: string) => !/[\u0000-\u001f\u007f-\u009f\u0100-\uffff]/.test(key)
+
+/** `text` with every secret blanked and control characters turned to spaces: what is left may go into a log. */
+export function scrubbed(text: string, secrets: string[]): string {
+  let clean = text
+  for (const secret of secrets) if (secret) clean = clean.split(secret).join('[key]')
+  return clean.replace(/[\u0000-\u001f\u007f]/g, ' ')
+}
 
 export function resolved(settings: TranscriberSettings) {
   const provider = providers[settings.provider]
@@ -181,10 +214,15 @@ export function microsoftModel(id: string): string | null {
  * language is fixed: Microsoft detects German and English by itself.
  */
 export function microsoftDefinition(settings: TranscriberSettings) {
-  const enhanced = microsoftModel(resolved(settings).model)
+  const { model } = resolved(settings)
+  const enhanced = microsoftModel(model)
   const definition: Record<string, unknown> = {}
   if (enhanced) {
-    definition.enhancedMode = { enabled: true, model: enhanced, modelOptions: { transcribeStyle: settings.removesFillers ? 'clean' : 'verbatim' } }
+    const mode: Record<string, unknown> = { enabled: true, model: enhanced }
+    // Only MAI-Transcribe 2 takes the style; 1.5 refused the whole request
+    // when it came along, and a model typed in by hand is not known to.
+    if (model.toLowerCase().includes('mai-transcribe-2')) mode.modelOptions = { transcribeStyle: settings.removesFillers ? 'clean' : 'verbatim' }
+    definition.enhancedMode = mode
   }
   if (settings.vocabulary.length > 0) definition.phraseList = { phrases: settings.vocabulary }
   if (settings.language) definition.locales = [locale(settings.language)]
@@ -197,8 +235,24 @@ export function microsoftDefinition(settings: TranscriberSettings) {
  * Kept just under, so a recording that would be refused is not sent at all.
  */
 export const googleInlineLimit = 20_000_000
-/** What the JSON around the audio adds, at most, with a long word list. */
-const googleOverhead = 64_000
+
+/**
+ * The model id as the API wants it: Google's own lists spell it
+ * `models/gemini-…`, and an id pasted from one keeps that prefix.
+ */
+export function googleModel(id: string): string {
+  const typed = id.trim()
+  return (typed.startsWith('models/') ? typed.slice('models/'.length).trim() : typed) || providers.google.defaultModel
+}
+
+/**
+ * The bytes of the request body, counted before the audio is turned into a
+ * string: the JSON around it as it will be sent (word list, escapes and
+ * multi-byte letters included), plus the audio as base64.
+ */
+export function googleRequestSize(settings: TranscriberSettings, wavLength: number): number {
+  return Buffer.byteLength(JSON.stringify(googleBody(settings, new Uint8Array(0)))) + Math.ceil(wavLength / 3) * 4
+}
 
 /**
  * Gemini 3.5 Transcribe, "interactions" API. `mode: "smart"` leaves out
@@ -211,27 +265,54 @@ export function googleBody(settings: TranscriberSettings, wav: Uint8Array) {
   if (settings.vocabulary.length > 0) transcription.custom_vocabulary = settings.vocabulary.slice(0, 1000)
   if (settings.removesFillers) transcription.mode = 'smart'
   return {
-    model,
+    model: googleModel(model),
     input: [{ type: 'audio', data: base64(wav), mime_type: 'audio/wav' }],
     generation_config: { transcription_config: transcription },
+    // One recording, answered once: nothing to fetch again later. Google keeps
+    // an interaction otherwise (55 days on the paid tier, one on the free one).
+    store: false,
   }
 }
 
-export function makeRequest(settings: TranscriberSettings, wav: Uint8Array, apiKey: string) {
+interface PreparedRequest {
+  url: string
+  headers: Record<string, string>
+  body: BodyInit
+  /** Milliseconds. */
+  timeout: number
+}
+
+/**
+ * How long one request may take in all, upload and answer included, in
+ * milliseconds: the base timeout (30 s) plus a second for every two seconds
+ * of audio (16 kHz, 16 bit: 32,000 bytes a second). The timer runs over the
+ * whole request, not up to the first byte, so it has to cover the upload: at
+ * a second per four, five minutes of speech got 105 s, and a line slower than
+ * 0.7 Mbit/s failed a dictation that was only slow. 180 s is 0.4 Mbit/s. The
+ * Mac app allows the same (Transcriber.Settings.timeout(for:)).
+ */
+export function requestTimeout(base: number | undefined, wavLength: number): number {
+  return ((base ?? 30) + Math.max(0, wavLength - 44) / 32_000 / 2) * 1000
+}
+
+export function makeRequest(settings: TranscriberSettings, wav: Uint8Array, apiKey: string): PreparedRequest {
+  // Checked where the header is built, so nothing that fetch would quote back
+  // (its error holds the whole header value) can reach a log.
+  if (!keyIsUsable(apiKey)) throw new TranscriptionFailure('unauthorized', undefined, 'the key holds a character a header cannot carry')
   const { baseURL, model, json } = resolved(settings)
-  const timeout = ((settings.timeout ?? 30) + Math.max(0, wav.length - 44) / 32_000 / 4) * 1000
+  const timeout = requestTimeout(settings.timeout, wav.length)
   if (settings.provider === 'microsoft') {
     const host = microsoftHost(settings.microsoftRegion, settings.microsoftEndpoint)
     if (!host) throw new TranscriptionFailure('server', undefined, 'no usable region or address')
     const form = new FormData()
     form.append('audio', new Blob([wav as unknown as ArrayBuffer], { type: 'audio/wav' }), 'speech.wav')
     form.append('definition', JSON.stringify(microsoftDefinition(settings)))
-    return { url: `${host}/speechtotext/transcriptions:transcribe?api-version=2025-10-15`, headers: { 'Ocp-Apim-Subscription-Key': apiKey } as Record<string, string>, body: form as BodyInit, timeout }
+    return { url: `${host}/speechtotext/transcriptions:transcribe?api-version=2025-10-15`, headers: { 'Ocp-Apim-Subscription-Key': apiKey }, body: form, timeout }
   }
   if (settings.provider === 'google') {
     // Before the audio is turned into a string a third larger.
-    if (Math.ceil(wav.length / 3) * 4 + googleOverhead > googleInlineLimit) throw new TranscriptionFailure('tooLarge')
-    return { url: `${baseURL}/interactions`, headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' } as Record<string, string>, body: JSON.stringify(googleBody(settings, wav)) as BodyInit, timeout }
+    if (googleRequestSize(settings, wav.length) > googleInlineLimit) throw new TranscriptionFailure('tooLarge')
+    return { url: `${baseURL}/interactions`, headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' }, body: JSON.stringify(googleBody(settings, wav)), timeout }
   }
   const url = `${baseURL}/audio/transcriptions`
   const headers: Record<string, string> = { Authorization: `Bearer ${apiKey}` }
@@ -300,32 +381,60 @@ export function microsoftText(json: unknown): string | undefined {
 
 /**
  * The text of a Gemini answer. Written against the documentation, not a real
- * answer, so it takes every shape the docs show: `steps[].content[]` with
- * `{type: "text"}` (the interactions API), `output_text`, and the older
- * `candidates[].content.parts[]` with `audioTranscription` or `text`. A
- * recognised answer with no text in it is silence: empty, not an error.
+ * answer, so it takes every shape the docs show: `steps[]` of `model_output`
+ * with `{type: "text"}` items (the interactions API), `output_text` (the
+ * SDKs' copy of the same words), the `outputs[]` list that API had before,
+ * and the older `candidates[].content.parts[]` with `audioTranscription` or
+ * `text`. The first of these, in this order, that holds words is the answer,
+ * so words that come twice (steps and output_text) are not said twice; a
+ * step that is not output (`thought`) and the alternative candidates after
+ * the first are not read. A recognised answer with no text in it is silence:
+ * empty, not an error. The Mac reads the same way.
  */
 export function googleText(json: unknown): string | undefined {
   const answer = json as {
-    steps?: { content?: { type?: string; text?: unknown }[] }[]
+    steps?: { type?: string; content?: unknown }[]
     output_text?: unknown
+    outputs?: unknown
     candidates?: { content?: { parts?: { text?: unknown; audioTranscription?: unknown }[] } }[]
   } | null
   if (!answer || typeof answer !== 'object') return undefined
-  const found: string[] = []
-  const add = (value: unknown) => {
-    if (typeof value === 'string') found.push(value)
-    else if (value && typeof value === 'object') add((value as { text?: unknown; transcript?: unknown }).text ?? (value as { transcript?: unknown }).transcript)
+  // Each source is undefined when the answer does not have it, and a list (maybe empty) when it does.
+  const sources: (string[] | undefined)[] = [
+    Array.isArray(answer.steps) ? answer.steps.flatMap(step => (step && (step.type === undefined || step.type === 'model_output') ? textItems(step.content) : [])) : undefined,
+    typeof answer.output_text === 'string' ? [answer.output_text] : undefined,
+    Array.isArray(answer.outputs) ? textItems(answer.outputs) : undefined,
+    Array.isArray(answer.candidates) ? firstCandidate(answer.candidates) : undefined,
+  ]
+  const present = sources.filter((source): source is string[] => source !== undefined)
+  if (present.length === 0) return undefined
+  const spoken = (list: string[]) => list.map(piece => piece.trim()).filter(Boolean)
+  return spoken(present.find(list => spoken(list).length > 0) ?? []).join(' ')
+}
+
+/** A string, or the text of an object that holds it (`{text}`, `{transcript}`, `{transcription}`). */
+function textOf(value: unknown): string | undefined {
+  if (typeof value === 'string') return value
+  if (!value || typeof value !== 'object') return undefined
+  const { text, transcript, transcription } = value as { text?: unknown; transcript?: unknown; transcription?: unknown }
+  return textOf(text ?? transcript ?? transcription)
+}
+
+/** The `{type: "text", text}` items of a content list. */
+function textItems(content: unknown): string[] {
+  return (Array.isArray(content) ? content : [])
+    .map((item: { type?: string; text?: unknown } | null) => (item && (item.type === undefined || item.type === 'text' || item.type === 'output_text') ? textOf(item.text) : undefined))
+    .filter((piece): piece is string => piece !== undefined)
+}
+
+/** The words of the first candidate that has any: the others are alternatives, not more speech. */
+function firstCandidate(candidates: { content?: { parts?: { text?: unknown; audioTranscription?: unknown }[] } }[]): string[] {
+  for (const candidate of candidates) {
+    const parts = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : []
+    const found = parts.map(part => textOf(part?.audioTranscription ?? part?.text)).filter((piece): piece is string => piece !== undefined && piece.trim() !== '')
+    if (found.length > 0) return found
   }
-  for (const step of Array.isArray(answer.steps) ? answer.steps : [])
-    for (const item of Array.isArray(step?.content) ? step.content : [])
-      if (item && (item.type === undefined || item.type === 'text' || item.type === 'output_text')) add(item.text)
-  if (found.length === 0) add(answer.output_text)
-  if (found.length === 0)
-    for (const candidate of Array.isArray(answer.candidates) ? answer.candidates : [])
-      for (const part of Array.isArray(candidate?.content?.parts) ? candidate.content.parts : []) add(part?.audioTranscription ?? part?.text)
-  if (found.length > 0) return found.map(piece => piece.trim()).filter(Boolean).join(' ')
-  return Array.isArray(answer.steps) || Array.isArray(answer.candidates) || typeof answer.output_text === 'string' ? '' : undefined
+  return []
 }
 
 /** The text in a provider's answer; undefined where the answer is not one of its shapes. */
@@ -336,12 +445,20 @@ export function textIn(provider: Provider, body: string): string | undefined {
   return text?.trim()
 }
 
-export async function transcribe(settings: TranscriberSettings, wav: Uint8Array, apiKey: string, fetcher: Fetch = fetch as unknown as Fetch, sleep = (ms: number) => new Promise(r => setTimeout(r, ms))): Promise<string> {
+/**
+ * @param signal Aborts the work: the request in flight, the wait before a
+ *   retry, the backup timer. The call then rejects with an AbortError, and no
+ *   further request is sent. A function here is the wait itself, as callers
+ *   passed it before the signal had this place.
+ */
+export async function transcribe(settings: TranscriberSettings, wav: Uint8Array, apiKey: string, fetcher: Fetch = fetch as unknown as Fetch, signal?: AbortSignal | Sleep, sleep: Sleep = pause): Promise<string> {
+  if (typeof signal === 'function') { sleep = signal; signal = undefined }
   if (!apiKey) throw new TranscriptionFailure('noKey')
+  if (signal?.aborted) throw abortError()
   const base = settings.backupAfter === undefined ? 2.5 : settings.backupAfter
   // OpenRouter only, where the slow answers were measured; counted from the
   // start of the upload, so a second more for every ten seconds of audio.
-  if (base === null || settings.provider !== 'openrouter') return attempt(settings, wav, apiKey, fetcher, sleep)
+  if (base === null || settings.provider !== 'openrouter') return attempt(settings, wav, apiKey, fetcher, sleep, signal)
   // Plus the time the upload takes at 1 Mbit/s: on a slow line the second
   // copy started while the first was still sending, and both ran out of time.
   const delay = base + (Math.max(0, wav.length - 44) * 8) / 1_000_000
@@ -357,9 +474,12 @@ export async function transcribe(settings: TranscriberSettings, wav: Uint8Array,
       if (done) return
       done = true
       clearTimeout(timer)
+      signal?.removeEventListener('abort', discard)
       controllers.forEach(c => c.abort())
       settle()
     }
+    // Both requests and the timer for the second go with it.
+    const discard = () => finish(() => reject(abortError()))
     const follow = (request: Promise<string>) => request.then(
       text => finish(() => resolve(text)),
       error => {
@@ -372,40 +492,46 @@ export async function transcribe(settings: TranscriberSettings, wav: Uint8Array,
     )
     follow(ask())
     const timer = setTimeout(() => { backedUp = true; running++; follow(ask()) }, delay * 1000)
+    signal?.addEventListener('abort', discard, { once: true })
   })
 }
 
-/** One request, tried again while the provider throttles. */
-async function attempt(settings: TranscriberSettings, wav: Uint8Array, apiKey: string, fetcher: Fetch, sleep: (ms: number) => Promise<unknown>, cancel?: AbortSignal): Promise<string> {
+/** One request, tried again while the provider throttles. `cancel` ends it: the fetch, and the wait before a retry. */
+async function attempt(settings: TranscriberSettings, wav: Uint8Array, apiKey: string, fetcher: Fetch, sleep: Sleep, cancel?: AbortSignal): Promise<string> {
   const request = makeRequest(settings, wav, apiKey)
+  // What a transport error could quote of the request.
+  const secrets = [`Bearer ${apiKey}`, apiKey]
   const attempts = settings.attempts ?? 3
   for (let attempt = 1; ; attempt++) {
+    if (cancel?.aborted) throw abortError()
     let response: Response
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), request.timeout)
-    cancel?.addEventListener('abort', () => controller.abort())
-    try {
-      response = await fetcher(request.url, { method: 'POST', headers: request.headers, body: request.body, signal: controller.signal })
-    } catch (error) {
-      clearTimeout(timer)
-      if ((error as Error).name === 'AbortError') throw new TranscriptionFailure('timedOut')
-      throw new TranscriptionFailure('offline', undefined, (error as Error).message)
-    }
     let text: string
+    const controller = new AbortController()
+    const stop = () => controller.abort()
+    cancel?.addEventListener('abort', stop, { once: true })
+    const timer = setTimeout(stop, request.timeout)
     try {
+      // The key goes to the address the user chose and nowhere else: a
+      // redirect on the same origin is followed, any other is refused
+      // (core/redirect.ts says why the fetch cannot be left to do it).
+      response = await fetchWithinOrigin(fetcher, request.url, { method: 'POST', headers: request.headers, body: request.body, signal: controller.signal })
+      // Broken off while the answer came in: said as such, not a bare "Fehler".
       text = await response.text()
     } catch (error) {
-      // Broken off while the answer came in: said as such, not a bare "Fehler".
+      if (cancel?.aborted) throw abortError()
+      if (isAbort(error)) throw new TranscriptionFailure('timedOut')
+      throw transportFailure(error, secrets)
+    } finally {
       clearTimeout(timer)
-      if ((error as Error).name === 'AbortError') throw new TranscriptionFailure('timedOut')
-      throw new TranscriptionFailure('offline', undefined, (error as Error).message)
+      cancel?.removeEventListener('abort', stop)
     }
-    clearTimeout(timer)
+    // A fetch that did not look at the signal still answers a discarded call.
+    if (cancel?.aborted) throw abortError()
     if (response.status === 402 || (response.status === 429 && /insufficient_quota/.test(text))) throw new TranscriptionFailure('noCredit', response.status)
     if (response.status === 429 && attempt < attempts) {
-      await sleep(retryDelay(response.headers.get('retry-after'), text) * 1000)
+      await sleep(retryDelay(response.headers.get('retry-after'), text) * 1000, cancel)
       // The other request answered meanwhile, or the dictation was thrown away.
-      if (cancel?.aborted) throw new TranscriptionFailure('timedOut')
+      if (cancel?.aborted) throw abortError()
       continue
     }
     const message = response.status >= 200 && response.status < 300 ? undefined : messageIn(text)
@@ -419,4 +545,15 @@ async function attempt(settings: TranscriberSettings, wav: Uint8Array, apiKey: s
     if (value === undefined) throw new TranscriptionFailure('unreadableResponse')
     return value
   }
+}
+
+/**
+ * A failed fetch as a failure that is safe to log: fetch quotes the header
+ * that it refused, key included, and a proxy's error page may echo anything.
+ * A refused redirect is named as such ("No connection" would hide it).
+ */
+function transportFailure(error: unknown, secrets: string[]): TranscriptionFailure {
+  if (error instanceof RedirectRefused) return new TranscriptionFailure('redirected', undefined, error.message)
+  const message = error instanceof Error ? error.message : String(error)
+  return new TranscriptionFailure('offline', undefined, scrubbed(message, secrets))
 }

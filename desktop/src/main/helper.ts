@@ -5,8 +5,9 @@ import type { LocalEngine } from './localEngine'
  * The message loop of satz's helper processes for local models (Electron
  * utilityProcesses, started by local.ts): one for Whisper (local-worker.ts),
  * one for sherpa-onnx (sherpa-worker.ts). Messages in: download, cancel,
- * measure, warmUp, unload, release, transcribe, dictationElsewhere. Messages
- * out: state, log, result, error, done.
+ * measure, warmUp, unload, release, transcribe, abandon (a transcription
+ * nobody waits for any more), dictationElsewhere. Messages out: state, log,
+ * result, error, done.
  */
 /** What a helper process hears from satz and answers on: Electron's parentPort, a stand-in in the tests. */
 /* eslint-disable @typescript-eslint/no-explicit-any -- messages are plain objects */
@@ -24,6 +25,9 @@ export function serve(make: (dir: string, log: (message: string) => void, setSta
 
   const engine = make(dir, message => port.postMessage({ type: 'log', message }), (id, state) => port.postMessage({ type: 'state', id, state }))
 
+  /** Transcriptions not answered yet, by request, for `abandon`. */
+  const transcribing = new Map<number, AbortController>()
+
   /** The answer to a request, or its error. */
   const answer = <T>(request: number, work: Promise<T>, field: string) => work.then(
     value => port.postMessage({ type: 'result', request, [field]: value }),
@@ -38,7 +42,14 @@ export function serve(make: (dir: string, log: (message: string) => void, setSta
       case 'unload': engine.unload().then(() => port.postMessage({ type: 'done', request: data.request })); break
       case 'release': engine.release(data.id).then(() => port.postMessage({ type: 'done', request: data.request })); break
       case 'measure': void answer(data.request, engine.measure(data.id, Float32Array.from(data.samples), data.vocabulary, data.spoken, data.told), 'ms'); break
-      case 'transcribe': void answer(data.request, engine.transcribe(Float32Array.from(data.samples), data.id, data.vocabulary, data.spoken, data.told), 'text'); break
+      case 'transcribe': {
+        const controller = new AbortController()
+        transcribing.set(data.request, controller)
+        const work = engine.transcribe(Float32Array.from(data.samples), data.id, data.vocabulary, data.spoken, data.told, controller.signal)
+        void answer(data.request, work.finally(() => transcribing.delete(data.request)), 'text')
+        break
+      }
+      case 'abandon': transcribing.get(data.request)?.abort(); break
     }
   })
 }

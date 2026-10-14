@@ -2,7 +2,7 @@ import { clipboard, ClipboardItem } from 'electron'
 import { execFile } from 'node:child_process'
 import fs from 'node:fs'
 import { de } from '../core/language'
-import { ClipboardHandback, type ClipboardPort } from './clipboardHandback'
+import { ClipboardHandback, registerHandback, type ClipboardPort } from './clipboardHandback'
 
 /**
  * Puts the transcript where the user was typing: on the clipboard, then
@@ -16,9 +16,24 @@ import { ClipboardHandback, type ClipboardPort } from './clipboardHandback'
  */
 export type KeyTap = () => void
 
-/** Every item on the clipboard, in every form, read out now (the live items change with the clipboard). */
+/**
+ * What the clipboard holds right now. Another app has it open for a moment
+ * while it copies, and the read is refused then: asked again a few times
+ * before it counts as unreadable. Rejects when it stays unreadable, which is
+ * not the same as empty.
+ */
+async function readItems(): Promise<ClipboardItem[]> {
+  let failure: unknown
+  for (const wait of [0, 60, 180]) {
+    if (wait) await new Promise(resolve => setTimeout(resolve, wait))
+    try { return await clipboard.read() } catch (error) { failure = error }
+  }
+  throw failure
+}
+
+/** Every item on the clipboard, in every form, read out now (the live items change with the clipboard). Rejects when it cannot be read. */
 async function save(): Promise<ClipboardItem[]> {
-  const items = await clipboard.read().catch(() => [] as ClipboardItem[])
+  const items = await readItems()
   const copies: ClipboardItem[] = []
   for (const item of items) {
     const payload: Record<string, string | Blob | Electron.ClipboardBookmark> = {}
@@ -26,6 +41,8 @@ async function save(): Promise<ClipboardItem[]> {
       try { payload[type] = await item.getType(type) } catch { /* that form is gone already */ }
     }
     if (Object.keys(payload).length > 0) copies.push(new ClipboardItem(payload as never))
+    // Something was there and none of it could be read: not an empty clipboard.
+    else if (item.types.length > 0) throw new Error('none of the forms on the clipboard could be read')
   }
   return copies
 }
@@ -38,7 +55,8 @@ const system: ClipboardPort<ClipboardItem[]> = {
   clear: () => clipboard.clear(),
   writeText: text => Promise.resolve(clipboard.writeText(text)),
   holdsOnly: async text => {
-    const items = await clipboard.read().catch(() => [] as ClipboardItem[])
+    // Unreadable: not known to hold just the transcript, so it is left alone.
+    const items = await readItems().catch(() => [] as ClipboardItem[])
     const onlyText = items.length === 1 && items[0].types.every(type => type.startsWith('text/plain'))
     return onlyText && (await clipboard.readText()) === text
   },
@@ -52,6 +70,7 @@ const system: ClipboardPort<ClipboardItem[]> = {
  */
 const PASTE_TAKES = 1000
 const handback = new ClipboardHandback(system, PASTE_TAKES)
+registerHandback(handback)
 
 export const isWayland = () => process.platform === 'linux' && (process.env.XDG_SESSION_TYPE === 'wayland' || !!process.env.WAYLAND_DISPLAY)
 

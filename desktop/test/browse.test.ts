@@ -52,7 +52,8 @@ test('a provider is ready once it has what it needs: a key; Custom also an addre
   assert.deepEqual(providerNeeds('microsoft', { ...facts, hasKey: false }), ['key'])
   assert.deepEqual(providerNeeds('microsoft', { ...facts, microsoftRegion: 'east us' }), ['region'])
   assert.deepEqual(providerNeeds('microsoft', { ...facts, microsoftRegion: 'east us', microsoftEndpoint: 'https://r.cognitiveservices.azure.com' }), [])
-  assert.deepEqual(providerNeeds('microsoft', { ...facts, microsoftEndpoint: 'http://speech.example.com' }), ['address'])
+  // Typed and refused is not "no address yet": the page says why (codexFixAddress.test.ts).
+  assert.deepEqual(providerNeeds('microsoft', { ...facts, microsoftEndpoint: 'http://speech.example.com' }), ['addressRefused'])
   assert.deepEqual(providerNeeds('microsoft', { ...facts, hasKey: false, microsoftRegion: '' , microsoftEndpoint: undefined }), ['key'])
   assert.deepEqual(providerNeeds('custom', { ...facts, hasKey: false }), ['key', 'address', 'model'])
   assert.deepEqual(providerNeeds('custom', { ...facts, customBaseURL: 'https://x.test/v1', model: ' m ' }), [])

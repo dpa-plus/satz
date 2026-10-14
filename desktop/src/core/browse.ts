@@ -1,5 +1,9 @@
+import { allowsAddress } from './address'
 import type { Language } from './language'
-import { microsoftHost, needsKey, type Provider } from './transcriber'
+import { keyIsUsable, microsoftHost, needsKey, type Provider } from './transcriber'
+
+// The rule for where a key may be sent lives in address.ts (transcriber.ts needs it too, and this file imports that one).
+export { allowsAddress, isOnOwnNetwork } from './address'
 
 /**
  * Looking is not switching. The provider menu in Settings shows a provider's
@@ -27,8 +31,47 @@ export function providerLabel(provider: Provider, inUse: Provider, language: Lan
   return provider === inUse ? `${name} ${language === 'de' ? '(in Benutzung)' : '(in use)'}` : name
 }
 
-/** What a provider still lacks before it can take a dictation. */
-export type Need = 'key' | 'address' | 'model' | 'region' | 'localModel'
+/**
+ * Custom's address, as it is checked and as the audio goes to it: https, or
+ * http on the user's own network (address.ts), with a host. The key travels
+ * with the audio. "ftp://…" has a host too: it made Custom "in use", and
+ * every dictation then failed. The Mac's rule (ProviderAddress), and
+ * Microsoft's own address follows it too (microsoftHost).
+ */
+export function customAddress(typed: string): string | null {
+  // A preferences file edited by hand may hold anything here.
+  const address = typeof typed === 'string' ? typed.trim() : ''
+  let url: URL
+  try { url = new URL(address) } catch { return null }
+  return allowsAddress(url) ? address : null
+}
+
+/** Why a typed address was refused: the rule in one line, the same on every platform. */
+export const addressRefusal = (language: Language) => language === 'de'
+  ? 'Diese Adresse geht nicht: https, oder http nur im eigenen Netz.'
+  : 'This address won\'t work: https, or http only on your own network.'
+
+/**
+ * Why a key cannot be saved, null when it can: a line break or another
+ * character a request header cannot carry, pasted along with it. Saved, it
+ * failed every dictation, and the error quoted the whole key into the log.
+ */
+export function keyRefusal(key: string, language: Language): string | null {
+  if (keyIsUsable(key.trim())) return null
+  return language === 'de'
+    ? 'Im Schlüssel steckt ein Zeichen, das nicht dazugehört, etwa ein Zeilenumbruch. Bitte nur den Schlüssel einfügen.'
+    : 'The key contains a character that does not belong in it, such as a line break. Please paste just the key.'
+}
+
+/**
+ * What a provider still lacks before it can take a dictation. `address` is
+ * none typed yet; `addressRefused` one that is typed and cannot be used, told
+ * apart so the message says why instead of asking for what is already there.
+ */
+export type Need = 'key' | 'address' | 'addressRefused' | 'model' | 'region' | 'localModel'
+
+/** Whether anything is typed in a field: an address that is typed and refused is told apart from one not yet typed. */
+const typed = (text: string | undefined) => typeof text === 'string' && text.trim() !== ''
 
 /**
  * What a provider needs, ported from the Mac's ProviderReadiness: a key for
@@ -42,18 +85,20 @@ export function providerNeeds(provider: Provider, facts: { hasKey: boolean; cust
   if (provider === 'local') return facts.hasKey ? [] : ['localModel']
   if (needsKey(provider) && !facts.hasKey) needs.push('key')
   if (provider === 'custom') {
-    let host = ''
-    try { host = new URL(facts.customBaseURL.trim()).host } catch { /* none */ }
-    if (!host) needs.push('address')
+    if (customAddress(facts.customBaseURL) === null) needs.push(typed(facts.customBaseURL) ? 'addressRefused' : 'address')
     if (!facts.model.trim()) needs.push('model')
   }
   if (provider === 'microsoft' && microsoftHost(facts.microsoftRegion, facts.microsoftEndpoint) === null) {
-    needs.push(facts.microsoftEndpoint?.trim() ? 'address' : 'region')
+    needs.push(typed(facts.microsoftEndpoint) ? 'addressRefused' : 'region')
   }
   return needs
 }
 
-/** "Erst den Schlüssel eintragen", naming everything missing at once; null when nothing is. */
+/**
+ * "Erst den Schlüssel eintragen", naming everything missing at once; null when
+ * nothing is. An address that is typed but refused is not "missing": it is
+ * told why, after what else is still to fill in.
+ */
 export function needsMessage(needs: Need[], language: Language): string | null {
   if (needs.length === 1 && needs[0] === 'localModel') return language === 'de' ? 'Erst ein Modell laden.' : 'Download a model first.'
   const words = {
@@ -62,15 +107,16 @@ export function needsMessage(needs: Need[], language: Language): string | null {
     model: { de: 'Modell', en: 'model', deWhole: 'das Modell', enWhole: 'the model' },
     region: { de: 'Region', en: 'region', deWhole: 'die Region', enWhole: 'the region' },
   }
-  const named = needs.filter((need): need is keyof typeof words => need !== 'localModel')
-  if (named.length === 0) return null
+  const named = needs.filter((need): need is keyof typeof words => need in words)
+  const why = needs.includes('addressRefused') ? addressRefusal(language) : null
+  if (named.length === 0) return why
   // A region is picked from a menu, the rest is typed.
   const picked = named.every(need => need === 'region')
   const list = (items: string[], and: string) => (items.length > 1 ? `${items.slice(0, -1).join(', ')} ${and} ${items[items.length - 1]}` : items[0])
-  if (language === 'de') {
-    return named.length === 1 ? `Erst ${words[named[0]].deWhole} ${picked ? 'wählen' : 'eintragen'}.` : `Erst ${list(named.map(need => words[need].de), 'und')} eintragen.`
-  }
-  return named.length === 1 ? `${picked ? 'Choose' : 'Enter'} ${words[named[0]].enWhole} first.` : `Enter the ${list(named.map(need => words[need].en), 'and')} first.`
+  const ask = language === 'de'
+    ? (named.length === 1 ? `Erst ${words[named[0]].deWhole} ${picked ? 'wählen' : 'eintragen'}.` : `Erst ${list(named.map(need => words[need].de), 'und')} eintragen.`)
+    : (named.length === 1 ? `${picked ? 'Choose' : 'Enter'} ${words[named[0]].enWhole} first.` : `Enter the ${list(named.map(need => words[need].en), 'and')} first.`)
+  return why ? `${ask} ${why}` : ask
 }
 
 /**

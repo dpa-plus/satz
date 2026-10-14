@@ -1,4 +1,5 @@
 import type { Language } from './language'
+import { allowsAddress } from './address'
 import { needsMessage, type Need } from './browse'
 import type { Provider } from './transcriber'
 
@@ -216,16 +217,17 @@ export const modelSeconds = (provider: CleanupProviderId, model: string): number
 const here = (hostname: string) => ['localhost', '127.0.0.1', '[::1]'].includes(hostname)
 
 /**
- * An address a key may travel to: https, or http to this computer (a local
- * model, a stand-in server), like microsoftHost. Pasted without a scheme it
- * is taken as https. Without a trailing slash; null for one that is none.
+ * An address a key may travel to: https, or http on this computer or the
+ * own network (an Ollama on the NAS), the rule transcription addresses
+ * follow too (core/address.ts). Pasted without a scheme it is taken as
+ * https. Without a trailing slash; null for one that is none.
  */
 export function usableAddress(raw: string | undefined): string | null {
   const typed = raw?.trim()
   if (!typed) return null
   let url: URL
   try { url = new URL(typed.includes('://') ? typed : `https://${typed}`) } catch { return null }
-  if (!url.host || (url.protocol !== 'https:' && !(url.protocol === 'http:' && here(url.hostname)))) return null
+  if (!url.host || !allowsAddress(url)) return null
   return `${url.origin}${url.pathname}`.replace(/\/+$/, '')
 }
 

@@ -81,10 +81,10 @@ export interface LocalModelsOptions {
   /** Starts a helper process; Electron's utilityProcess.fork unless a test gives its own. */
   fork?: Fork
   /**
-   * false: nothing in the models folder is downloaded, removed or swept. A
-   * test copy of satz that was not given a folder of its own would be using
-   * the real satz's models, and must not change them (like the Mac's
-   * LaunchMode.canChangeModels).
+   * false: nothing in the models folder is downloaded, removed, swept or
+   * written. A test copy of satz that was not given a folder of its own
+   * would be using the real satz's models, and must not change them (like
+   * the Mac's LaunchMode.canChangeModels).
    */
   canChangeFiles?: boolean
 }
@@ -120,6 +120,8 @@ export class LocalModels {
   onArrived: (id: string) => void = () => {}
 
   private canChangeFiles: boolean
+  /** Speeds measured where the folder is not ours to write: shown until satz quits. */
+  private speeds = new Map<string, Speed>()
 
   constructor(private dir: string, private log: (message: string) => void, private changed: () => void, private version: string, options: LocalModelsOptions = {}) {
     const fork = options.fork ?? electronFork
@@ -137,12 +139,12 @@ export class LocalModels {
   private helperFor(id: string) { return this.helpers[engineOf(id)] }
 
   state(id: string): LocalState {
-    return this.states.get(id) ?? (isDownloaded(this.dir, id) ? { kind: 'ready' } : { kind: 'missing' })
+    return this.states.get(id) ?? (isDownloaded(this.dir, id, this.canChangeFiles) ? { kind: 'ready' } : { kind: 'missing' })
   }
 
   isReady(id: string) { return this.state(id).kind === 'ready' }
   isMeasuring(id: string) { return this.measuring.has(id) }
-  speed(id: string): Speed | null { return readSpeed(this.dir, id) }
+  speed(id: string): Speed | null { return this.speeds.get(id) ?? readSpeed(this.dir, id) }
 
   /** One download at a time: two at once halved both, and the second one's button was what the user was waiting on. */
   get downloading() {
@@ -235,7 +237,8 @@ export class LocalModels {
     try {
       const { ms } = await this.ask(this.helperFor(id), { type: 'measure', id, samples: clip, vocabulary, spoken, told })
       const speed: Speed = { secondsPer10: secondsPer10(Number(ms), clip.length / 16_000), date: new Date().toISOString(), version: this.version, machine: machineName() }
-      writeSpeed(this.dir, id, speed)
+      if (this.canChangeFiles) writeSpeed(this.dir, id, speed)
+      else this.speeds.set(id, speed)
       this.log(`local: ${id} takes ${speed.secondsPer10.toFixed(1)} s per 10 s of speech`)
       return 'done'
     } catch (error) {
@@ -289,10 +292,21 @@ export class LocalModels {
    * @param samples 16 kHz mono, as recorded.
    * @param spoken the language set in Settings, for clips too short to tell.
    * @param told the language a model that cannot tell (Canary) listens for.
+   * @param signal the dictation was thrown away: the helper skips what of it
+   *   is still queued (localEngine.ts). A decode already running ends first,
+   *   as the native call cannot be stopped; its text is not wanted.
    */
-  transcribe(samples: Float32Array, id: string, vocabulary: string[], spoken: 'de' | 'en', told?: string): Promise<string> {
+  transcribe(samples: Float32Array, id: string, vocabulary: string[], spoken: 'de' | 'en', told?: string, signal?: AbortSignal): Promise<string> {
+    if (signal?.aborted) return Promise.reject(signal.reason)
+    const helper = this.helperFor(id)
     // A speed test in the other helper stops before its next run: it would share the processor with this dictation.
-    for (const helper of Object.values(this.helpers)) if (helper !== this.helperFor(id) && helper.running) helper.post({ type: 'dictationElsewhere' })
-    return this.ask(this.helperFor(id), { type: 'transcribe', id, vocabulary, samples, spoken, told }).then(({ text }) => String(text ?? ''))
+    for (const other of Object.values(this.helpers)) if (other !== helper && other.running) other.post({ type: 'dictationElsewhere' })
+    const request = ++this.requests
+    // Only to a running helper: posting starts one, and a helper not running has nothing of this request.
+    const abandon = () => { if (helper.running) helper.post({ type: 'abandon', request }) }
+    signal?.addEventListener('abort', abandon, { once: true })
+    return helper.ask({ type: 'transcribe', id, vocabulary, samples, spoken, told }, request)
+      .then(({ text }) => String(text ?? ''))
+      .finally(() => signal?.removeEventListener('abort', abandon))
   }
 }

@@ -127,7 +127,9 @@ test('where requests go: fixed, a default the user may change, Azure\'s origin w
   assert.equal(cleanupBase('openrouter', 'https://evil.example'), 'https://openrouter.ai/api/v1')
   assert.equal(cleanupBase('ollama', ''), 'http://localhost:11434/v1')
   assert.equal(cleanupBase('ollama', 'http://127.0.0.1:8080/v1/'), 'http://127.0.0.1:8080/v1')
-  assert.equal(cleanupBase('ollama', 'http://other.lan:11434/v1'), null)
+  // An Ollama on the NAS: http on the own network, like every address a key travels to.
+  assert.equal(cleanupBase('ollama', 'http://other.lan:11434/v1'), 'http://other.lan:11434/v1')
+  assert.equal(cleanupBase('ollama', 'http://llm.example.org/v1'), null)
   assert.equal(cleanupBase('azure', 'https://mine.openai.azure.com/openai/deployments/x?api-version=1'), 'https://mine.openai.azure.com/openai/v1')
   assert.equal(cleanupBase('azure', ''), null)
   assert.equal(cleanupBase('custom', 'http://127.0.0.1:5000/v1'), 'http://127.0.0.1:5000/v1')

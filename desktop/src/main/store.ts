@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
+import { customAddress, keyRefusal } from '../core/browse'
 import { historyFields, type CleanupLevel } from '../core/cleanup'
 import { cleanupAccounts, type CleanupProviderId } from '../core/cleanupProviders'
 import { readHistory, type HistoryEntry } from '../core/history'
@@ -68,6 +69,47 @@ function readJSON<T>(name: string): T | null {
   try { return JSON.parse(fs.readFileSync(file(name), 'utf8')) as T } catch { return null }
 }
 
+const isEntry = (entry: unknown): entry is HistoryEntry =>
+  typeof entry === 'object' && entry !== null && typeof (entry as HistoryEntry).text === 'string'
+
+/**
+ * The history on disk, and whether the file must be left alone this run.
+ * One that is not a list of entries (cut off, or written by something else)
+ * or that exists but cannot be read (permissions, a lock, a folder in its
+ * place) is moved aside, kept for the user, and satz starts with an empty
+ * one: read as it was, `{}` stopped satz's start halfway, and a file that
+ * could not be read was taken for none and written over by the next
+ * dictation. If it cannot be moved either, it stays where it is and nothing
+ * is written to it (`kept`).
+ */
+function readHistoryFile(log: (message: string) => void): { entries: HistoryEntry[]; kept: boolean } {
+  const target = file('history.json')
+  const setAside = (why: 'broken' | 'unreadable') => {
+    // Colons are not allowed in a Windows file name.
+    const aside = `${target}.${why}-${new Date().toISOString().replace(/[:.]/g, '-')}`
+    try {
+      fs.renameSync(target, aside)
+      log(`history: history.json could not be read, moved to ${path.basename(aside)}; starting with an empty history`)
+      return { entries: [], kept: false }
+    } catch (error) {
+      log(`history: history.json could neither be read nor moved aside (${(error as Error).message}); it is left as it is and no history is written this time`)
+      return { entries: [], kept: true }
+    }
+  }
+  let text: string
+  try {
+    text = fs.readFileSync(target, 'utf8')
+  } catch (error) {
+    // No history yet is the ordinary case; anything else is a file that is there and cannot be read.
+    return (error as NodeJS.ErrnoException).code === 'ENOENT' ? { entries: [], kept: false } : setAside('unreadable')
+  }
+  try {
+    const entries: unknown = JSON.parse(text)
+    if (Array.isArray(entries) && entries.every(isEntry)) return { entries, kept: false }
+  } catch { /* moved aside below */ }
+  return setAside('broken')
+}
+
 /**
  * Written beside the file (private from the start where it holds text) and
  * moved over it in one step: written in place, an interrupted write reset the
@@ -88,8 +130,10 @@ function writeJSON(name: string, value: unknown, mode?: number) {
 export class Store {
   prefs: Preferences
   history: HistoryEntry[]
+  /** history.json is there but can be neither read nor moved aside: it stays as it is, and the history lives in memory until satz quits (readHistory logged it, once). */
+  private historyKept: boolean
 
-  constructor() {
+  constructor(log: (message: string) => void = () => {}) {
     const language = systemLanguage(app.getLocale())
     const stored = readJSON<Partial<Preferences>>('preferences.json') ?? {}
     this.prefs = {
@@ -120,7 +164,9 @@ export class Store {
       ...stored,
     }
     setLanguage(this.prefs.language)
-    this.history = readHistory(readJSON('history.json'), this.prefs.historyLimit, newId)
+    const read = readHistoryFile(log)
+    this.historyKept = read.kept
+    this.history = readHistory(read.entries, this.prefs.historyLimit, newId)
   }
 
   save() { writeJSON('preferences.json', this.prefs) }
@@ -145,7 +191,8 @@ export class Store {
     return {
       provider: this.prefs.provider,
       model: this.prefs.models[this.prefs.provider] ?? '',
-      customBaseURL: this.prefs.customBaseURL,
+      // The address as it was checked (endpointMissing), not a second reading of it.
+      customBaseURL: customAddress(this.prefs.customBaseURL) ?? '',
       microsoftRegion: this.prefs.microsoftRegion,
       microsoftEndpoint: this.prefs.microsoftEndpoint,
       // Trigger words go in too: a made-up one only survives transcription
@@ -161,7 +208,7 @@ export class Store {
   get endpointMissing() {
     if (this.prefs.provider === 'microsoft') return microsoftHost(this.prefs.microsoftRegion, this.prefs.microsoftEndpoint) === null
     if (this.prefs.provider !== 'custom') return false
-    try { return !new URL(this.prefs.customBaseURL.trim()).host } catch { return true }
+    return customAddress(this.prefs.customBaseURL) === null
   }
 
   // MARK: - Keys
@@ -174,7 +221,10 @@ export class Store {
 
   hasKey(provider = this.prefs.provider) { return this.readKey(provider) !== null }
 
+  /** Throws, saying why, for a key with a character no request can carry (core/browse.ts, keyRefusal). */
   storeKey(key: string, provider = this.prefs.provider) {
+    const refusal = keyRefusal(key, this.prefs.language)
+    if (refusal) throw new Error(refusal)
     fs.mkdirSync(path.join(dir(), 'keys'), { recursive: true, mode: 0o700 })
     const target = this.keyFile(provider)
     writeAtomically(target, key.trim(), 0o600)
@@ -192,6 +242,8 @@ export class Store {
 
   storeAccount(account: string, key: string) {
     if (!cleanupAccounts.includes(account)) return
+    const refusal = keyRefusal(key, this.prefs.language)
+    if (refusal) throw new Error(refusal)
     fs.mkdirSync(path.join(dir(), 'keys'), { recursive: true, mode: 0o700 })
     writeAtomically(path.join(dir(), 'keys', account), key.trim(), 0o600)
   }
@@ -202,7 +254,12 @@ export class Store {
     // Off means nothing is written, not written and then forgotten.
     if (!text || this.prefs.historyLimit === 0) return
     this.history = [{ id: newId(), text, date: new Date().toISOString(), pasted, ...historyFields(text, cleanup) }, ...this.history].slice(0, this.prefs.historyLimit)
-    writeJSON('history.json', this.history, 0o600)
+    this.writeHistory()
+  }
+
+  /** Every write of history.json goes through here: none while the file is one satz could not read and must not replace. */
+  private writeHistory() {
+    if (!this.historyKept) writeJSON('history.json', this.history, 0o600)
   }
 
   /** Lowering it drops the oldest at once, from disk too. */
@@ -210,16 +267,18 @@ export class Store {
     this.update({ historyLimit: limit })
     if (limit === 0) return this.clearHistory()
     this.history = this.history.slice(0, limit)
-    writeJSON('history.json', this.history, 0o600)
+    this.writeHistory()
   }
 
   removeHistory(id: string) {
     this.history = this.history.filter(entry => entry.id !== id)
-    writeJSON('history.json', this.history, 0o600)
+    this.writeHistory()
   }
 
   clearHistory() {
     this.history = []
+    // The file that was not readable holds what the user cannot see here: not deleted either.
+    if (this.historyKept) return
     try { fs.rmSync(file('history.json')) } catch { /* already gone */ }
   }
 }

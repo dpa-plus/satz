@@ -228,6 +228,8 @@ test('Google: the request is JSON to /v1beta/interactions with the key in x-goog
     model: 'gemini-3.5-transcribe',
     input: [{ type: 'audio', data: Buffer.from(wav).toString('base64'), mime_type: 'audio/wav' }],
     generation_config: { transcription_config: { language_codes: [], custom_vocabulary: ['Kubernetes', 'Klammer auf'], mode: 'smart' } },
+    // One recording, answered once: Google need not keep the interaction.
+    store: false,
   })
 })
 
@@ -275,7 +277,8 @@ test('Google against the stand-in: exact address, key header and JSON body; the 
     assert.equal(seen.headers.authorization, undefined)
     assert.equal(seen.headers['content-type'], 'application/json')
     const body = JSON.parse(seen.body.toString('utf8'))
-    assert.deepEqual(Object.keys(body), ['model', 'input', 'generation_config'])
+    assert.deepEqual(Object.keys(body), ['model', 'input', 'generation_config', 'store'])
+    assert.equal(body.store, false)
     assert.equal(body.model, 'gemini-3.5-transcribe')
     assert.equal(body.input.length, 1)
     assert.deepEqual([body.input[0].type, body.input[0].mime_type], ['audio', 'audio/wav'])

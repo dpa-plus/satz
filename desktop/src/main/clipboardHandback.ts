@@ -11,7 +11,11 @@
  * is then the one to give back (the Mac does the same, Paster.swift).
  */
 export interface ClipboardPort<Saved> {
-  /** Everything on the clipboard, in every form, read out now (live items change with the clipboard). */
+  /**
+   * Everything on the clipboard, in every form, read out now (live items
+   * change with the clipboard). Rejects when the clipboard cannot be read: that
+   * is not an empty clipboard, and giving it back as one would wipe it.
+   */
   save(): Promise<Saved>
   /** Nothing was on it: it is to end up empty again. */
   isEmpty(saved: Saved): boolean
@@ -20,6 +24,18 @@ export interface ClipboardPort<Saved> {
   writeText(text: string): Promise<void>
   /** Just this text and nothing else: something copied since, also the same words with their formatting, is the user's. */
   holdsOnly(text: string): Promise<boolean>
+}
+
+/**
+ * The clipboard could not be read, so nothing was written to it: what is on
+ * it could not be given back afterwards. The caller treats the paste as not
+ * done and keeps the text.
+ */
+export class ClipboardBackupError extends Error {
+  constructor(cause: unknown) {
+    super(`the clipboard could not be read, so it was left alone (${(cause as Error)?.message ?? cause})`, { cause })
+    this.name = 'ClipboardBackupError'
+  }
 }
 
 export interface Timers { set(run: () => void, ms: number): unknown; clear(handle: unknown): void }
@@ -49,7 +65,14 @@ export class ClipboardHandback<Saved> {
 
   private async put<Outcome extends { pasted: boolean }>(text: string, paste: () => Promise<Outcome>, keepsOnClipboard: boolean): Promise<Outcome> {
     const earlier = this.pending
-    const original = await this.takeOriginal()
+    let original: Saved | null
+    try {
+      original = await this.takeOriginal(keepsOnClipboard)
+    } catch (error) {
+      // Nothing was written. The paste before still has its hand-back coming.
+      if (earlier) this.arm(earlier.original, earlier.text)
+      throw error
+    }
     let outcome: Outcome
     try {
       await this.port.writeText(text)
@@ -62,7 +85,7 @@ export class ClipboardHandback<Saved> {
     }
     // The transcript stays: the fallback when it could not be pasted, the
     // user's choice otherwise. Nothing is given back, also not for pastes before.
-    if (!outcome.pasted || keepsOnClipboard) return outcome
+    if (!outcome.pasted || keepsOnClipboard || original === null) return outcome
     this.arm(original, text)
     return outcome
   }
@@ -74,15 +97,27 @@ export class ClipboardHandback<Saved> {
     this.pending = burst
   }
 
-  /** The clipboard to give back after this paste: the burst's, if the user left it alone. */
-  private async takeOriginal(): Promise<Saved> {
+  /**
+   * The clipboard to give back after this paste: the burst's, if the user left it alone.
+   *
+   * A clipboard that cannot be read is not an empty one (it would be cleared
+   * afterwards): the paste is refused before anything is written, so what the
+   * user copied stays. Where the transcript is meant to stay on the clipboard
+   * anyway (`unneeded`) there is nothing to give back and the paste goes ahead.
+   */
+  private async takeOriginal(unneeded: boolean): Promise<Saved | null> {
     const burst = this.pending
     this.pending = null
     if (burst) {
       this.timers.clear(burst.timer)
       if (await this.port.holdsOnly(burst.text)) return burst.original
     }
-    return this.port.save()
+    try {
+      return await this.port.save()
+    } catch (error) {
+      if (unneeded) return null
+      throw new ClipboardBackupError(error)
+    }
   }
 
   /** Only while the clipboard still holds just the transcript. */
@@ -94,4 +129,30 @@ export class ClipboardHandback<Saved> {
     if (this.port.isEmpty(burst.original)) this.port.clear()
     else await this.port.restore(burst.original)
   }
+
+  /**
+   * satz quits: the timer would not outlive it, and the transcript would stay
+   * on the clipboard for good. Gives back what is due at once, after a paste
+   * that is still running has finished.
+   */
+  flush(): Promise<void> {
+    const run = this.chain.then(() => {
+      const burst = this.pending
+      if (!burst) return
+      this.timers.clear(burst.timer)
+      return this.giveBack(burst)
+    })
+    this.chain = run.then(() => {}, () => {})
+    return run
+  }
+}
+
+let appHandback: { flush(): Promise<void> } | null = null
+
+/** The hand-back the app pastes through (paste.ts), the one `flushHandback` gives back. */
+export function registerHandback(handback: { flush(): Promise<void> }) { appHandback = handback }
+
+/** For quitting: puts the clipboard back now instead of when the timer would have. Never rejects, there is nothing left to do about an error. */
+export async function flushHandback(): Promise<void> {
+  try { await appHandback?.flush() } catch { /* quitting */ }
 }

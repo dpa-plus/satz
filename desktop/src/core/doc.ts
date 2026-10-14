@@ -27,9 +27,13 @@ export class Doc {
 
   replace(range: Range, s: string, attrs: { seg?: number; mark?: number } = {}) {
     const units = s.split('')
-    this.chars.splice(range.location, range.length, ...units)
-    this.seg.splice(range.location, range.length, ...units.map(() => attrs.seg ?? 0))
-    this.mark.splice(range.location, range.length, ...units.map(() => attrs.mark ?? 0))
+    // Joined, not spread into splice: one argument per character threw above
+    // about 125,000 characters, and the dictation stayed "finishing" for good.
+    const swap = <T>(values: T[], inserted: T[]) =>
+      values.slice(0, range.location).concat(inserted, values.slice(range.location + range.length))
+    this.chars = swap(this.chars, units)
+    this.seg = swap(this.seg, new Array<number>(units.length).fill(attrs.seg ?? 0))
+    this.mark = swap(this.mark, new Array<number>(units.length).fill(attrs.mark ?? 0))
   }
 
   delete(range: Range) { this.replace(range, '') }
