@@ -1,0 +1,330 @@
+{
+  "about": [
+    "What the steady-noise check (SpeechGate.isSteady on the Mac, isSteady in desktop/src/core/speech.ts) must call steady and what it must keep.",
+    "Read by Tests/SatzKitTests/CodexFixSteadyNoiseTests.swift and desktop/test/codexFixSteadyNoise.test.ts, so both platforms answer every case the same way.",
+    "Each case is `seconds` of 16 kHz audio: `noise` (none is digital silence), plus ja-genau.wav (\"Ja, genau.\", 0.83 s) added at `clip.at` seconds, times `clip.gain` (1 if absent).",
+    "white: x = (1664525 x + 1013904223) mod 2^32 from x = seed, each sample x / 2^32 * 2 - 1 (Codex's generator, so the first two cases are its F01 fixtures).",
+    "hiss: white times amplitude. fan: white through low = 0.92 low + white, scaled to an RMS of level. tone: amplitude sin(2 pi hertz i / 16000).",
+    "fan with `pole` 0.99 instead of 0.92 is rumble. pink: white through Paul Kellet's filter (b0..b6 below in both tests), scaled to an RMS of level. `taps`: at each second given, a key thump 0.12 exp(-i/100) (sin(2 pi 180 i/16000) + 0.5 sin(2 pi 2200 i/16000)) for 400 samples. `clip.until`: only the clip's first seconds (0.36 is \"Ja,\")."
+  ],
+  "cases": [
+    {
+      "name": "Codex F01, Cohere: \"Ja, genau.\", then a long pause in hiss at -43 dBFS (the first 29 s piece)",
+      "seconds": 29,
+      "noise": {
+        "kind": "hiss",
+        "amplitude": 0.012,
+        "seed": 42
+      },
+      "clip": {
+        "at": 1
+      },
+      "steady": false
+    },
+    {
+      "name": "Codex F01, Qwen: the same in hiss at -65 dBFS (the first 14 s piece)",
+      "seconds": 14,
+      "noise": {
+        "kind": "hiss",
+        "amplitude": 0.001,
+        "seed": 42
+      },
+      "clip": {
+        "at": 1
+      },
+      "steady": false
+    },
+    {
+      "name": "the phrase 20 dB quieter, in the same hiss",
+      "seconds": 29,
+      "noise": {
+        "kind": "hiss",
+        "amplitude": 0.012,
+        "seed": 42
+      },
+      "clip": {
+        "at": 1,
+        "gain": 0.1
+      },
+      "steady": false
+    },
+    {
+      "name": "the phrase at the end of the piece",
+      "seconds": 29,
+      "noise": {
+        "kind": "hiss",
+        "amplitude": 0.012,
+        "seed": 42
+      },
+      "clip": {
+        "at": 28
+      },
+      "steady": false
+    },
+    {
+      "name": "the phrase over a fan at -30 dBFS",
+      "seconds": 29,
+      "noise": {
+        "kind": "fan",
+        "level": 0.03,
+        "seed": 7
+      },
+      "clip": {
+        "at": 1
+      },
+      "steady": false
+    },
+    {
+      "name": "the phrase over a 50 Hz hum",
+      "seconds": 12,
+      "noise": {
+        "kind": "tone",
+        "hertz": 50,
+        "amplitude": 0.02
+      },
+      "clip": {
+        "at": 5
+      },
+      "steady": false
+    },
+    {
+      "name": "hiss at -43 dBFS",
+      "seconds": 29,
+      "noise": {
+        "kind": "hiss",
+        "amplitude": 0.012,
+        "seed": 42
+      },
+      "steady": true
+    },
+    {
+      "name": "hiss at -65 dBFS",
+      "seconds": 29,
+      "noise": {
+        "kind": "hiss",
+        "amplitude": 0.001,
+        "seed": 42
+      },
+      "steady": true
+    },
+    {
+      "name": "hiss at -65 dBFS, as long as Qwen's piece",
+      "seconds": 14,
+      "noise": {
+        "kind": "hiss",
+        "amplitude": 0.001,
+        "seed": 42
+      },
+      "steady": true
+    },
+    {
+      "name": "loud hiss at -15 dBFS",
+      "seconds": 29,
+      "noise": {
+        "kind": "hiss",
+        "amplitude": 0.3,
+        "seed": 42
+      },
+      "steady": true
+    },
+    {
+      "name": "fan at -30 dBFS",
+      "seconds": 30,
+      "noise": {
+        "kind": "fan",
+        "level": 0.03,
+        "seed": 7
+      },
+      "steady": true
+    },
+    {
+      "name": "fan at -45 dBFS",
+      "seconds": 12,
+      "noise": {
+        "kind": "fan",
+        "level": 0.006,
+        "seed": 7
+      },
+      "steady": true
+    },
+    {
+      "name": "fan at -65 dBFS",
+      "seconds": 29,
+      "noise": {
+        "kind": "fan",
+        "level": 0.00056,
+        "seed": 7
+      },
+      "steady": true
+    },
+    {
+      "name": "hum, 50 Hz",
+      "seconds": 12,
+      "noise": {
+        "kind": "tone",
+        "hertz": 50,
+        "amplitude": 0.02
+      },
+      "steady": true
+    },
+    {
+      "name": "pure tone, 440 Hz",
+      "seconds": 29,
+      "noise": {
+        "kind": "tone",
+        "hertz": 440,
+        "amplitude": 0.1
+      },
+      "steady": true
+    },
+    {
+      "name": "quiet pure tone, 1 kHz at -63 dBFS",
+      "seconds": 29,
+      "noise": {
+        "kind": "tone",
+        "hertz": 1000,
+        "amplitude": 0.001
+      },
+      "steady": true
+    },
+    {
+      "name": "a second of hiss is enough to judge",
+      "seconds": 1,
+      "noise": {
+        "kind": "hiss",
+        "amplitude": 0.012,
+        "seed": 42
+      },
+      "steady": true
+    },
+    {
+      "name": "under a second is too little to judge",
+      "seconds": 0.8,
+      "noise": {
+        "kind": "hiss",
+        "amplitude": 0.012,
+        "seed": 42
+      },
+      "steady": false
+    },
+    {
+      "name": "digital silence is the speech gate's business, not this one's",
+      "seconds": 5,
+      "steady": false
+    },
+    {
+      "name": "the phrase at a third of its level under a fan at -30 dBFS (Cohere still hears it)",
+      "seconds": 29,
+      "noise": {
+        "kind": "fan",
+        "level": 0.03,
+        "seed": 7
+      },
+      "clip": {
+        "at": 1,
+        "gain": 0.3
+      },
+      "steady": false
+    },
+    {
+      "name": "\"Ja,\" alone in hiss at -43 dBFS",
+      "seconds": 29,
+      "noise": {
+        "kind": "hiss",
+        "amplitude": 0.012,
+        "seed": 42
+      },
+      "clip": {
+        "at": 1,
+        "until": 0.36
+      },
+      "steady": false
+    },
+    {
+      "name": "the phrase over pink noise",
+      "seconds": 29,
+      "noise": {
+        "kind": "pink",
+        "level": 0.01,
+        "seed": 101
+      },
+      "clip": {
+        "at": 1
+      },
+      "steady": false
+    },
+    {
+      "name": "the phrase over rumble",
+      "seconds": 29,
+      "noise": {
+        "kind": "fan",
+        "pole": 0.99,
+        "level": 0.01,
+        "seed": 101
+      },
+      "clip": {
+        "at": 1
+      },
+      "steady": false
+    },
+    {
+      "name": "two key taps of the shortcut in hiss at -43 dBFS (Cohere wrote sentences for them)",
+      "seconds": 29,
+      "noise": {
+        "kind": "hiss",
+        "amplitude": 0.012,
+        "seed": 11
+      },
+      "taps": [
+        0.2,
+        28.8
+      ],
+      "steady": true
+    },
+    {
+      "name": "two key taps in a 3 s piece",
+      "seconds": 3,
+      "noise": {
+        "kind": "hiss",
+        "amplitude": 0.012,
+        "seed": 11
+      },
+      "taps": [
+        0.2,
+        2.8
+      ],
+      "steady": true
+    },
+    {
+      "name": "rumble",
+      "seconds": 29,
+      "noise": {
+        "kind": "fan",
+        "pole": 0.99,
+        "level": 0.01,
+        "seed": 101
+      },
+      "steady": true
+    },
+    {
+      "name": "pink noise",
+      "seconds": 29,
+      "noise": {
+        "kind": "pink",
+        "level": 0.01,
+        "seed": 101
+      },
+      "steady": true
+    },
+    {
+      "name": "pink noise, 10 s",
+      "seconds": 10,
+      "noise": {
+        "kind": "pink",
+        "level": 0.01,
+        "seed": 102
+      },
+      "steady": true
+    }
+  ]
+}

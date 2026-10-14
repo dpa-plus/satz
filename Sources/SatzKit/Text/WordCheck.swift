@@ -110,20 +110,62 @@ public enum SpeechGate {
     }
 
     /// Whether a piece is one steady level, like a fan, hiss or hum, rather
-    /// than speech. Speech rises and falls with every syllable and pause: its
-    /// louder frames (30 ms, the 90th percentile) are 18 to 1500 times the
-    /// quieter ones (the 10th) in clips of every kind tried, steady noise is
-    /// 1.1 times; twice splits them with room on both sides, and speech only
-    /// 6 dB above the fan it is recorded over still passes. `hasSpeech` cannot
-    /// tell: it takes anything above -45 dBFS for speech, which a low-gain
-    /// microphone needs, and Cohere Transcribe wrote whole sentences for a fan
-    /// (the same numbers as desktop/src/core/speech.ts). Under a second there
-    /// is too little to judge, and a piece with a silent stretch is not steady.
+    /// than speech. Cohere Transcribe and Qwen3-ASR write sentences for such
+    /// noise, so it is not sent to them; `hasSpeech` cannot tell, it takes
+    /// anything above -45 dBFS for speech, which a low-gain microphone needs.
+    ///
+    /// Steady takes two things, both measured above 100 Hz. The louder tenth
+    /// of the frames stays under twice the quieter tenth, as before. And no
+    /// 210 ms (`burstFrames`) are all at least 1.45 times the piece's median
+    /// frame: the first test alone took "Ja, genau." before a long pause for
+    /// a fan, because it was under a tenth of the piece and its words were
+    /// never heard (Codex F01, 14.10.2026). Measured on 14.10.: speech scores
+    /// 1.9 to 200 over hiss, fans, pink and brown noise and hum, down to the
+    /// phrase at a third of its level under a fan at -30 dBFS (1.54); fans,
+    /// hiss, rumble, key taps, clicks and a cough score 1.0 to 1.25; only a
+    /// strongly gusting fan (1.38, kept by the first test anyway) comes
+    /// close. A phrase quieter than the noise around it can still be skipped.
+    /// Under a second there is too little to judge, and a piece with a
+    /// silent stretch is not steady. The same numbers as
+    /// desktop/src/core/speech.ts (shared cases in Tests/Fixtures/CodexFixSteadyNoise).
     public static func isSteady(_ samples: ArraySlice<Float>, sampleRate: Double = 16_000) -> Bool {
-        let sorted = levels(samples, sampleRate: sampleRate).sorted()
-        guard sorted.count >= 30 else { return false }
-        let quiet = sorted[sorted.count / 10]
-        return quiet > 0 && sorted[sorted.count * 9 / 10] < 2 * quiet
+        let levels = levelsAbove100Hz(samples, sampleRate: sampleRate)
+        guard levels.count >= 30 else { return false }
+        let sorted = levels.sorted()
+        let quiet = sorted[levels.count / 10]
+        guard quiet > 0, sorted[levels.count * 9 / 10] < 2 * quiet else { return false }
+        return sustainedBurst(levels) < 1.45 * sorted[levels.count / 2]
+    }
+
+    /// Seven 30 ms frames, about a syllable and a half: a key tap or a click
+    /// is one or two, a cough barely reaches it.
+    private static let burstFrames = 7
+
+    /// The quietest frame of the loudest `burstFrames` frames in a row: a
+    /// burst counts only if all of it is loud.
+    private static func sustainedBurst(_ levels: [Float]) -> Float {
+        var loudest: Float = 0
+        for start in 0 ... levels.count - burstFrames {
+            loudest = max(loudest, levels[start ..< start + burstFrames].min() ?? 0)
+        }
+        return loudest
+    }
+
+    /// The frame levels the steady check reads, after a gentle high-pass at
+    /// 100 Hz: rumble and slow wandering below it lifted a fan's frames
+    /// enough to pass for a syllable, and Cohere wrote sentences for it.
+    /// Speech keeps its level, so it stands out more over a hum, not less.
+    private static func levelsAbove100Hz(_ samples: ArraySlice<Float>, sampleRate: Double) -> [Float] {
+        let rc = 1 / (2 * Double.pi * 100)
+        let a = Float(rc / (rc + 1 / sampleRate))
+        var filtered = [Float](repeating: 0, count: samples.count)
+        var output: Float = 0, input: Float = 0
+        for (i, sample) in samples.enumerated() {
+            output = a * (output + sample - input)
+            input = sample
+            filtered[i] = output
+        }
+        return levels(filtered[...], sampleRate: sampleRate)
     }
 
     /// The same for a piece of a recording, by the recording's `threshold`.

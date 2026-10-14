@@ -61,22 +61,64 @@ export function hasSpeech(samples: Float32Array, rate = 16_000, threshold?: numb
 }
 
 /**
+ * The frame levels the steady check reads, after a gentle high-pass at
+ * 100 Hz: rumble and slow wandering below it lifted a fan's frames enough to
+ * pass for a syllable, and Cohere wrote sentences for it. Speech keeps its
+ * level, so it stands out more over a hum, not less.
+ */
+function levelsAbove100Hz(samples: Float32Array, rate: number): number[] {
+  const rc = 1 / (2 * Math.PI * 100), a = rc / (rc + 1 / rate)
+  const filtered = new Float32Array(samples.length)
+  let output = 0, input = 0
+  for (let i = 0; i < samples.length; i++) {
+    output = a * (output + samples[i] - input)
+    input = samples[i]
+    filtered[i] = output
+  }
+  return frameLevels(filtered, rate)
+}
+
+/** Seven 30 ms frames, about a syllable and a half: a key tap or a click is one or two, a cough barely reaches it. */
+const burstFrames = 7
+
+/** The quietest frame of the loudest `burstFrames` frames in a row: a burst counts only if all of it is loud. */
+function sustainedBurst(levels: number[]): number {
+  let loudest = 0
+  for (let start = 0; start + burstFrames <= levels.length; start++) {
+    let quietest = Infinity
+    for (let k = start; k < start + burstFrames; k++) quietest = Math.min(quietest, levels[k])
+    loudest = Math.max(loudest, quietest)
+  }
+  return loudest
+}
+
+/**
  * Whether a piece is one steady level, like a fan, hiss or hum, rather than
- * speech. Speech rises and falls with every syllable and pause: its louder
- * frames (30 ms, the 90th percentile) are 18 to 1500 times the quieter ones
- * (the 10th) in clips of every kind tried; steady noise is 1.1 times. Twice
- * splits them with room on both sides: speech only 6 dB above the fan it is
- * recorded over still passes. `hasSpeech` cannot tell: it
- * takes anything louder than -45 dBFS for speech, which a low-gain
- * microphone needs, and Cohere Transcribe wrote whole sentences for a fan.
- * Under a second there is too little to judge, and a piece with a silent
- * stretch in it is not steady.
+ * speech. Cohere Transcribe and Qwen3-ASR write sentences for such noise, so
+ * it is not sent to them; `hasSpeech` cannot tell, it takes anything louder
+ * than -45 dBFS for speech, which a low-gain microphone needs.
+ *
+ * Steady takes two things, both measured above 100 Hz. The louder tenth of
+ * the frames stays under twice the quieter tenth, as before. And no 210 ms
+ * (`burstFrames`) are all at least 1.45 times the piece's median frame: the
+ * first test alone took "Ja, genau." before a long pause for a fan, because
+ * it was under a tenth of the piece and its words were never heard (Codex
+ * F01, 14.10.2026). Measured on 14.10.: speech scores 1.9 to 200 over hiss,
+ * fans, pink and brown noise and hum, down to the phrase at a third of its
+ * level under a fan at -30 dBFS (1.54); fans, hiss, rumble, key taps, clicks
+ * and a cough score 1.0 to 1.25; only a strongly gusting fan (1.38, kept by
+ * the first test anyway) comes close. A phrase quieter than the noise around
+ * it can still be skipped. Under a second there is too little to judge, and
+ * a piece with a silent stretch is not steady. The same numbers as
+ * WordCheck.swift (shared cases in Tests/Fixtures/CodexFixSteadyNoise).
  */
 export function isSteady(samples: Float32Array, rate = 16_000): boolean {
-  const levels = frameLevels(samples, rate).sort((a, b) => a - b)
+  const levels = levelsAbove100Hz(samples, rate)
   if (levels.length < 30) return false
-  const quiet = levels[Math.floor(levels.length * 0.1)]
-  return quiet > 0 && levels[Math.floor(levels.length * 0.9)] < 2 * quiet
+  const sorted = [...levels].sort((a, b) => a - b)
+  const quiet = sorted[Math.floor(levels.length * 0.1)]
+  if (quiet <= 0 || sorted[Math.floor(levels.length * 0.9)] >= 2 * quiet) return false
+  return sustainedBurst(levels) < 1.45 * sorted[Math.floor(levels.length / 2)]
 }
 
 /**
