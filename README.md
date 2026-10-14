@@ -180,7 +180,7 @@ Off until you switch it on. With *Clean up the text* in Settings, a language mod
 
 *Show prompt* shows exactly what satz sends. Your vocabulary goes with it, so names stay spelled your way. English words in German sentences stay English.
 
-**What you dictate is never answered.** "What time is it?" stays a question, and "write a mail to Jonas" stays a sentence. satz checks every answer against what you said: if it looks like a reply, a translation you did not ask for or a comment, or the model fails or is too slow, satz pastes what you said and the card says *Not cleaned up*. The history keeps what you said next to the cleaned text (*Original* on the row).
+**What you dictate is never answered.** "What time is it?" stays a question, and "write a mail to Jonas" stays a sentence. satz checks every answer against what you said: if it looks like a reply, a translation you did not ask for or a comment, if a number, a sign or a "not" changed, if *Punctuation only* changed a word, or if the model fails, cuts off or is too slow, satz pastes what you said and the card says *Not cleaned up*. The history keeps what you said next to the cleaned text (*Original* on the row), unless you switched the history off.
 
 **What it adds.** Every model in the menu shows the seconds it adds to a dictation and what it costs per hour of talking, estimated for the length of your own dictations and measured once you have used it or clicked *Try*. *Try* runs a sample (or your own text) through the model you are looking at before you switch to it.
 
