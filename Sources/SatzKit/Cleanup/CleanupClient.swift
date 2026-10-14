@@ -42,6 +42,8 @@ public struct CleanupClient: Sendable {
         }
         let timeout = timeoutOverride ?? CleanupTiming.timeout(for: core, level: job.level, runsHere: job.runsHere,
                                                                catalogSeconds: job.model.seconds)
+        // Discarded before it began: nothing is sent.
+        if Task.isCancelled { return .cancelled(original) }
         let started = Date()
         do {
             let answer = try await Self.within(timeout) { [self] in try await ask(job, text: core, timeout: timeout) }
@@ -59,6 +61,11 @@ public struct CleanupClient: Sendable {
                 return CleanupResult(text: original, failure: .rejected, cleaned: cleaned, seconds: seconds, dollars: dollars)
             }
             return CleanupResult(text: cleaned, cleaned: cleaned, seconds: seconds, dollars: dollars)
+        } catch where Task.isCancelled {
+            // Discarded while it ran. The transport reports that as an error
+            // of its own (URLError.cancelled, CancellationError); it is not
+            // the provider failing, and the answer is thrown away anyway.
+            return .cancelled(original)
         } catch let failure as Failed {
             return CleanupResult(text: original, failure: failure.failure, seconds: Date().timeIntervalSince(started), detail: failure.detail)
         } catch let failure as CleanupFailure {
@@ -94,13 +101,18 @@ public struct CleanupClient: Sendable {
         // Once more without an extra the provider says it does not take.
         if status == 400, let said = CleanupRequest.message(in: data),
            let changed = CleanupRequest.retried(body, job: job, message: said, text: text), let base = job.baseURL {
+            // Discarded meanwhile: no second request.
+            try Task.checkCancellation()
             request = CleanupRequest.request(job, base: base, body: changed)
             request.timeoutInterval = timeout
             (data, status) = try await send(request)
         }
         guard (200 ..< 300).contains(status) else {
-            let said = CleanupRequest.message(in: data).map { ": \($0)" } ?? ""
-            throw Failed(failure: .from(status: status, body: data), detail: "status \(status)\(said)")
+            // The status and the error's type and code, never its message: a
+            // provider may quote the request in it, and the request holds the
+            // dictation and, in the header, the key.
+            let fields = CleanupRequest.errorDetail(in: data, key: job.key).map { ": \($0)" } ?? ""
+            throw Failed(failure: .from(status: status, body: data), detail: "status \(status)\(fields)")
         }
         guard let answer = CleanupRequest.parse(data, family: job.provider.family) else {
             throw Failed(failure: .providerError, detail: "status \(status): unreadable answer")

@@ -5,6 +5,11 @@ import SatzKit
 /// that plays as if someone were speaking it.
 protocol AudioSource: AnyObject, Sendable {
     var onLevel: (@Sendable @MainActor (Float) -> Void)? { get set }
+    /// The input stopped on its own and could not be started again. What it
+    /// heard stays, and `finishSamples()` still hands it over.
+    var onInputLost: (@Sendable @MainActor () -> Void)? { get set }
+    /// The same, for an owner that was not listening yet when it happened.
+    var inputLost: Bool { get }
     func start() async throws
     func finishSamples() async -> [Float]?
     var sampleCount: Int { get }
@@ -39,6 +44,9 @@ enum AudioSources {
 /// and the levels move, exactly like the microphone would.
 final class FileSource: AudioSource, @unchecked Sendable {
     var onLevel: (@Sendable @MainActor (Float) -> Void)?
+    /// A file never comes unplugged.
+    var onInputLost: (@Sendable @MainActor () -> Void)?
+    var inputLost: Bool { false }
 
     private let samples: [Float]
     private let lock = NSLock()

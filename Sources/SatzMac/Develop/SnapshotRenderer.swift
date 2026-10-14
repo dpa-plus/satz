@@ -200,9 +200,11 @@ enum SnapshotRenderer {
 
     private static let speech: [Float] = [0.1, 0.3, 0.55, 0.8, 0.62, 0.35, 0.5, 0.75, 0.9, 0.6, 0.3, 0.45]
 
-    private static func card(_ phase: Session.Phase, text: String = "", marker: Bool = false, cleaning: Bool = false) -> some View {
+    private static func card(_ phase: Session.Phase, text: String = "", marker: Bool = false, cleaning: Bool = false,
+                             microphoneLost: Bool = false) -> some View {
         let session = Session(preferences: preferences, history: History(), discarded: Discarded())
-        session.stage(phase, text: text, marker: marker, levels: phase == .listening ? speech : [], cleaning: cleaning)
+        session.stage(phase, text: text, marker: marker, levels: phase == .listening ? speech : [], cleaning: cleaning,
+                      microphoneLost: microphoneLost)
         return CardView(session: session, preferences: preferences)
     }
 
@@ -211,7 +213,12 @@ enum SnapshotRenderer {
         return VStack(spacing: 22) {
             card(.listening, marker: true)
             card(.listening, text: text + " ", marker: true)
+            // A pause with nothing typed yet is the small pill: its word has to fit.
+            card(.paused)
             card(.paused, text: text)
+            // The microphone was unplugged: paused by itself, with and without the text above it.
+            card(.paused, microphoneLost: true)
+            card(.paused, text: text, microphoneLost: true)
             card(.finishing, text: text)
             card(.finishing, text: text, cleaning: true)
             card(.failed("Keine Verbindung", canRetry: true), text: text)

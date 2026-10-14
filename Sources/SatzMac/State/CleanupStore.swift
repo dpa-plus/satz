@@ -11,10 +11,10 @@ final class CleanupStore {
 
     /// OpenRouter's live list, by model id.
     private(set) var listings: [String: OpenRouterListing] = [:]
-    /// What Ollama and LM Studio have installed or loaded, once asked.
-    private(set) var installed: [CleanupProvider: [String]] = [:]
-    /// Asked, and nobody answered: the server is not running.
-    private(set) var notRunning: Set<CleanupProvider> = []
+    /// What the servers of Ollama and LM Studio answered when asked what they
+    /// have installed or loaded. By provider and address, so an answer only
+    /// ever speaks for the server it came from.
+    private var discovered: [Server: Discovery] = [:]
     private(set) var speeds = CleanupSpeeds()
     private(set) var appleState: AppleCleanup.State = .unsupported
     /// The provider Settings shows while it is not the one in use: clicking
@@ -31,7 +31,37 @@ final class CleanupStore {
         let result: CleanupResult
     }
 
+    /// One server: the provider and its address as `CleanupAddress.url`
+    /// reduces it ("localhost:11434/v1/" and "http://localhost:11434/v1" are
+    /// the same one). nil for a provider that has no list, or an address
+    /// that cannot be used.
+    struct Server: Hashable {
+        let provider: CleanupProvider
+        let address: String
+
+        init?(_ provider: CleanupProvider, address typed: String) {
+            guard provider == .ollama || provider == .lmStudio,
+                  let url = CleanupAddress.url(provider.address(typed)) else { return nil }
+            self.provider = provider
+            address = url.absoluteString
+        }
+    }
+
+    private enum Discovery: Equatable {
+        case models([String])
+        /// Asked, and nobody answered: the server is not running.
+        case silent
+    }
+
     @ObservationIgnored private var tryTask: Task<Void, Never>?
+    /// The server each provider was asked last. An answer counts only while
+    /// its server is that one, and only if no later answer of the same server
+    /// is in already: Settings asks again for every address typed, and the
+    /// answer of the one before may come after (`refreshInstalled`).
+    @ObservationIgnored private var lastAsked: [CleanupProvider: Server] = [:]
+    @ObservationIgnored private var asks = 0
+    /// The ask whose answer a server's entry holds.
+    @ObservationIgnored private var answeredAt: [Server: Int] = [:]
     @ObservationIgnored private var fetchingPrices = false
     /// When the last fetch of OpenRouter's list failed: not tried again for
     /// ten minutes, so a Settings window opened and closed does not ask each time.
@@ -51,6 +81,13 @@ final class CleanupStore {
         return data
     }
     @ObservationIgnored var now: () -> Date = { Date() }
+    /// What a server answers to `GET /models`; replaced by tests, which hold
+    /// the answers back to put them in any order.
+    @ObservationIgnored var fetchModels: (URL) async throws -> Data = { base in
+        let (data, response) = try await URLSession.shared.data(for: URLRequest(url: base.appendingPathComponent("models"), timeoutInterval: 3))
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
+        return data
+    }
 
     /// Next to the preferences; in test mode next to the state file.
     static let standardSpeedsFile = FileManager.default
@@ -76,11 +113,27 @@ final class CleanupStore {
         looking ?? preferences.cleanupProvider
     }
 
-    /// The model id: the one picked, or Ollama's and LM Studio's first.
+    /// The model id: the one picked, or the first of the server at the address
+    /// in use, for Ollama and LM Studio.
     func modelID(_ provider: CleanupProvider, _ preferences: Preferences) -> String {
         let stored = preferences.cleanupModel(for: provider)
-        if stored.isEmpty, provider == .ollama || provider == .lmStudio { return installed[provider]?.first ?? "" }
+        if stored.isEmpty, provider == .ollama || provider == .lmStudio {
+            return installedModels(provider, address: preferences.cleanupAddress(for: provider))?.first ?? ""
+        }
         return stored
+    }
+
+    /// What the server at `address` (as typed; empty is the provider's own)
+    /// said it has; nil while it has not answered, or answered nothing.
+    func installedModels(_ provider: CleanupProvider, address: String = "") -> [String]? {
+        guard let server = Server(provider, address: address), case .models(let ids)? = discovered[server] else { return nil }
+        return ids
+    }
+
+    /// The server at `address` was asked and did not answer.
+    func isNotRunning(_ provider: CleanupProvider, address: String = "") -> Bool {
+        guard let server = Server(provider, address: address) else { return false }
+        return discovered[server] == .silent
     }
 
     func model(_ provider: CleanupProvider, _ preferences: Preferences) -> CleanupModel {
@@ -92,10 +145,10 @@ final class CleanupStore {
         CleanupCatalog.model(id, for: provider, listing: provider == .openRouter ? listings[id] : nil)
     }
 
-    /// The menu's models: the catalog, or what the server on this computer has.
-    func models(_ provider: CleanupProvider) -> [CleanupModel] {
+    /// The menu's models: the catalog, or what the server at `address` has.
+    func models(_ provider: CleanupProvider, address: String = "") -> [CleanupModel] {
         switch provider {
-        case .ollama, .lmStudio: (installed[provider] ?? []).map { model($0, for: provider) }
+        case .ollama, .lmStudio: (installedModels(provider, address: address) ?? []).map { model($0, for: provider) }
         default: CleanupCatalog.models(for: provider).map { model($0.id, for: provider) }
         }
     }
@@ -137,16 +190,24 @@ final class CleanupStore {
     // MARK: - Running
 
     /// One dictation's cleanup, with the provider in use. Its time is kept.
+    ///
+    /// A dictation that is discarded cancels this task. It then sends nothing
+    /// more, and what it was told is neither measured nor logged: the answer
+    /// is thrown away, and a request that was cut short says nothing about
+    /// how fast the model is.
     func clean(_ text: String, _ preferences: Preferences) async -> CleanupResult {
+        guard !Task.isCancelled else { return .cancelled(text) }
         let provider = preferences.cleanupProvider
         if provider == .apple { appleState = AppleCleanup.state }
         // Ollama's first model, when none was picked and Settings has not
         // asked it since satz started.
         if modelID(provider, preferences).isEmpty, provider == .ollama || provider == .lmStudio {
-            await fetchInstalled(provider, address: preferences.cleanupAddress(for: provider))
+            await refreshInstalled(provider, address: preferences.cleanupAddress(for: provider))
+            guard !Task.isCancelled else { return .cancelled(text) }
         }
         let job = job(provider, preferences)
         let result = await client.run(job, text: text)
+        guard !Task.isCancelled else { return .cancelled(text) }
         record(job, result)
         let outcome = result.failure.map { "not cleaned up (\($0.code))" } ?? (result.cleaned == nil ? "nothing to clean" : "cleaned up")
         let timing = result.seconds.map { String(format: " after %.2f s", $0) } ?? ""
@@ -222,25 +283,37 @@ final class CleanupStore {
         }
     }
 
-    /// What Ollama or LM Studio has, asked when Settings shows it.
-    func refreshInstalled(_ provider: CleanupProvider, address: String) {
-        Task { await fetchInstalled(provider, address: address) }
-    }
-
-    /// What Ollama or LM Studio has, in OpenAI's format (`GET /models`).
-    private func fetchInstalled(_ provider: CleanupProvider, address: String) async {
-        guard provider == .ollama || provider == .lmStudio,
-              let base = CleanupAddress.url(provider.address(address)) else { return }
+    /// What Ollama or LM Studio has, asked when Settings shows the address and
+    /// before a dictation that has no model picked. The answer is kept for
+    /// that address only, and dropped when it is not the one asked last or
+    /// not the newest answer of its server. Showing another address stops the
+    /// ask that is running, when the view runs this in its `.task`.
+    func refreshInstalled(_ provider: CleanupProvider, address: String) async {
+        guard provider == .ollama || provider == .lmStudio else { return }
+        let server = Server(provider, address: address)
+        // An address that cannot be used is the last one asked as well: the
+        // answer of the one before is not the server shown now.
+        lastAsked[provider] = server
+        guard let server, let base = CleanupAddress.url(provider.address(address)) else { return }
+        asks += 1
+        let ask = asks
+        let found: Discovery
         do {
-            let (data, response) = try await URLSession.shared.data(for: URLRequest(url: base.appendingPathComponent("models"), timeoutInterval: 3))
-            guard (response as? HTTPURLResponse)?.statusCode == 200,
-                  let models = CleanupCatalog.installedModels(in: data) else { throw URLError(.badServerResponse) }
-            installed[provider] = models
-            notRunning.remove(provider)
+            // In OpenAI's format (`GET /models`).
+            guard let models = CleanupCatalog.installedModels(in: try await fetchModels(base)) else { throw URLError(.badServerResponse) }
+            found = .models(models)
         } catch {
-            installed[provider] = nil
-            notRunning.insert(provider)
+            // Stopped, not unanswered: the view moved on, or the dictation was discarded.
+            if Task.isCancelled { return }
+            found = .silent
         }
+        guard lastAsked[provider] == server, ask > answeredAt[server, default: 0] else { return }
+        for old in discovered.keys where old.provider == provider && old != server {
+            discovered[old] = nil
+            answeredAt[old] = nil
+        }
+        discovered[server] = found
+        answeredAt[server] = ask
     }
 
     // MARK: - On disk
@@ -268,7 +341,10 @@ final class CleanupStore {
     func stage(speeds: CleanupSpeeds = CleanupSpeeds(), installed: [CleanupProvider: [String]] = [:],
                apple: AppleCleanup.State = .available, tried: Tried? = nil, trying: Bool = false) {
         self.speeds = speeds
-        self.installed = installed
+        // At the address a provider has until another is typed.
+        discovered = Dictionary(uniqueKeysWithValues: installed.compactMap { provider, ids in
+            Server(provider, address: "").map { ($0, Discovery.models(ids)) }
+        })
         appleState = apple
         self.tried = tried
         self.trying = trying

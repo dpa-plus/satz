@@ -40,8 +40,7 @@ struct CleanupBlock: View {
             Toggle(isOn: $preferences.cleansText) { Text(de("Text aufräumen", en: "Clean up the text")) }
                 .toggleStyle(AccentToggleStyle())
                 .frame(height: 48)
-            Text(de("Ein Sprachmodell überarbeitet den Text, bevor satz ihn einfügt. Das Original bleibt im Verlauf.",
-                    en: "A language model edits the text before satz pastes it. The original stays in the history."))
+            Text(Self.switchLine(for: history))
                 .font(Typography.text(12))
                 .foregroundStyle(theme.inkSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -60,6 +59,17 @@ struct CleanupBlock: View {
         .font(Typography.text(15))
         .foregroundStyle(theme.ink)
         .padding(.horizontal, 16)
+    }
+
+    /// What the switch does, and where the original is afterwards. The
+    /// original is only kept in the history, so with the history off there is
+    /// none to come back to, and the line says so instead of promising it.
+    static func switchLine(for history: History) -> String {
+        history.limit > 0
+            ? de("Ein Sprachmodell überarbeitet den Text, bevor satz ihn einfügt. Das Original bleibt im Verlauf.",
+                 en: "A language model edits the text before satz pastes it. The original stays in the history.")
+            : de("Ein Sprachmodell überarbeitet den Text, bevor satz ihn einfügt. Der Verlauf ist aus: das Original wird nicht aufbewahrt.",
+                 en: "A language model edits the text before satz pastes it. History is off: the original is not kept.")
     }
 
     private var missing: String? {
@@ -383,7 +393,7 @@ private struct CleanupModelRow: View {
     private static let other = "\u{0}other"
 
     var body: some View {
-        let list = store.models(provider)
+        let list = store.models(provider, address: preferences.cleanupAddress(for: provider))
         let id = store.modelID(provider, preferences)
         let current = list.first { $0.id == id }
         let model = store.model(provider, preferences)
@@ -425,9 +435,12 @@ private struct CleanupModelRow: View {
         .onChange(of: idFocused) { _, focused in if !focused { commit() } }
         .onAppear { draft = preferences.cleanupModel(for: provider) }
         .onDisappear { typing = false }
+        // Again for each address shown. Awaited here, so showing another one
+        // (or closing Settings) stops the ask of the one before; and what it
+        // answers anyway is kept for its own address only (`CleanupStore.refreshInstalled`).
         .task(id: "\(provider.rawValue) \(preferences.cleanupAddress(for: provider))") {
             guard !isSnapshot, provider == .ollama || provider == .lmStudio else { return }
-            store.refreshInstalled(provider, address: preferences.cleanupAddress(for: provider))
+            await store.refreshInstalled(provider, address: preferences.cleanupAddress(for: provider))
         }
     }
 
@@ -540,7 +553,7 @@ private struct CleanupModelRow: View {
                 "Kostenlos, bleibt auf dem Mac. Kleines Modell: beantwortet manchmal Fragen im Text oder übersetzt; satz fügt dann meist das Original ein.",
                 en: "Free, stays on this Mac. A small model: it sometimes answers questions in the text or translates; satz then mostly pastes the original."))
         case .ollama, .lmStudio:
-            if store.notRunning.contains(provider) {
+            if store.isNotRunning(provider, address: preferences.cleanupAddress(for: provider)) {
                 return provider == .ollama ? de("Ollama läuft nicht. ollama.com", en: "Ollama is not running. ollama.com")
                                            : de("LM Studio läuft nicht.", en: "LM Studio is not running.")
             }

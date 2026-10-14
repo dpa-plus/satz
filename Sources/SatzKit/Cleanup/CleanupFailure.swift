@@ -127,6 +127,14 @@ public struct CleanupResult: Sendable, Equatable {
         self.detail = detail
     }
 
+    /// What a cleanup that was cancelled gives back: the original, with no
+    /// time and no price, so it counts as no measurement. Whoever cancelled
+    /// it does not read it (Session drops the answer of a discarded
+    /// dictation); were it read, it says the original was not cleaned.
+    public static func cancelled(_ original: String) -> CleanupResult {
+        CleanupResult(text: original, failure: .notReachable, detail: "cancelled")
+    }
+
     /// The model answered, well or not: its time says how fast it is. A
     /// failed request's time says nothing about the model.
     public var answered: Bool {

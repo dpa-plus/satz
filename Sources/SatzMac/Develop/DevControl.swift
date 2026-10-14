@@ -270,9 +270,12 @@ final class DevControl {
         return state
     }
 
-    private func dump() {
+    /// Not private so a test can ask for the state without a notification.
+    func dump() {
         var state: [String: Any] = [
             "phase": String(describing: session.phase),
+            // A pause the microphone caused (unplugged), which the card says in words.
+            "microphoneLost": session.microphoneLost,
             "cleaning": session.isCleaning,
             "text": session.plainText(),
             "raw": session.text.string,

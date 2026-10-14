@@ -80,10 +80,19 @@ struct CardView: View {
     /// The pill's width: room for the short wave and the three buttons.
     static let pillWidth: CGFloat = 200
 
+    /// A pause also says a word, and "Pausiert" took the room the wave and the
+    /// buttons leave at `pillWidth` (it showed as "Pau…"). A number, not "as
+    /// wide as it needs", so the width still has something to animate between;
+    /// the card grows from its right edge, so the buttons stay put.
+    static let pausedPillWidth: CGFloat = 224
+
     private var width: CGFloat? {
         if showsText { return Self.width }
+        // Said in words, like the other notices: the pill was too narrow for them.
+        if session.phase == .paused, session.microphoneLost { return nil }
         switch session.phase {
-        case .idle, .starting, .listening, .paused: return Self.pillWidth
+        case .paused: return Self.pausedPillWidth
+        case .idle, .starting, .listening: return Self.pillWidth
         // Short status lines ("Verworfen · Rückgängig") take what they need.
         default: return nil
         }
@@ -143,9 +152,18 @@ private struct Strip: View {
     @ViewBuilder
     private var middle: some View {
         switch session.phase {
+        case .paused where session.microphoneLost:
+            // Not a pause the user made: a warning, as on Windows and Linux,
+            // and no waveform, since nothing is heard.
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(theme.accent)
+            label(de("Mikrofon getrennt", en: "Microphone lost"))
+            if wide { Spacer(minLength: 0) }
         case .idle, .starting, .listening, .paused:
             // While listening the moving bars say it; only a pause gets a word.
-            if session.phase == .paused { label(de("Pausiert", en: "Paused")) }
+            // The word first in line for room: the wave gives way, never the word.
+            if session.phase == .paused { label(de("Pausiert", en: "Paused")).layoutPriority(1) }
             // Long and short waves cross-fade instead of reshuffling bars,
             // on top of each other: side by side in the row, both would
             // squeeze in for a moment and shove the row about.
@@ -179,7 +197,11 @@ private struct Strip: View {
         case .discarded:
             label(de("Verworfen", en: "Discarded"))
             Button(action: session.undoDiscard) {
-                Text(de("Rückgängig", en: "Undo")).underline()
+                // One line at its own width: the pill takes what its parts ask
+                // for, and "Rückgängig" was handed less than that (it broke as
+                // "Rückgängi" and "g"). The word gives way to nothing; the label
+                // before it is the one that may be cut short.
+                Text(de("Rückgängig", en: "Undo")).underline().lineLimit(1).fixedSize(horizontal: true, vertical: false)
             }
             .buttonStyle(.plain)
             .font(Typography.text(13, .semibold))

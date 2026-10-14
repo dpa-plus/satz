@@ -54,6 +54,9 @@ final class Session {
     private(set) var phase: Phase = .idle
     /// Within `.finishing`: the text is with the cleanup model ("Räumt auf").
     private(set) var isCleaning = false
+    /// Within `.paused`: the microphone went away on its own and would not
+    /// start again ("Mikrofon getrennt"). Going on opens the input there is now.
+    private(set) var microphoneLost = false
     /// Enough history to fill the full card's waveform; the pill shows the end.
     private(set) var levels = Array(repeating: Float(0), count: 32)
     /// Recordings on their way to the provider.
@@ -110,6 +113,8 @@ final class Session {
         let seconds: Double?
     }
     @ObservationIgnored var onClose: () -> Void = {}
+    /// Opens the microphone, or test mode's clip; tests put in one they can unplug.
+    @ObservationIgnored var makeSource: @MainActor (String?) -> AudioSource = { AudioSources.make(inputDeviceUID: $0) }
     /// Escape discards while recording; off for a test copy.
     @ObservationIgnored var takesEscape = true
 
@@ -429,9 +434,14 @@ final class Session {
         onRecord()
         levels = Array(repeating: 0, count: levels.count)
         holdEscape()
+        microphoneLost = false
 
-        let recorder = AudioSources.make(inputDeviceUID: preferences.inputDeviceUID)
+        let recorder = makeSource(preferences.inputDeviceUID)
         recorder.onLevel = { [weak self] level in self?.push(level) }
+        recorder.onInputLost = { [weak self, weak recorder] in
+            guard let self, let recorder else { return }
+            microphoneStopped(recorder)
+        }
 
         Task {
             do {
@@ -459,6 +469,8 @@ final class Session {
                 stopping[index].end = stopping[index].recorder.sampleCount
             }
             phase = .listening
+            // Gone again before this was listening: its notice found no one.
+            if recorder.inputLost { microphoneStopped(recorder) }
             if finishWhenOpen {
                 finishWhenOpen = false
                 finish()
@@ -489,6 +501,25 @@ final class Session {
         })
     }
 
+    /// The microphone stopped on its own and neither it nor the system's
+    /// input would start again (unplugged mid-sentence). It used to go quiet
+    /// with the card still "listening", and every word after it was lost.
+    /// Now paused like the pause button, so what it heard is kept and
+    /// written; going on opens whatever input there is now, finishing sends
+    /// what was recorded. The same on Windows and Linux.
+    private func microphoneStopped(_ lost: AudioSource) {
+        if lost === recorder, phase == .listening {
+            Log.note("microphone lost while listening, paused")
+            pause()
+            microphoneLost = true
+        } else if phase == .paused, !microphoneLost, stopping.contains(where: { $0.recorder === lost }) {
+            // Gone in a pause's tail: what it heard still comes, and the
+            // card says why the next words will come from another input.
+            Log.note("microphone lost in a pause")
+            microphoneLost = true
+        }
+    }
+
     private func resume() {
         guard phase == .paused else { return }
         if let caret, let id = activeID, !isAtMarker(caret, of: id) {
@@ -508,6 +539,7 @@ final class Session {
         default: return
         }
         phase = .finishing
+        microphoneLost = false
         releaseEscape()
         let recorder = self.recorder
         self.recorder = nil
@@ -982,6 +1014,7 @@ final class Session {
 
     private func reset() {
         startWhenDone = false
+        microphoneLost = false
         edit { text.setAttributedString(NSAttributedString()) }
         segments = [:]
         activeID = nil
@@ -1030,8 +1063,10 @@ final class Session {
     // MARK: - Fixtures
 
     /// Puts the card into a fixed state, for snapshots.
-    func stage(_ phase: Phase, text staged: String = "", marker: Bool = false, levels levelValues: [Float] = [], cleaning: Bool = false) {
+    func stage(_ phase: Phase, text staged: String = "", marker: Bool = false, levels levelValues: [Float] = [], cleaning: Bool = false,
+               microphoneLost lost: Bool = false) {
         isCleaning = cleaning
+        microphoneLost = lost
         edit {
             text.setAttributedString(NSAttributedString(string: staged, attributes: Self.textAttributes))
             if marker { text.append(Self.marker(for: 1)) }

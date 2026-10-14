@@ -324,6 +324,11 @@ public enum CleanupRequest {
         public var cost: Double?
     }
 
+    /// The finishReasons with which Gemini holds an answer back instead of
+    /// finishing it: filters, a block list, personal data, a quote. The same
+    /// five on Windows and Linux (`geminiBlocks`).
+    static let geminiBlocks: Set<String> = ["SAFETY", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII", "RECITATION"]
+
     public static func parse(_ data: Data, family: CleanupProvider.Family) -> Answer? {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         var answer = Answer()
@@ -337,16 +342,26 @@ public enum CleanupRequest {
             answer.inputTokens = usage?["input_tokens"] as? Int
             answer.outputTokens = usage?["output_tokens"] as? Int
         case .gemini:
+            let usage = object["usageMetadata"] as? [String: Any]
+            answer.inputTokens = usage?["promptTokenCount"] as? Int
+            answer.outputTokens = usage?["candidatesTokenCount"] as? Int
+            // A prompt Gemini will not answer comes back without any
+            // candidate, the reason only in promptFeedback: a block, whatever
+            // else the body holds (a JSON null is no reason). Windows and
+            // Linux read it the same way (`parseAnswer`).
+            if let reason = (object["promptFeedback"] as? [String: Any])?["blockReason"], !(reason is NSNull) {
+                answer.text = ""
+                answer.refused = true
+                break
+            }
             let candidate = (object["candidates"] as? [[String: Any]])?.first
             let parts = (candidate?["content"] as? [String: Any])?["parts"] as? [[String: Any]] ?? []
             // Parts marked as thought are the model thinking aloud.
             answer.text = parts.filter { $0["thought"] as? Bool != true }.compactMap { $0["text"] as? String }.joined()
-            let blocked = (object["promptFeedback"] as? [String: Any])?["blockReason"] != nil
-            answer.refused = blocked || ["SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST"].contains(candidate?["finishReason"] as? String ?? "")
+            // A candidate that stopped for a block often carries some text:
+            // what a filter let through before it stopped is no answer to paste.
+            answer.refused = geminiBlocks.contains(candidate?["finishReason"] as? String ?? "")
             answer.truncated = candidate?["finishReason"] as? String == "MAX_TOKENS"
-            let usage = object["usageMetadata"] as? [String: Any]
-            answer.inputTokens = usage?["promptTokenCount"] as? Int
-            answer.outputTokens = usage?["candidatesTokenCount"] as? Int
         case .openAI, .apple:
             let choice = (object["choices"] as? [[String: Any]])?.first
             let message = choice?["message"] as? [String: Any]
@@ -366,10 +381,45 @@ public enum CleanupRequest {
     }
 
     /// `{"error": {"message": …}}`, Anthropic's and Google's too, or a bare
-    /// `{"message": …}`; the first 200 characters, for the log.
+    /// `{"message": …}`; the first 200 characters. Only to read: the retry
+    /// looks in it for the extra field the provider refuses. It is never
+    /// logged, because a provider may quote the request in its message, and
+    /// the request holds the dictation (`errorDetail(in:key:)` is for the log).
     public static func message(in data: Data) -> String? {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         let said = ((object["error"] as? [String: Any])?["message"] as? String) ?? (object["error"] as? String) ?? (object["message"] as? String)
         return said.map { String($0.prefix(200)) }
+    }
+
+    /// What of an error answer may go into the log: its `type`, `code` and
+    /// `status` as "type=…, code=…", the same fields and the same rule as
+    /// Windows and Linux (`providerDetail`). Never the message, whatever it
+    /// holds: a provider may quote the request in it, and the request holds
+    /// the dictation. A value is logged only if it is a short token (letters,
+    /// digits and `_.:-`, 64 at most, so no sentence that echoes the
+    /// dictation) and does not contain the key.
+    public static func errorDetail(in data: Data, key: String? = nil) -> String? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let error = object["error"] as? [String: Any] else { return nil }
+        let secret = (key ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        var fields: [String] = []
+        for name in ["type", "code", "status"] {
+            let token: String
+            switch error[name] {
+            case let text as String: token = text
+            // A JSON boolean is an NSNumber too: not a code.
+            case let number as NSNumber where CFGetTypeID(number) != CFBooleanGetTypeID(): token = number.stringValue
+            default: continue
+            }
+            guard isToken(token), secret.count < 8 || !token.contains(secret) else { continue }
+            fields.append("\(name)=\(token)")
+        }
+        return fields.isEmpty ? nil : fields.joined(separator: ", ")
+    }
+
+    private static func isToken(_ text: String) -> Bool {
+        (1 ... 64).contains(text.utf8.count) && text.unicodeScalars.allSatisfy {
+            ($0.isASCII && ($0.properties.isAlphabetic || ("0" ... "9").contains($0))) || "_.:-".unicodeScalars.contains($0)
+        }
     }
 }

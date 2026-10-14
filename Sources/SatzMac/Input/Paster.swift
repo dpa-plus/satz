@@ -60,14 +60,89 @@ enum Paster {
         guard bringForward(origin) else {
             return abandon(ours, .clipboardOnly(de("Auf der Zwischenablage, die App ließ sich nicht aktivieren.", en: "On the clipboard, the app could not be brought forward.")))
         }
-        switch restoreKeyboard(window: window, field: field, in: AppKeyboard(origin)) {
+        let keyboard = AppKeyboard(origin)
+        switch restoreKeyboard(window: window, field: field, in: keyboard) {
         case .restored: break
         case .windowGone:
             return abandon(ours, .clipboardOnly(de("Auf der Zwischenablage, das Fenster ist nicht mehr da.", en: "On the clipboard, the window is gone.")))
         case .fieldRefused:
             return abandon(ours, .clipboardOnly(de("Auf der Zwischenablage, das Textfeld ließ sich nicht mehr auswählen.", en: "On the clipboard, the text field could not be selected again.")))
         }
-        sendCommandV()
+        return paste(ours, on: pasteboard, into: field, in: keyboard, keepsOnClipboard: keepsOnClipboard, keys: sendCommandV)
+    }
+
+    // MARK: - Whether the field took it
+
+    /// What a field says, just before ⌘V, about taking text.
+    enum Editability: Equatable {
+        /// Says it is editable.
+        case editable
+        /// Switched off: nothing goes in, so it gets no ⌘V at all.
+        case disabled
+        /// Says its text cannot be changed. A text view made read-only says
+        /// this (14.10.: it kept the keyboard, nothing went in, and satz
+        /// called it pasted), but so do terminals, which take ⌘V all the
+        /// same. So ⌘V still goes out, and the field is looked at afterwards.
+        case readOnly
+        /// Says nothing: ⌘V as always.
+        case unknown
+    }
+
+    /// What a field shows, compared before and after ⌘V. Any part the
+    /// field does not report is nil on both sides.
+    struct FieldText: Equatable {
+        var characters: Int?
+        /// The caret: it moves even when a selection is replaced by text of
+        /// the same length.
+        var selection: NSRange?
+        var value: String?
+    }
+
+    /// The text field roles. A field of one of these that says its value
+    /// cannot be set is read-only; anything else that says so (a group, a
+    /// label) was never a text field to begin with.
+    private static let textRoles: Set<String> = ["AXTextField", "AXTextArea", "AXComboBox", "AXSearchField"]
+
+    /// What a field's answers come to; `AppKeyboard` asks, this decides.
+    static func editability(valueSettable: Bool?, insideEditableWeb: Bool, enabled: Bool?, role: String?) -> Editability {
+        if valueSettable == true || insideEditableWeb { return .editable }
+        if enabled == false { return .disabled }
+        guard valueSettable == false, let role, textRoles.contains(role) else { return .unknown }
+        return .readOnly
+    }
+
+    /// ⌘V into the field the keyboard is back in, then the clipboard handed
+    /// back or kept. A field switched off gets no ⌘V; one that says it is
+    /// read-only is looked at for up to `settle` seconds, and if nothing in
+    /// it changed the transcript was not inserted: it stays on the clipboard.
+    ///
+    /// Fields that say they are editable are not looked at. In web views a
+    /// terminal or a code editor types into a hidden helper field that is
+    /// emptied after every input (xterm.js, Monaco): it looks the same after
+    /// a paste that worked, and calling that a failure would put the
+    /// transcript over the user's clipboard on every dictation there.
+    /// `settle` is a second: the wait ends as soon as the field changes (a
+    /// local terminal echoes in 0.05 s), and a terminal over a slow ssh link
+    /// may take longer than half a second to show the paste, which a shorter
+    /// wait took for a refusal and left the transcript over the clipboard.
+    /// The handback's own second only starts after it.
+    static func paste(_ ours: Int, on pasteboard: NSPasteboard, into field: AXUIElement?, in keyboard: some KeyboardPlace,
+                      keepsOnClipboard: Bool, settle: TimeInterval = 1.0, keys: () -> Void) -> Outcome {
+        let editability = field.map { keyboard.editability(of: $0) } ?? .unknown
+        if editability == .disabled {
+            return abandon(ours, .clipboardOnly(de("Auf der Zwischenablage, das Textfeld nimmt gerade keinen Text an.", en: "On the clipboard, the text field does not take text right now.")))
+        }
+        // Read before ⌘V: afterwards it may already show the paste.
+        let before = editability == .readOnly ? field.flatMap { keyboard.text(of: $0) } : nil
+        keys()
+        if let field, let before {
+            waitUntil(timeout: settle) { keyboard.text(of: field) != before }
+            // A field that stopped answering is taken at its word, as one
+            // that never answered is.
+            if keyboard.text(of: field) == before {
+                return abandon(ours, .clipboardOnly(de("Auf der Zwischenablage, das Textfeld hat den Text nicht angenommen.", en: "On the clipboard, the text field did not take the text.")))
+            }
+        }
         if keepsOnClipboard {
             // Nothing to give back: the transcript stays, as chosen.
             if loan?.ours == ours { loan = nil }
@@ -313,6 +388,10 @@ protocol KeyboardPlace {
     func focus(_ field: AXUIElement)
     /// `focus`, saying whether the app took the request.
     func requestFocus(_ field: AXUIElement) -> Bool
+    /// Whether the field takes text, as far as the app says.
+    func editability(of field: AXUIElement) -> Paster.Editability
+    /// What the field shows now; nil where the app does not say.
+    func text(of field: AXUIElement) -> Paster.FieldText?
 }
 
 extension KeyboardPlace {
@@ -322,6 +401,10 @@ extension KeyboardPlace {
         focus(field)
         return true
     }
+
+    /// A place that says nothing is pasted into as before these checks.
+    func editability(of field: AXUIElement) -> Paster.Editability { .unknown }
+    func text(of field: AXUIElement) -> Paster.FieldText? { nil }
 }
 
 /// The keyboard of a running app, through Accessibility.
@@ -356,6 +439,40 @@ struct AppKeyboard: KeyboardPlace {
     func requestFocus(_ field: AXUIElement) -> Bool {
         AXUIElementSetMessagingTimeout(field, 0.25)
         return AXUIElementSetAttributeValue(field, kAXFocusedAttribute as CFString, kCFBooleanTrue) == .success
+    }
+
+    func editability(of field: AXUIElement) -> Paster.Editability {
+        AXUIElementSetMessagingTimeout(field, 0.25)
+        var settable: DarwinBoolean = false
+        let asked = AXUIElementIsAttributeSettable(field, kAXValueAttribute as CFString, &settable)
+        // Browsers mark what lies inside an editable page; the keyboard can
+        // sit on a part of a rich editor whose own value is not settable.
+        let ancestor = value(of: "AXEditableAncestor", in: field)
+        return Paster.editability(valueSettable: asked == .success ? settable.boolValue : nil,
+                                  insideEditableWeb: ancestor.map { CFGetTypeID($0) == AXUIElementGetTypeID() } ?? false,
+                                  enabled: value(of: kAXEnabledAttribute, in: field) as? Bool,
+                                  role: value(of: kAXRoleAttribute, in: field) as? String)
+    }
+
+    func text(of field: AXUIElement) -> Paster.FieldText? {
+        AXUIElementSetMessagingTimeout(field, 0.25)
+        let characters = value(of: kAXNumberOfCharactersAttribute, in: field) as? Int
+        var selection: NSRange?
+        if let range = value(of: kAXSelectedTextRangeAttribute, in: field), CFGetTypeID(range) == AXValueGetTypeID() {
+            var cf = CFRange()
+            if AXValueGetValue(range as! AXValue, .cfRange, &cf) { selection = NSRange(location: cf.location, length: cf.length) }
+        }
+        // The whole text only while it is short: a terminal's is its entire
+        // scrollback, and it is read again every few milliseconds.
+        let text = (characters ?? 0) <= 20_000 ? value(of: kAXValueAttribute, in: field) as? String : nil
+        guard characters != nil || selection != nil || text != nil else { return nil }
+        return Paster.FieldText(characters: characters, selection: selection, value: text)
+    }
+
+    private func value(of attribute: String, in field: AXUIElement) -> CFTypeRef? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(field, attribute as CFString, &value) == .success else { return nil }
+        return value
     }
 
     private func element(_ attribute: String) -> AXUIElement? {
