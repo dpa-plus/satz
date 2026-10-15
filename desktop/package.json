@@ -1,10 +1,10 @@
 {
   "name": "satz",
   "productName": "satz",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Dictation for Windows and Linux: talk, see the text, paste it where you were typing.",
   "author": "DPA+",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "private": true,
   "main": "dist/main.js",
   "scripts": {
@@ -57,6 +57,16 @@
     "asarUnpack": [
       "node_modules/uiohook-napi/**",
       "node_modules/onnxruntime-node/**"
+    ],
+    "extraResources": [
+      {
+        "from": "../LICENSE",
+        "to": "LICENSE"
+      },
+      {
+        "from": "../Resources/Licenses",
+        "to": "Licenses"
+      }
     ],
     "win": {
       "signExecutable": false,

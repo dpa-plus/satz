@@ -1,0 +1,171 @@
+Source: kaldi-decoder/csrc/decodable-ctc.cc
+
+// kaldi-decoder/csrc/decodable-ctc.cc
+//
+// Copyright (c)  2023  Xiaomi Corporation
+
+Source: kaldi-decoder/csrc/decodable-ctc.h
+
+// kaldi-decoder/csrc/decodable-ctc.h
+//
+// Copyright (c)  2023  Xiaomi Corporation
+
+Source: kaldi-decoder/csrc/decodable-itf.h
+
+// kaldi-decoder/csrc/decodable-itf.h
+
+// Copyright 2009-2011  Microsoft Corporation;  Saarland University;
+//                      Mirko Hannemann;  Go Vivace Inc.;
+//                2013  Johns Hopkins University (author: Daniel Povey)
+// Copyright (c)  2023  Xiaomi Corporation
+// this file is copied and modified from
+// kaldi/src/itf/decodable-itf.h
+
+Source: kaldi-decoder/csrc/eigen.cc
+
+// kaldi-decoder/csrc/eigen.cc
+
+// Copyright (c)  2023  Xiaomi Corporation
+
+Source: kaldi-decoder/csrc/eigen.h
+
+// kaldi-decoder/csrc/eigen.h
+
+// Copyright (c)  2023  Xiaomi Corporation
+
+Source: kaldi-decoder/csrc/faster-decoder.cc
+
+// kaldi-decoder/csrc/faster-decoder.cc
+
+// Copyright 2009-2011 Microsoft Corporation
+//           2012-2013 Johns Hopkins University (author: Daniel Povey)
+// Copyright (c)  2023 Xiaomi Corporation
+
+// this file is copied and modified from
+// kaldi/src/decoder/faster-decoder.cc
+
+Source: kaldi-decoder/csrc/faster-decoder.h
+
+// kaldi-decoder/csrc/faster-decoder.h
+
+// Copyright 2009-2011  Microsoft Corporation
+//                2013  Johns Hopkins University (author: Daniel Povey)
+// Copyright (c)  2023  Xiaomi Corporation
+
+// this file is copied and modified from
+// kaldi/src/decoder/faster-decoder.h
+
+Source: kaldi-decoder/csrc/hash-list-inl.h
+
+// kaldi-decoder/csrc/hash-list-inl.h
+
+// Copyright 2009-2011   Microsoft Corporation
+//                2013   Johns Hopkins University (author: Daniel Povey)
+// Copyright (c)  2023  Xiaomi Corporation
+
+// this file is copied and modified from
+// kaldi/src/utils/hash-list-inl.h
+
+Source: kaldi-decoder/csrc/hash-list.h
+
+// kaldi-decoder/csrc/hash-list.h
+
+// Copyright 2009-2011   Microsoft Corporation
+//                2013   Johns Hopkins University (author: Daniel Povey)
+// Copyright (c)  2023   Xiaomi Corporation
+
+// this file is copied and modified from
+// kaldi/src/utils/hash-list.h
+
+Source: kaldi-decoder/csrc/kaldi-math.h
+
+// kaldi-decoder/csrc/kaldi-math.h
+
+// Copyright 2009-2011  Ondrej Glembek;  Microsoft Corporation;  Yanmin Qian;
+//                      Jan Silovsky;  Saarland University
+//                2023  Xiaomi Corporation
+
+// this file is copied and modified from
+// kaldi/src/base/kaldi-math.h
+
+Source: kaldi-decoder/csrc/lattice-faster-decoder.cc
+
+// kaldi-decoder/csrc/lattice-faster-decoder.cc
+
+// Copyright 2009-2012  Microsoft Corporation  Mirko Hannemann
+//           2013-2018  Johns Hopkins University (Author: Daniel Povey)
+//                2014  Guoguo Chen
+//                2018  Zhehuai Chen
+// Copyright (c)  2023  Xiaomi Corporation
+
+// this file is copied and modified from
+// kaldi/src/decoder/lattice-faster-decoder.cc
+
+Source: kaldi-decoder/csrc/lattice-faster-decoder.h
+
+// kaldi-decoder/csrc/lattice-faster-decoder.h
+
+// Copyright 2009-2013  Microsoft Corporation;  Mirko Hannemann;
+//           2013-2014  Johns Hopkins University (Author: Daniel Povey)
+//                2014  Guoguo Chen
+//                2018  Zhehuai Chen
+// Copyright (c)  2023  Xiaomi Corporation
+
+// this file is copied and modified from
+// kaldi/src/decoder/lattice-faster-decoder.h
+
+Source: kaldi-decoder/csrc/lattice-simple-decoder.cc
+
+// kaldi-decoder/csrc/lattice-simple-decoder.cc
+
+// Copyright 2009-2012  Microsoft Corporation
+//           2013-2014  Johns Hopkins University (Author: Daniel Povey)
+//                2014  Guoguo Chen
+// Copyright (c)  2023  Xiaomi Corporation
+
+// this file is copied and modified from
+// kaldi/src/decoder/lattice-simple-decoder.cc
+
+Source: kaldi-decoder/csrc/lattice-simple-decoder.h
+
+// kaldi-decoder/csrc/lattice-simple-decoder.h
+
+// Copyright 2009-2012  Microsoft Corporation
+//           2012-2014  Johns Hopkins University (Author: Daniel Povey)
+//                2014  Guoguo Chen
+// Copyright (c)  2023  Xiaomi Corporation
+
+// this file is copied and modified from
+// kaldi/src/decoder/lattice-simple-decoder.h
+
+Source: kaldi-decoder/csrc/log.h
+
+// kaldi-decoder/csrc/log.h
+//
+// Copyright (c)  2022  Xiaomi Corporation
+
+Source: kaldi-decoder/csrc/simple-decoder.cc
+
+// kaldi-decoder/csrc/simple-decoder.cc
+
+// Copyright 2009-2011 Microsoft Corporation
+//           2012-2013 Johns Hopkins University (author: Daniel Povey)
+// Copyright (c)  2023 Xiaomi Corporation
+
+Source: kaldi-decoder/csrc/simple-decoder.h
+
+// kaldi-decoder/csrc/simple-decoder.h
+
+// Copyright 2009-2013  Microsoft Corporation;  Lukas Burget;
+//                      Saarland University (author: Arnab Ghoshal);
+//                      Johns Hopkins University (author: Daniel Povey)
+// Copyright (c)  2023  Xiaomi Corporation
+
+Source: kaldi-decoder/csrc/stl-utils.h
+
+// kaldi-decoder/csrc/stl-utils.h
+//
+// Copyright (c)  2022  Xiaomi Corporation
+
+// this file is copied and modified from
+// kaldi/src/util/stl-utils.h

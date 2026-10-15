@@ -1,0 +1,540 @@
+Source: kaldifst/csrc/basic-filebuf.h
+
+// Copyright (c) 2009-2014 by the contributors listed in CREDITS.TXT (included
+// below)
+// This file is copied from kaldi/src/util/basic-filebuf.h
+///////////////////////////////////////////////////////////////////////////////
+// This is a modified version of the std::basic_filebuf from libc++
+// (http://libcxx.llvm.org/).
+// It allows one to create basic_filebuf from an existing FILE* handle or file
+// descriptor.
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source License licenses. See LICENSE.TXT for details (included at the
+// bottom).
+///////////////////////////////////////////////////////////////////////////////
+
+Source: kaldifst/csrc/const-integer-set-inl.h
+
+// kaldifst/csrc/const-integer-set-inl.h
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/util/const-integer-set-inl.h
+//
+// Copyright 2009-2011     Microsoft Corporation
+
+Source: kaldifst/csrc/const-integer-set.h
+
+// kaldifst/csrc/const-integer-set.h
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/util/const-integer-set.h
+
+// Copyright 2009-2011  Microsoft Corporation;  Saarland University
+
+Source: kaldifst/csrc/context-fst.cc
+
+// kaldifst/csrc/context-fst.cc
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/fstext/context-fst.cc
+
+// Copyright      2018  Johns Hopkins University (author: Daniel Povey)
+
+Source: kaldifst/csrc/context-fst.h
+
+// kaldifst/csrc/context-fst.h
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/fstext/context-fst.h
+
+// Copyright 2009-2011  Microsoft Corporation
+//                2018  Johns Hopkins University (author: Daniel Povey)
+
+Source: kaldifst/csrc/deterministic-fst-inl.h
+
+// kaldifst/csrc/deterministic-fst-inl.h
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/fstext/deterministic-fst-inl.h
+
+// Copyright 2011-2012 Gilles Boulianne
+//                2014 Telepoint Global Hosting Service, LLC. (Author: David
+//                Snyder)
+//           2012-2015 Johns Hopkins University (author: Daniel Povey)
+
+Source: kaldifst/csrc/deterministic-fst.h
+
+// kaldifst/csrc/deterministic-fst.h
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/fstext/deterministic-fst.h
+
+// Copyright 2011-2012 Gilles Boulianne
+//                2014 Telepoint Global Hosting Service, LLC. (Author: David
+//                Snyder)
+//           2012-2015 Johns Hopkins University (author: Daniel Povey)
+
+Source: kaldifst/csrc/determinize-star-inl.h
+
+// kaldifst/csrc/determinize-star-inl.h
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/fstext/determinize-star-inl.h
+
+// copyright 2009-2011  microsoft corporation;  jan silovsky
+//           2015 hainan xu
+
+Source: kaldifst/csrc/determinize-star.h
+
+// kaldifst/csrc/determinize-star.h
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/fstext/determinize-star.h
+
+// Copyright 2009-2011  Microsoft Corporation
+//                2014  Guoguo Chen
+//                2015  Hainan Xu
+
+Source: kaldifst/csrc/fstext-utils-inl.h
+
+// kaldifst/csrc/fstext-utils-inl.h
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/fstext/fstext-utils-inl.h
+
+// Copyright 2009-2012  Microsoft Corporation  Johns Hopkins University
+//                      (Author: Daniel Povey)
+//
+//           2014  Telepoint Global Hosting Service, LLC.
+//                 (Author: David Snyder)
+
+Source: kaldifst/csrc/fstext-utils.h
+
+// kaldifst/csrc/fstext-utils.h
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/fstext/fstext-utils.h
+
+// Copyright 2009-2011  Microsoft Corporation
+//           2012-2013  Johns Hopkins University (Author: Daniel Povey)
+//                2013  Guoguo Chen
+//                2014  Telepoint Global Hosting Service, LLC. (Author: David
+//                Snyder)
+
+Source: kaldifst/csrc/grammar-context-fst.h
+
+// kaldifst/csrc/grammar-context-fst.h
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/fstext/grammar-context-fst.h
+
+// Copyright 2009-2011  Microsoft Corporation
+
+Source: kaldifst/csrc/io-funcs-inl.h
+
+// kaldifst/csrc/io-funcs-inl.h
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/base/io-funcs-inl.h
+
+// Copyright 2009-2011  Microsoft Corporation;  Saarland University;
+//                      Jan Silovsky;   Yanmin Qian;
+//                      Johns Hopkins University (Author: Daniel Povey)
+//                2016  Xiaohui Zhang
+
+Source: kaldifst/csrc/io-funcs.h
+
+// kaldifst/csrc/io-funcs.h
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/base/io-funcs.h
+
+// Copyright 2009-2011  Microsoft Corporation;  Saarland University;
+//                      Jan Silovsky;   Yanmin Qian
+//                2016  Xiaohui Zhang
+
+Source: kaldifst/csrc/kaldi-fst-io-inl.h
+
+// kaldifst/csrc/kaldi-fst-io-inl.h
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/fstext/kaldi-fst-io-inl.h
+
+// Copyright 2009-2011  Microsoft Corporation
+//           2012-2015  Johns Hopkins University (Author: Daniel Povey)
+//                2013  Guoguo Chen
+
+Source: kaldifst/csrc/kaldi-fst-io.cc
+
+// kaldifst/csrc/kaldi-fst-io.cc
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/fstext/kaldi-fst-io.cc
+
+// Copyright 2009-2011  Microsoft Corporation
+//           2012-2015  Johns Hopkins University (Author: Daniel Povey)
+//                2013  Guoguo Chen
+
+Source: kaldifst/csrc/kaldi-fst-io.h
+
+// kaldifst/csrc/kaldi-fst-io.h
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/fstext/kaldi-fst-io.h
+
+// Copyright 2009-2011  Microsoft Corporation
+//           2012-2015  Johns Hopkins University (Author: Daniel Povey)
+//                2013  Guoguo Chen
+
+Source: kaldifst/csrc/kaldi-holder-inl.h
+
+// kaldifst/csrc/kaldi-holder-inl.h
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/util/kaldi-holder-inl.h
+
+// Copyright 2009-2011     Microsoft Corporation
+//                2016     Johns Hopkins University (author: Daniel Povey)
+//                2016     Xiaohui Zhang
+//
+
+Source: kaldifst/csrc/kaldi-holder.cc
+
+// kaldifst/csrc/kaldi-holder.cc
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/util/kaldi-holder.cc
+
+// Copyright 2009-2011     Microsoft Corporation
+//                2016     Xiaohui Zhang
+
+Source: kaldifst/csrc/kaldi-holder.h
+
+// kaldifst/csrc/kaldi-holder.h
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/util/kaldi-holder.h
+
+// Copyright 2009-2011     Microsoft Corporation
+//                2016     Johns Hopkins University (author: Daniel Povey)
+//                2016     Xiaohui Zhang
+//
+
+Source: kaldifst/csrc/kaldi-io-inl.h
+
+// kaldifst/csrc/util/kaldi-io-inl.h
+
+// Copyright 2009-2011 Microsoft Corporation
+
+// See ../../COPYING for clarification regarding multiple authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+
+//  http://www.apache.org/licenses/LICENSE-2.0
+
+// THIS CODE IS PROVIDED *AS IS* BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED
+// WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE,
+// MERCHANTABLITY OR NON-INFRINGEMENT.
+// See the Apache 2 License for the specific language governing permissions and
+// limitations under the License.
+
+Source: kaldifst/csrc/kaldi-io.cc
+
+// kaldifst/csrc/kaldi-io.cc
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/util/kaldi-io.cc
+
+// Copyright 2009-2011  Microsoft Corporation;  Jan Silovsky
+//                2016  Xiaohui Zhang
+
+Source: kaldifst/csrc/kaldi-io.h
+
+// kaldifst/csrc/kaldi-io.h
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/util/kaldi-io.h
+
+// Copyright 2009-2011  Microsoft Corporation;  Jan Silovsky
+//                2016  Xiaohui Zhang
+
+Source: kaldifst/csrc/kaldi-math.cc
+
+// kaldifst/csrc/kaldi-math.cc
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/base/kaldi-math.cc
+//
+// Copyright 2009-2011  Ondrej Glembek;  Microsoft Corporation;  Yanmin Qian;
+//                      Jan Silovsky;  Saarland University
+//
+
+Source: kaldifst/csrc/kaldi-math.h
+
+// kaldifst/csrc/kaldi-math.h
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/base/kaldi-math.h
+//
+// Copyright 2009-2011  Ondrej Glembek;  Microsoft Corporation;  Yanmin Qian;
+//                      Jan Silovsky;  Saarland University
+//
+
+Source: kaldifst/csrc/kaldi-pipebuf.h
+
+// kaldifst/csrc/util/kaldi-pipebuf.h
+
+// Copyright 2009-2011  Ondrej Glembek
+
+// See ../../COPYING for clarification regarding multiple authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+
+//  http://www.apache.org/licenses/LICENSE-2.0
+
+// THIS CODE IS PROVIDED *AS IS* BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED
+// WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE,
+// MERCHANTABLITY OR NON-INFRINGEMENT.
+// See the Apache 2 License for the specific language governing permissions and
+// limitations under the License.
+
+/** @file kaldi-pipebuf.h
+ *  This is an Kaldi C++ Library header.
+ */
+
+Source: kaldifst/csrc/kaldi-semaphore.cc
+
+// kaldifst/csrc/kaldi-semaphore.cc
+
+// Copyright 2012  Karel Vesely (Brno University of Technology)
+//           2017  Dogan Can (University of Southern California)
+
+// See ../../COPYING for clarification regarding multiple authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//  http://www.apache.org/licenses/LICENSE-2.0
+//
+// THIS CODE IS PROVIDED *AS IS* BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED
+// WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE,
+// MERCHANTABLITY OR NON-INFRINGEMENT.
+// See the Apache 2 License for the specific language governing permissions and
+// limitations under the License.
+
+Source: kaldifst/csrc/kaldi-semaphore.h
+
+// kaldifst/csrc/kaldi-semaphore.h
+
+// Copyright 2012  Karel Vesely (Brno University of Technology)
+//           2017  Dogan Can (University of Southern California)
+
+// See ../../COPYING for clarification regarding multiple authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//  http://www.apache.org/licenses/LICENSE-2.0
+//
+// THIS CODE IS PROVIDED *AS IS* BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED
+// WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE,
+// MERCHANTABLITY OR NON-INFRINGEMENT.
+// See the Apache 2 License for the specific language governing permissions and
+// limitations under the License.
+
+Source: kaldifst/csrc/kaldi-table-inl.h
+
+// kaldifst/src/kaldi-table-inl.h
+
+// Copyright 2009-2011    Microsoft Corporation
+//                2013    Johns Hopkins University (author: Daniel Povey)
+//                2016    Xiaohui Zhang
+
+// See ../../COPYING for clarification regarding multiple authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//  http://www.apache.org/licenses/LICENSE-2.0
+//
+// THIS CODE IS PROVIDED *AS IS* BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED
+// WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE,
+// MERCHANTABLITY OR NON-INFRINGEMENT.
+// See the Apache 2 License for the specific language governing permissions and
+// limitations under the License.
+
+Source: kaldifst/csrc/kaldi-table.cc
+
+// kaldifst/csrc/kaldi-table.cc
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/util/kaldi-table.cc
+
+// Copyright 2009-2011  Microsoft Corporation
+
+Source: kaldifst/csrc/kaldi-table.h
+
+// kaldifst/csrc/kaldi-table.h
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/util/kaldi-table.h
+
+// Copyright 2009-2011    Microsoft Corporation
+//                2013    Johns Hopkins University (author: Daniel Povey)
+
+Source: kaldifst/csrc/lattice-utils-inl.h
+
+// kaldifst/csrc/lattice-utils-inl.h
+//
+// Copyright 2009-2011  Microsoft Corporation
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/fstext/lattice-utils-inl.h
+
+Source: kaldifst/csrc/lattice-utils.h
+
+// kaldifst/csrc/lattice-utils.h
+//
+// Copyright 2009-2011  Microsoft Corporation
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/fstext/lattice-utils.h
+
+Source: kaldifst/csrc/lattice-weight.h
+
+// kaldifst/csrc/lattice-weight.h
+// Copyright 2009-2012  Microsoft Corporation
+//                      Johns Hopkins University (author: Daniel Povey)
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/fstext/lattice-weight.cc
+
+Source: kaldifst/csrc/log.h
+
+// kaldifst/csrc/log.h
+//
+// Copyright (c)  2020  Xiaomi Corporation (authors: Fangjun Kuang)
+
+Source: kaldifst/csrc/parse-options.cc
+
+// kaldifst/csrc/parse-options.h
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/util/parse-options.cc
+
+// Copyright 2009-2011  Karel Vesely;  Microsoft Corporation;
+//                      Saarland University (Author: Arnab Ghoshal);
+// Copyright 2012-2013  Johns Hopkins University (Author: Daniel Povey);
+//                      Frantisek Skala;  Arnab Ghoshal
+// Copyright 2013       Tanel Alumae
+
+Source: kaldifst/csrc/parse-options.h
+
+// kaldifst/csrc/parse-options.h
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/util/parse-options.h
+
+// Copyright 2009-2011  Karel Vesely;  Microsoft Corporation;
+//                      Saarland University (Author: Arnab Ghoshal);
+// Copyright 2012-2013  Frantisek Skala;  Arnab Ghoshal
+
+Source: kaldifst/csrc/pre-determinize-inl.h
+
+// kaldifst/csrc/pre-determinize-inl.h
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/fstext/pre-determinize-inl.h
+
+// Copyright 2009-2011  Microsoft Corporation
+
+Source: kaldifst/csrc/pre-determinize.h
+
+// kaldifst/csrc/pre-determinize.h
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/fstext/pre-determinize.h
+
+// Copyright 2009-2011  Microsoft Corporation
+
+Source: kaldifst/csrc/remove-eps-local-inl.h
+
+// kaldifst/csrc/remove-eps-local-inl.h
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/fstext/remove-eps-local-inl.h
+
+// Copyright 2009-2011  Microsoft Corporation
+//                2014  Johns Hopkins University (author: Daniel Povey
+
+Source: kaldifst/csrc/remove-eps-local.h
+
+// kaldifst/csrc/remove-eps-local.h
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/fstext/remove-eps-local.h
+
+// Copyright 2009-2011  Microsoft Corporation
+//                2014  Johns Hopkins University (author: Daniel Povey)
+
+Source: kaldifst/csrc/stl-utils.h
+
+// kaldifst/csrc/stl-utils.h
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/util/stl-utils.h
+
+// Copyright 2009-2011  Microsoft Corporation;  Saarland University
+
+Source: kaldifst/csrc/table-matcher.h
+
+// kaldifst/csrc/table-matcher.h
+//
+// Copyright 2009-2011  Microsoft Corporation
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/fstext/table-matcher.h
+
+// Copyright 2009-2011  Microsoft Corporation
+
+Source: kaldifst/csrc/text-normalizer.cc
+
+// kaldifst/csrc/text-normalizer.cc
+//
+// Copyright (c)  2023 Xiaomi Corporation
+
+Source: kaldifst/csrc/text-normalizer.h
+
+// kaldifst/csrc/text-normalizer.h
+//
+// Copyright (c)  2023 Xiaomi Corporation
+
+Source: kaldifst/csrc/text-utils.cc
+
+// kaldifst/csrc/text-utils.cc
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/util/text-utils.cc
+
+// Copyright 2009-2011  Saarland University;  Microsoft Corporation
+
+Source: kaldifst/csrc/text-utils.h
+
+// kaldifst/csrc/text-utils.h
+//
+// This file is copied/modified from
+// https://github.com/kaldi-asr/kaldi/blob/master/src/util/text-utils.h
+
+// Copyright 2009-2011  Saarland University;  Microsoft Corporation

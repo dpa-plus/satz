@@ -47,6 +47,8 @@ bundle:
 	cp "$(BIN)" "$(STAGE)/Contents/MacOS/satz"
 	cp Resources/Info.plist "$(STAGE)/Contents/Info.plist"
 	cp -R Resources/Fonts "$(STAGE)/Contents/Resources/Fonts"
+	cp LICENSE "$(STAGE)/Contents/Resources/LICENSE"
+	cp -R Resources/Licenses "$(STAGE)/Contents/Resources/Licenses"
 	cp Resources/AppIcon.icns "$(STAGE)/Contents/Resources/AppIcon.icns"
 	cp -R Resources/en.lproj Resources/de.lproj "$(STAGE)/Contents/Resources/"
 	# The clip a local model is timed with, and where it comes from.
