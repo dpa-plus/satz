@@ -8,7 +8,23 @@ import { makeDelivery } from '../src/main/delivery'
 import { deferred, disposeAll, phase, settle, setup } from './sessionHarness'
 
 const scratches: string[] = []
-afterEach(() => { disposeAll(); for (const scratch of scratches.splice(0)) { fs.chmodSync(scratch, 0o700); const file = path.join(scratch, 'history.json'); if (fs.existsSync(file)) fs.chmodSync(file, 0o700); fs.rmSync(scratch, { recursive: true, force: true }) } })
+afterEach(() => { disposeAll(); for (const scratch of scratches.splice(0)) fs.rmSync(scratch, { recursive: true, force: true }) })
+
+type FileOperation = 'readFileSync' | 'renameSync' | 'openSync' | 'rmSync'
+/** Windows chmod cannot deny reads or directory writes; inject the same IO error on every platform. */
+function denied<T>(operation: FileOperation, matches: (target: string) => boolean, work: () => T): T {
+  const filesystem = fs as unknown as Record<FileOperation, (...args: unknown[]) => unknown>
+  const real = filesystem[operation]
+  filesystem[operation] = function (target: unknown, ...rest: unknown[]) {
+    if (matches(String(target))) throw Object.assign(new Error(`EACCES: permission denied, ${operation}`), { code: 'EACCES' })
+    return real.call(this, target, ...rest)
+  }
+  try { return work() } finally { filesystem[operation] = real }
+}
+function unreadableUnmovable<T>(file: string, work: () => T): T {
+  const isHistory = (target: string) => target === file
+  return denied('readFileSync', isHistory, () => denied('renameSync', isHistory, work))
+}
 function loadStore() {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'satz-history-persistence-')); scratches.push(scratch)
   const internals = Module as unknown as { _load(request: string, ...rest: unknown[]): unknown }; const original = internals._load
@@ -45,7 +61,7 @@ test('history write failure warns after one insertion, retains original metadata
   session.press(); await settle(); sources[1].say(); session.press(); await settle()
   assert.deepEqual(inserted, ['Synthetic source words.', 'later saved']); assert.equal(store.persistenceIssue, null); assert.equal(phase(session), 'idle')
   const restarted = new Store(); assert.deepEqual(restarted.history.map(row => row.text), ['later saved', 'Synthetic source words.']); assert.equal(restarted.history[1].original, 'synthetic source words')
-  assert.equal(fs.statSync(file).mode & 0o777, 0o600)
+  if (process.platform !== 'win32') assert.equal(fs.statSync(file).mode & 0o777, 0o600)
 })
 
 test('Store returns typed failed save instead of pretending a memory-only row was persisted', () => {
@@ -73,25 +89,23 @@ test('failed clear is distinct and does not recursively delete a directory; succ
 test('unreadable unmovable history stays protected; new in-memory rows explicitly report unsaved', () => {
   const { Store, scratch } = loadStore(); const file = path.join(scratch, 'history.json')
   const original = '[{"id":"old","text":"original retained file","date":"2026-10-15","pasted":true}]'
-  fs.writeFileSync(file, original); fs.chmodSync(file, 0); fs.chmodSync(scratch, 0o500)
-  let store!: InstanceType<typeof Store>
-  try { store = new Store() } finally { fs.chmodSync(scratch, 0o700); fs.chmodSync(file, 0o600) }
+  fs.writeFileSync(file, original)
+  const store = unreadableUnmovable(file, () => new Store())
   assert.equal(store.persistenceIssue, 'protected')
   assert.deepEqual(store.addHistory('new memory-only words', true), { status: 'failed', issue: 'protected' }); assert.equal(store.history[0].text, 'new memory-only words')
   assert.equal(fs.readFileSync(file, 'utf8'), original)
   assert.deepEqual(store.clearHistory(), { status: 'failed', issue: 'protected' }); assert.equal(fs.readFileSync(file, 'utf8'), original)
-  fs.writeFileSync(path.join(scratch, 'preferences.json'), '{"historyLimit":0}'); fs.chmodSync(file, 0); fs.chmodSync(scratch, 0o500)
-  let off!: InstanceType<typeof Store>
-  try { off = new Store() } finally { fs.chmodSync(scratch, 0o700); fs.chmodSync(file, 0o600) }
+  fs.writeFileSync(path.join(scratch, 'preferences.json'), '{"historyLimit":0}')
+  const off = unreadableUnmovable(file, () => new Store())
   assert.equal(off.persistenceIssue, 'protected'); assert.equal(fs.readFileSync(file, 'utf8'), original)
 })
 
 test('failed write preserves existing disk history while the new row stays available in memory', () => {
   const { Store, scratch } = loadStore(); const store = new Store(); store.addHistory('previous saved words', true)
   const file = path.join(scratch, 'history.json'); const previous = fs.readFileSync(file, 'utf8')
-  fs.chmodSync(scratch, 0o500)
-  try { assert.deepEqual(store.addHistory('new unsaved words', true), { status: 'failed', issue: 'saveFailed' }) }
-  finally { fs.chmodSync(scratch, 0o700) }
+  denied('openSync', target => path.dirname(target) === scratch && path.basename(target).startsWith('.history-'), () => {
+    assert.deepEqual(store.addHistory('new unsaved words', true), { status: 'failed', issue: 'saveFailed' })
+  })
   assert.equal(fs.readFileSync(file, 'utf8'), previous)
   assert.deepEqual(store.history.map(row => row.text), ['new unsaved words', 'previous saved words'])
   assert.deepEqual(fs.readdirSync(scratch).filter(name => name.startsWith('.history-')), [])
@@ -121,9 +135,8 @@ test('startup with History Off retries the existing clear choice and preserves a
   const { Store, scratch } = loadStore(); const file = path.join(scratch, 'history.json')
   const original = '[{"id":"old","text":"previous saved text","date":"2026-10-15","pasted":true}]'
   fs.writeFileSync(path.join(scratch, 'preferences.json'), '{"historyLimit":0}')
-  fs.writeFileSync(file, original); fs.chmodSync(scratch, 0o500)
-  let store!: InstanceType<typeof Store>
-  try { store = new Store() } finally { fs.chmodSync(scratch, 0o700) }
+  fs.writeFileSync(file, original)
+  const store = denied('rmSync', target => target === file, () => new Store())
   assert.deepEqual(store.history, []); assert.equal(store.persistenceIssue, 'clearFailed')
   assert.equal(fs.readFileSync(file, 'utf8'), original)
   const recovered = new Store()
@@ -148,8 +161,7 @@ for (const issue of ['saveFailed', 'clearFailed', 'protected'] as const) {
     let store = new Store()
     if (issue === 'protected') {
       fs.writeFileSync(file, '[{"id":"old","text":"protected original","date":"2026-10-15","pasted":true}]')
-      fs.chmodSync(file, 0); fs.chmodSync(scratch, 0o500)
-      try { store = new Store() } finally { fs.chmodSync(scratch, 0o700); fs.chmodSync(file, 0o600) }
+      store = unreadableUnmovable(file, () => new Store())
       store.addHistory('new memory-only words', true)
     } else {
       fs.mkdirSync(file)

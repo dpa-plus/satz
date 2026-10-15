@@ -25,7 +25,7 @@ Most dictation apps want something from you first: an account, a subscription, o
 
 - **Works everywhere you type.** Mail, Slack, your editor, a chat with an AI. If it has a text cursor, satz can fill it.
 - **Very accurate, very cheap.** By default it uses Microsoft's MAI-Transcribe 2 through OpenRouter: 2.0% word errors on Artificial Analysis (September 2026), against 3.3% for OpenAI's GPT Transcribe, at a third of the price. You pay the provider directly, for what you use.
-- **Your words, not a rewrite.** No second model polishes your sentences. Clean mode only drops the "uhm"s and stutters.
+- **Optional text cleanup.** Off by default. Enable it to correct punctuation, smooth phrasing or use your own instructions.
 - **See it while you talk.** A small card shows your text as you go. Click into it to change where the next words land, pause to think, or throw it away and undo.
 - **Nothing to set up on a server.** No account, no telemetry. Your key stays on your computer.
 - **Offline if you want.** Provider *Local* runs Whisper on your own computer: a one-time download, then free, and nothing leaves the machine.
@@ -90,7 +90,7 @@ Talk, tap twice again, and the text is pasted. satz starts by itself when you lo
 | What goes wrong in other apps | What satz does |
 |---|---|
 | The last word gets clipped | The microphone stays open 400 ms after you stop |
-| Cut-up audio garbles words | satz never cuts your recording; the model always hears the whole thing |
+| Cut-up audio garbles words | Cloud transcription receives the whole recording; local model limits are explained below |
 | It spins forever | Every request has a time limit; a failure stays on the card with *Retry* |
 | A dropped connection loses your speech | The audio is kept until it has been sent |
 | The paste silently fails | It says so and leaves the text on the clipboard |
@@ -178,9 +178,9 @@ Off until you switch it on. With *Clean up the text* in Settings, a language mod
 | **Polished** | Rewritten as if you had typed it, with paragraphs and lists. |
 | **Own prompt** | Your own instruction, for example "translate into English" or "write it as a bullet list". |
 
-*Show prompt* shows exactly what satz sends. Your vocabulary goes with it, so names stay spelled your way. English words in German sentences stay English.
+The selected preset's instructions are always visible. Its named *Show full prompt* control reveals the complete prompt. Your vocabulary goes with it, so names stay spelled your way. English words in German sentences stay English.
 
-**What you dictate is never answered.** "What time is it?" stays a question, and "write a mail to Jonas" stays a sentence. satz checks every answer against what you said: if it looks like a reply, a translation you did not ask for or a comment, if a number, a sign or a "not" changed, if *Punctuation only* changed a word, or if the model fails, cuts off or is too slow, satz pastes what you said and the card says *Not cleaned up*. The history keeps what you said next to the cleaned text (*Original* on the row), unless you switched the history off.
+**The four built-in presets edit dictation without answering it.** "What time is it?" should stay a question, and "write a mail to Jonas" should stay a sentence. For these presets, satz checks the result against what you said: if it detects a reply, an unrequested translation or a comment, a changed number, sign or "not", or a changed word with *Punctuation only*, it pastes what you said and the card says *Not cleaned up*. *Own prompt* allows the transformation you request and does not apply those meaning checks. With any preset, a failed, empty, cut-off or late response falls back to what you said. The history keeps what you said next to the cleaned text (*Original* on the row), unless you switched the history off.
 
 **What it adds.** Every model in the menu shows the seconds it adds to a dictation and what it costs per hour of talking, estimated for the length of your own dictations and measured once you have used it or clicked *Try*. *Try* runs a sample (or your own text) through the model you are looking at before you switch to it.
 
@@ -228,12 +228,12 @@ The times were measured from Germany through OpenRouter in October 2026; the pri
 
 <br>
 
-**Mac** (Swift 6, Xcode command line tools):
+**Mac** (Swift 6 and the macOS 26 SDK, from Xcode 26 or newer):
 
     make app                     build dist/satz.app
     make run                     build and launch
     make share                   universal build zipped as dist/satz.zip
-    make test                    run the tests, offline
+    make test                    fetch native dependencies if needed, then run offline tests
 
 **Windows and Linux** (Electron, builds on a Mac too): see [desktop/README.md](desktop/README.md).
 

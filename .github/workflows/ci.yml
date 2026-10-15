@@ -4,19 +4,57 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test:
-    runs-on: macos-15
+  mac:
+    runs-on: macos-26
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Test
-        run: swift test
+        # make fetches the pinned native header and libraries on a fresh checkout.
+        run: make test
       - name: Build the app bundle
         run: make app
       - name: Interface still renders
         # Catches a view that compiles but crashes or lays out to nothing.
         run: |
           ./dist/satz.app/Contents/MacOS/satz --snapshot /tmp/snap
-          test -s /tmp/snap/pill.png
-          test -s /tmp/snap/settings.png
+          test -s /tmp/snap/card.png
+          test -s /tmp/snap/settings-light.png
+          test -s /tmp/snap/settings-dark.png
+
+  desktop:
+    name: Desktop (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run build
