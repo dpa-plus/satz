@@ -1,5 +1,5 @@
 import { satz } from './bridge'
-import { recordFor } from './microphone'
+import { lostError, recordFor } from './microphone'
 
 /**
  * The card: text on top, under it one row with the waveform up to the
@@ -219,15 +219,30 @@ registerProcessor('satz-tap', Tap)`
 
 recordFor(satz, {
   getUserMedia: () => navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false } }),
-  async openTap(onChunk, onFailed) {
+  async openTap(onChunk, onFailed, signal) {
     const context = new AudioContext({ sampleRate: 16_000 })
     const url = URL.createObjectURL(new Blob([worklet], { type: 'application/javascript' }))
+    // resume() may wait indefinitely; a stopped start still has to close its context.
+    let abort = () => {}
+    const cancelled = new Promise<never>((_resolve, reject) => {
+      abort = () => reject(lostError())
+      if (signal?.aborted) abort()
+      else signal?.addEventListener('abort', abort, { once: true })
+    })
     try {
-      await context.audioWorklet.addModule(url)
+      await Promise.race([(async () => {
+        await context.audioWorklet.addModule(url)
+        if (signal?.aborted) throw lostError()
+        // A newly opened context can need resuming; a stopped context must
+        // never be accepted as a microphone that is hearing the user.
+        if (context.state === 'suspended') await context.resume()
+        if (context.state !== 'running') throw lostError()
+      })(), cancelled])
     } catch (error) {
       context.close().catch(() => {})
       throw error
     } finally {
+      signal?.removeEventListener('abort', abort)
       URL.revokeObjectURL(url)
     }
     const node = new AudioWorkletNode(context, 'satz-tap')
@@ -236,7 +251,7 @@ recordFor(satz, {
     // a render error): from then on no audio comes, though the track lives.
     let closing = false
     const failed = () => { if (!closing) onFailed() }
-    context.onstatechange = () => { if (context.state === 'closed') failed() }
+    context.onstatechange = () => { if (context.state !== 'running') failed() }
     context.addEventListener('error', failed)
     node.onprocessorerror = failed
     return {

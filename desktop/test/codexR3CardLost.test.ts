@@ -91,7 +91,7 @@ function loadCard(options: { trackEnded?: boolean } = {}) {
     ResizeObserver: class { observe() {} },
     Node: { TEXT_NODE: 3 },
     setInterval: () => 0,
-    setTimeout, queueMicrotask, Promise, Error, Object, JSON, Math, Set, Map, EventTarget, Event,
+    setTimeout, queueMicrotask, Promise, Error, Object, JSON, Math, Set, Map, EventTarget, Event, AbortController,
   })
   const bundle = buildSync({ entryPoints: [path.join(__dirname, '..', 'src', 'renderer', 'card.ts')], bundle: true, write: false, format: 'iife', platform: 'browser', target: 'es2023' })
   vm.runInContext(bundle.outputFiles[0].text, context)

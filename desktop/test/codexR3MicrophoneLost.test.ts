@@ -44,7 +44,7 @@ function recordingBlock() {
 function rig(options: { mainBlock?: (block: string) => string } = {}) {
   const tracks: Track[] = []
   const taps: { onChunk: (chunk: Float32Array) => void; onFailed: () => void; closed: boolean }[] = []
-  let endedOnOpen = false
+  let endedOnOpen = false, tapFailsOnOpen = false
   const parts: MicrophoneParts = {
     async getUserMedia() {
       const track = new Track()
@@ -55,6 +55,7 @@ function rig(options: { mainBlock?: (block: string) => string } = {}) {
     async openTap(onChunk, onFailed) {
       const tap = { onChunk, onFailed, closed: false }
       taps.push(tap)
+      if (tapFailsOnOpen) onFailed()
       return { connect() {}, close() { tap.closed = true } }
     },
   }
@@ -89,6 +90,7 @@ function rig(options: { mainBlock?: (block: string) => string } = {}) {
     },
     live: () => tracks.filter(track => track.readyState === 'live').length,
     openWithEndedTrack() { endedOnOpen = true },
+    failTapOnOpen() { tapFailsOnOpen = true },
   }
 }
 
@@ -239,4 +241,21 @@ test('I-1: the hub opens a new capture after a lost one even while a recording i
   await hub.acquire(() => {})
   assert.equal(starts, 3, 'started, restarted after the loss, and again after that failed')
   assert.equal(hub.total, 100, 'the buffer the tail reads is kept')
+})
+
+test('a tap failing while resume opens keeps the earlier words available for finishing', async () => {
+  mock.timers.enable({ apis: ['setTimeout'] })
+  const r = rig()
+  try {
+    r.session.press(); await flush(); await r.speak()
+    r.session.toggleMicrophone(); await flush(); mock.timers.tick(400); await flush()
+    assert.equal(r.session.plainText().trim(), 'heard 16000')
+    r.failTapOnOpen()
+    r.session.toggleMicrophone(); await flush()
+    assert.deepEqual(r.session.phase, { kind: 'failed', message: 'Microphone lost', canRetry: false })
+    assert.equal(r.live(), 0)
+    assert.equal(r.taps[1].closed, true)
+    r.session.press(); await flush(); mock.timers.tick(400); await flush()
+    assert.deepEqual(r.delivered, ['heard 16000'])
+  } finally { r.session.dispose() }
 })

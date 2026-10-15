@@ -12,7 +12,7 @@ export interface Tap {
 export interface MicrophoneParts {
   getUserMedia(): Promise<MediaStream>
   /** The audio context and its tap, ready to take a stream. `onFailed`: the context stopped on its own. */
-  openTap(onChunk: (chunk: Float32Array) => void, onFailed: () => void): Promise<Tap>
+  openTap(onChunk: (chunk: Float32Array) => void, onFailed: () => void, signal?: AbortSignal): Promise<Tap>
 }
 
 const release = (stream: MediaStream | null, tap: Tap | null) => {
@@ -34,6 +34,7 @@ export class Microphone {
    * stayed connected for good, with the system's recording light on.
    */
   private generation = 0
+  private opening: AbortController | null = null
 
   /**
    * `onLost`: the open microphone went away by itself (unplugged, a headset
@@ -51,16 +52,26 @@ export class Microphone {
   async start(): Promise<boolean> {
     const mine = ++this.generation
     if (this.open) return true
+    this.opening?.abort()
+    const opening = new AbortController()
+    this.opening = opening
     let stream: MediaStream | null = null, tap: Tap | null = null
     // Only the capture this call made open counts; anything later is not ours.
     let opened: Open | null = null
-    const lost = () => { if (opened && this.open === opened) this.lose(opened) }
+    let failed = false
+    const lost = () => {
+      failed = true
+      if (opened && this.open === opened) this.lose(opened)
+    }
     try {
       stream = await this.parts.getUserMedia()
       if (mine !== this.generation) { release(stream, null); return false }
-      tap = await this.parts.openTap(this.onChunk, lost)
+      tap = await this.parts.openTap(this.onChunk, lost, opening.signal)
       if (mine !== this.generation) { release(stream, tap); return false }
       tap.connect(stream)
+      // A context can fail while its tap opens, before there is an open
+      // capture to lose. Accepting that start left the card listening to nothing.
+      if (failed) throw lostError()
       const tracks = stream.getTracks()
       for (const track of tracks) track.addEventListener?.('ended', lost)
       const unwatch = () => { for (const track of tracks) track.removeEventListener?.('ended', lost) }
@@ -71,12 +82,17 @@ export class Microphone {
       return true
     } catch (error) {
       release(stream, tap)
+      if (mine !== this.generation) return false
       throw error
+    } finally {
+      if (this.opening === opening) this.opening = null
     }
   }
 
   stop() {
     this.generation++
+    this.opening?.abort()
+    this.opening = null
     this.open?.unwatch()
     release(this.open?.stream ?? null, this.open?.tap ?? null)
     this.open = null
