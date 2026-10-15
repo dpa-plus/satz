@@ -334,8 +334,15 @@ public enum CleanupRequest {
         var answer = Answer()
         switch family {
         case .anthropic:
-            let parts = object["content"] as? [[String: Any]] ?? []
-            answer.text = parts.filter { $0["type"] as? String == "text" }.compactMap { $0["text"] as? String }.joined()
+            guard let parts = object["content"] as? [Any] else { return nil }
+            var text = ""
+            for part in parts {
+                guard let item = part as? [String: Any] else { return nil }
+                guard item["type"] as? String == "text" else { continue }
+                guard let value = textPart(item["text"]) else { return nil }
+                text += value
+            }
+            answer.text = text
             answer.refused = object["stop_reason"] as? String == "refusal"
             answer.truncated = object["stop_reason"] as? String == "max_tokens"
             let usage = object["usage"] as? [String: Any]
@@ -354,23 +361,37 @@ public enum CleanupRequest {
                 answer.refused = true
                 break
             }
-            let candidate = (object["candidates"] as? [[String: Any]])?.first
-            let parts = (candidate?["content"] as? [String: Any])?["parts"] as? [[String: Any]] ?? []
+            guard let candidates = object["candidates"] as? [Any] else { return nil }
+            if let first = candidates.first, !(first is [String: Any]) { return nil }
+            let candidate = candidates.first as? [String: Any]
+            let rawContent = candidate?["content"]
+            guard rawContent == nil || rawContent is NSNull || rawContent is [String: Any] else { return nil }
+            let rawParts = (rawContent as? [String: Any])?["parts"]
+            guard rawParts == nil || rawParts is NSNull || rawParts is [Any] else { return nil }
             // Parts marked as thought are the model thinking aloud.
-            answer.text = parts.filter { $0["thought"] as? Bool != true }.compactMap { $0["text"] as? String }.joined()
+            var text = ""
+            for part in rawParts as? [Any] ?? [] {
+                guard let item = part as? [String: Any] else { return nil }
+                if let thought = item["thought"] as? NSNumber,
+                   CFGetTypeID(thought) == CFBooleanGetTypeID(), thought.boolValue { continue }
+                guard let value = textPart(item["text"]) else { return nil }
+                text += value
+            }
+            answer.text = text
             // A candidate that stopped for a block often carries some text:
             // what a filter let through before it stopped is no answer to paste.
             answer.refused = geminiBlocks.contains(candidate?["finishReason"] as? String ?? "")
             answer.truncated = candidate?["finishReason"] as? String == "MAX_TOKENS"
         case .openAI, .apple:
-            let choice = (object["choices"] as? [[String: Any]])?.first
-            let message = choice?["message"] as? [String: Any]
+            guard let choices = object["choices"] as? [Any] else { return nil }
+            if let first = choices.first, !(first is [String: Any]) { return nil }
+            let choice = choices.first as? [String: Any]
+            let rawMessage = choice?["message"]
+            guard rawMessage == nil || rawMessage is NSNull || rawMessage is [String: Any] else { return nil }
+            let message = rawMessage as? [String: Any]
             answer.truncated = choice?["finish_reason"] as? String == "length"
-            if let text = message?["content"] as? String {
-                answer.text = text
-            } else if let parts = message?["content"] as? [[String: Any]] {
-                answer.text = parts.compactMap { $0["text"] as? String }.joined()
-            }
+            guard let text = openAIText(message?["content"]) else { return nil }
+            answer.text = text
             if let refusal = message?["refusal"] as? String, !refusal.isEmpty { answer.refused = true }
             let usage = object["usage"] as? [String: Any]
             answer.inputTokens = usage?["prompt_tokens"] as? Int
@@ -378,6 +399,26 @@ public enum CleanupRequest {
             answer.cost = (usage?["cost"] as? Double) ?? (usage?["cost"] as? Int).map(Double.init)
         }
         return answer
+    }
+
+    /// Never drop a malformed text part: the remainder can pass the guard as
+    /// a shortened dictation. Missing or null text is empty, as on desktop.
+    private static func textPart(_ value: Any?) -> String? {
+        if value == nil || value is NSNull { return "" }
+        return value as? String
+    }
+
+    private static func openAIText(_ content: Any?) -> String? {
+        if content == nil || content is NSNull { return "" }
+        if let text = content as? String { return text }
+        guard let parts = content as? [Any] else { return nil }
+        var text = ""
+        for part in parts {
+            if let value = part as? String { text += value; continue }
+            guard let item = part as? [String: Any], let value = textPart(item["text"]) else { return nil }
+            text += value
+        }
+        return text
     }
 
     /// `{"error": {"message": …}}`, Anthropic's and Google's too, or a bare
