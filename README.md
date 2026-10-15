@@ -228,7 +228,7 @@ The times were measured from Germany through OpenRouter in October 2026; the pri
 
 <br>
 
-**Mac** (Swift 6 and the macOS 26 SDK, from Xcode 26 or newer):
+**Mac** (Xcode 27 or newer, including Swift 6.4 and the macOS SDK):
 
     make app                     build dist/satz.app
     make run                     build and launch
