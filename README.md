@@ -266,4 +266,6 @@ Live tests talk to a real endpoint and are skipped without a key:
 
 ## Licence
 
-MIT. See [LICENSE](LICENSE). Made by [DPA Plus](https://dpa.plus).
+satz's own source is MIT. See [LICENSE](LICENSE). Made by [DPA Plus](https://dpa.plus).
+
+Bundled dependencies keep their own licenses. The Windows x64 and Linux packages include a GPL-3.0-or-later native library. See the [bundled software notices](Resources/Licenses/README.md) and the [corresponding source download](https://github.com/dpa-plus/satz/releases/download/v0.4.3/satz-0.4.3-source.tar.gz) for the licenses, source and build instructions.
