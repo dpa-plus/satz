@@ -68,6 +68,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // The event describes why this start happened; later tasks no longer
+        // have it. Reading it does not load preferences for one-shot tools.
+        let launchEvent = NSAppleEventManager.shared().currentAppleEvent?.copy() as? NSAppleEventDescriptor
         Typography.registerBundledFonts()
 
         if let directory = LaunchMode.argument("--snapshot") {
@@ -222,7 +225,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         watchAttention()
         keepSetupFresh()
-        followColourFamily()
 
         Log.note("setup: provider=\(preferences.provider.rawValue) key=\(setup.hasKey) microphone=\(setup.microphone) paste=\(setup.canPaste)")
         LocalModels.shared.isWanted = { [weak self] model in
@@ -254,12 +256,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         followProvider()
 
-        // Nothing works until setup is done, and a menu bar icon alone gives a
-        // new user no hint of that. A test copy opens no window by itself
-        // (`setup` does): a fresh models folder left its setup unfinished,
-        // and the window would land on the user's screen.
-        if !setup.isComplete && devControl == nil {
+        // A deliberate first open should be as visible as opening a running
+        // copy. Login and test starts stay in the menu bar.
+        switch LaunchPresentation.destination(mode: LaunchMode.current, event: launchEvent,
+                                              setupComplete: setup.isComplete) {
+        case .quiet:
+            break
+        case .setup:
             setupWindow.show()
+        case .history:
+            show(.history)
         }
     }
 
@@ -301,15 +307,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menuBar.needsAttention = !setup.isComplete || shortcut.status == .taken
         } onChange: { [weak self] in
             Task { @MainActor in self?.watchAttention() }
-        }
-    }
-
-    /// The app icon follows the colour family, at launch and on every change.
-    private func followColourFamily() {
-        withObservationTracking {
-            AppIcon.apply(Look.shared.family)
-        } onChange: { [weak self] in
-            Task { @MainActor in self?.followColourFamily() }
         }
     }
 

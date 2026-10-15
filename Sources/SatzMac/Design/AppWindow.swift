@@ -60,11 +60,6 @@ final class AppWindow: NSObject, NSWindowDelegate {
         if front != nil && front != .current { Self.cameFrom = front }
         if Self.open == 0 {
             NSApp.setActivationPolicy(.regular)
-            // Set while satz had no Dock icon, the coloured icon did not carry
-            // over: the Dock showed the bundle's orange one in every colour.
-            // Again once the Dock has made the tile, which happens after.
-            AppIcon.apply(Look.shared.family)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { AppIcon.apply(Look.shared.family) }
         }
         let opening = !counted
         if opening {

@@ -88,16 +88,6 @@ enum AppTheme: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    /// The bars on the app icon: bright enough to glow on the deep ground.
-    var iconBars: Color {
-        switch self {
-        case .dpa: Color(hex: 0xFF6100)
-        case .forest: Color(hex: 0x5DB07F)
-        case .lavender: Color(hex: 0xA98BEB)
-        case .sky: Color(hex: 0x52B4EA)
-        }
-    }
-
     var light: Theme {
         switch self {
         case .dpa:

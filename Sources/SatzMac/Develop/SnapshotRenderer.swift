@@ -90,13 +90,9 @@ enum SnapshotRenderer {
                 .write(to: folder.appendingPathComponent("settings-\(family.rawValue).png"))
         }
         AppTheme.current = .dpa
-        let icons = HStack(spacing: 24) {
-            ForEach(AppTheme.allCases, id: \.self) { family in
-                IconRenderer.tile(for: family).scaleEffect(0.18).frame(width: 184, height: 184)
-            }
-        }
-        .padding(20)
-        .background(Color(hex: 0x2A2A2A))
+        let icons = IconRenderer.tile.scaleEffect(0.18).frame(width: 184, height: 184)
+            .padding(20)
+            .background(Color(hex: 0x2A2A2A))
         try png(of: icons).write(to: folder.appendingPathComponent("icons.png"))
     }
 
