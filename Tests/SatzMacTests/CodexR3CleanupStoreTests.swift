@@ -69,6 +69,27 @@ private final class CountingStub: URLProtocol, @unchecked Sendable {
     override func stopLoading() {}
 }
 
+/// Try-state tests run beside the cancellation suite. Their successful
+/// requests must not enter that suite's strict "nothing sent" counter.
+private final class TryAnswerStub: URLProtocol, @unchecked Sendable {
+    static var session: URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TryAnswerStub.self]
+        return URLSession(configuration: configuration)
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let body = Data(#"{"choices":[{"message":{"role":"assistant","content":"Hallo Welt, wie geht es dir?"}}]}"#.utf8)
+        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
 /// Opened by the test, awaited by the stand-in for Apple's model. A plain
 /// wait, so it does not notice a cancellation: the answer comes anyway.
 private final class Gate: @unchecked Sendable {
@@ -452,7 +473,7 @@ struct CleanupTryInputTests {
         ]
         for change in changes {
             let store = CleanupStore(folder: nil, speedsFile: nil)
-            store.client = CleanupClient(session: CountingStub.session)
+            store.client = CleanupClient(session: TryAnswerStub.session)
             let preferences = Preferences(defaults: nil)
             preferences.cleanupProvider = .custom
             preferences.setCleanupAddress("http://127.0.0.1:9/v1", for: .custom)
@@ -492,7 +513,7 @@ struct CleanupTryInputTests {
 
     @Test func aPriceOrDiscoveryUpdateDoesNotInvalidateTheSameInput() async {
         let store = CleanupStore(folder: nil, speedsFile: nil)
-        store.client = CleanupClient(session: CountingStub.session)
+        store.client = CleanupClient(session: TryAnswerStub.session)
         store.stage(installed: [.ollama: ["before"]])
         let preferences = Preferences(defaults: nil)
         preferences.cleanupProvider = .ollama
