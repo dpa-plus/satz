@@ -110,7 +110,8 @@ async function download(id: string, served: Record<string, Uint8Array>, expected
   try {
     engine.download(id)
     await until(() => states.at(-1)?.kind === 'failed' || states.at(-1)?.kind === 'ready')
-    const list = () => (fs.existsSync(path.join(dir, id)) ? fs.readdirSync(path.join(dir, id), { recursive: true }).map(String) : [])
+    // The catalog uses URL paths; recursive readdir uses the host's separators.
+    const list = () => (fs.existsSync(path.join(dir, id)) ? fs.readdirSync(path.join(dir, id), { recursive: true }).map(file => String(file).replaceAll('\\', '/')) : [])
     // A failure is reported as soon as one file fails; a sibling still being
     // fetched finishes (or is removed) a moment later. Read what stays.
     for (let i = 0; i < 150 && list().some(file => file.includes('.tmp.')); i++) await new Promise(resolve => setTimeout(resolve, 20))

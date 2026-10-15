@@ -19,12 +19,12 @@ class FakeSource implements AudioSource {
   private tail: (() => void) | null = null
   holdTail = false
   constructor(readonly script: string) {}
-  /** Milliseconds the microphone takes to open, like a Bluetooth headset. */
-  opening = 0
+  /** Holds the microphone open request until the test allows it to finish. */
+  opening?: Promise<void>
   /** The microphone does not open (a Bluetooth headset switching profile). */
   fails = false
   async start() {
-    if (this.opening) await new Promise(resolve => setTimeout(resolve, this.opening))
+    if (this.opening) await this.opening
     if (this.fails) throw new Error('Microphone unavailable')
   }
   get sampleCount() { return this.revealed * K }
@@ -52,12 +52,12 @@ const decode = (samples: Float32Array) => {
 const tick = (ms = 0) => new Promise(resolve => setTimeout(resolve, ms))
 async function settle() { for (let i = 0; i < 8; i++) await tick() }
 
-function setup(scripts: string[], options: { mode?: 'tap' | 'hold'; transcribe?: (s: Float32Array) => Promise<string>; opening?: number; missing?: string; failOn?: number } = {}) {
+function setup(scripts: string[], options: { mode?: 'tap' | 'hold'; transcribe?: (s: Float32Array) => Promise<string>; opening?: Promise<void>; missing?: string; failOn?: number } = {}) {
   const sources: FakeSource[] = []
   const delivered: string[] = []
   let mode = options.mode ?? 'tap'
   const session = new Session({
-    makeSource: () => { const s = new FakeSource(scripts[sources.length] ?? ''); s.opening = options.opening ?? 0; s.fails = options.failOn === sources.length; sources.push(s); return s },
+    makeSource: () => { const s = new FakeSource(scripts[sources.length] ?? ''); s.opening = options.opening; s.fails = options.failOn === sources.length; sources.push(s); return s },
     transcribe: options.transcribe ?? (async samples => decode(samples)),
     replacements: () => [],
     missing: () => options.missing ?? null,
@@ -235,15 +235,19 @@ test('music pauses for recording, not for the card that says nothing was heard',
   session.dispose()
 })
 
-test('a press while the microphone is still opening finishes once it is open', async () => {
-  const { session, sources, delivered } = setup(['Hallo'], { opening: 50 })
+test('a press while the microphone is still opening finishes once it is open', async t => {
+  let open!: () => void
+  const opening = new Promise<void>(resolve => { open = resolve })
+  const { session, sources, delivered } = setup(['Hallo'], { opening })
+  t.after(() => session.dispose())
   session.press()
   sources[0].say()
   session.press(); await settle()
   assert.equal(session.phase.kind, 'starting')
-  await tick(80); await settle()
+  assert.deepEqual(delivered, [])
+  open(); await settle()
   assert.deepEqual(delivered, ['Hallo'])
-  session.dispose()
+  assert.equal(session.phase.kind, 'idle')
 })
 
 test('a local model not downloaded yet is said before anything is recorded', async () => {
@@ -273,18 +277,25 @@ test('a microphone failing on resume keeps the text that arrives after it', asyn
   session.dispose()
 })
 
-test('a press while the text is being written starts the next dictation', async () => {
-  const { session, sources, delivered } = setup(['Hallo', 'Welt'], { transcribe: slow(40) })
+test('a press while the text is being written starts the next dictation', async t => {
+  let release!: () => void
+  const gate = new Promise<void>(resolve => { release = resolve })
+  const { session, sources, delivered } = setup(['Hallo', 'Welt'], {
+    transcribe: async samples => { await gate; return decode(samples) },
+  })
+  t.after(() => session.dispose())
   session.press(); await settle()
   sources[0].say()
   session.press(); await settle()
   assert.equal(session.phase.kind, 'finishing')
   session.press(); await settle()
-  await tick(60); await settle()
+  assert.equal(session.phase.kind, 'finishing')
+  assert.deepEqual(delivered, [])
+  assert.equal(sources.length, 1)
+  release(); await settle()
   assert.deepEqual(delivered, ['Hallo'])
   assert.equal(sources.length, 2)
   assert.equal(session.phase.kind, 'listening')
-  session.dispose()
 })
 
 test('an empty answer for real speech offers Retry instead of "Nothing heard"', async () => {

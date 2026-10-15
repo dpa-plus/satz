@@ -31,7 +31,7 @@ type Handler = (event: unknown, text: unknown, asked: unknown) => Promise<Reply>
 /** The "cleanup:try" handler from main.ts, with a `tryCleanup` that asks a real Cleaner, as the one beside it does. */
 function mainHandler(cleaner: Cleaner, cancelled = false): Handler {
   const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.ts'), 'utf8')
-  const handler = main.match(/ipcMain\.handle\('cleanup:try', (async [\s\S]*?\n {2}\})\)\n/)
+  const handler = main.match(/ipcMain\.handle\('cleanup:try', (async [\s\S]*?\r?\n {2}\})\)\r?\n/)
   assert.ok(handler, 'the cleanup:try handler is where it was')
   const code = ts.transpileModule(`globalThis.handler = ${handler[1]}`, { compilerOptions: { target: ts.ScriptTarget.ES2023 } }).outputText
   const context = vm.createContext({
