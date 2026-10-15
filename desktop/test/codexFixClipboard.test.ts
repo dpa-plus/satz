@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict'
 import Module from 'node:module'
-import { test } from 'node:test'
+import { afterEach, test } from 'node:test'
 import { ClipboardBackupError, ClipboardHandback, flushHandback, registerHandback, type ClipboardPort } from '../src/main/clipboardHandback'
-import { deferred, flush } from './sessionHarness'
+import { makeDelivery } from '../src/main/delivery'
+import { deferred, disposeAll, flush, phase, settle, setup as sessionSetup } from './sessionHarness'
+
+afterEach(() => disposeAll())
 
 // Codex bug hunt 14.10., F02: a clipboard that could not be read was taken
 // for an empty one, so the paste wrote over it and the hand-back then cleared
@@ -256,12 +259,66 @@ test('paste.ts: something on the clipboard that none of which can be read is not
   assert.equal(board.calls.some(call => call.startsWith('writeText') || call === 'clear'), false)
 })
 
-test('paste.ts: a form that has gone since the clipboard was read is left out of the backup, the others come back', async () => {
+test('paste.ts: an unreadable rich form leaves the entire original clipboard untouched', async () => {
   const board = electronClipboard({ items: [new Item({ 'text/plain': 'original', 'text/html': '<i>original</i>' }, ['text/html'])] })
   const { deliver } = loadPaste(board.clipboard)
-  await deliver('transcript', () => {}, false)
+  let keystrokes = 0
+  await assert.rejects(deliver('transcript', () => { keystrokes++ }, false), ClipboardBackupError)
   await flushHandback()
+  assert.equal(keystrokes, 0)
+  assert.equal(board.content, 'text/plain+text/html:original')
+  assert.equal(board.calls.some(call => call.startsWith('writeText') || call === 'write' || call === 'clear'), false)
+})
+
+test('paste.ts: an unreadable Linux text alias does not block a complete canonical text backup', async () => {
+  const alias = 'electron application/osclipboard;format="UTF8_STRING"'
+  const board = electronClipboard({ items: [new Item({ [alias]: 'original', 'text/plain': 'original' }, [alias])] })
+  const { deliver } = loadPaste(board.clipboard)
+  let keystrokes = 0
+  assert.deepEqual(await deliver('transcript', () => { keystrokes++ }, false), { pasted: true })
+  await flushHandback()
+  assert.equal(keystrokes, 1)
   assert.equal(board.content, 'text/plain:original')
+})
+
+test('Session: an incomplete rich clipboard backup keeps the dictation recoverable and inserts once after Restore', async () => {
+  const unreadable = ['text/html']
+  const board = electronClipboard({ items: [new Item({ 'text/plain': 'original', 'text/html': '<i>original</i>' }, unreadable)] })
+  const { deliver } = loadPaste(board.clipboard)
+  const inserted: string[] = []
+  const history: [string, boolean][] = []
+  const route = makeDelivery({
+    records: false,
+    windows: { restore: async () => true, isTerminal: async () => false },
+    paste: deliver,
+    keyTap: () => { inserted.push(board.text) },
+    writeClipboard: text => board.clipboard.writeText(text),
+    keepsOnClipboard: () => false,
+    addHistory: (text, pasted) => { history.push([text, pasted]) },
+    delivered() {}, log() {}, sleep: async () => {},
+  })
+  const { session, sources } = sessionSetup(['recoverable dictated words'], {
+    deliver: text => route(text, Promise.resolve('window')),
+  })
+  session.press(); await settle(); sources[0].say(); session.press(); await settle()
+  assert.equal(phase(session), 'failed')
+  assert.equal(session.canRestore, true)
+  assert.equal(session.discarded?.preview, 'recoverable dictated words')
+  assert.deepEqual(inserted, [])
+  assert.deepEqual(history, [])
+  assert.equal(board.content, 'text/plain+text/html:original')
+  assert.equal(board.calls.some(call => call.startsWith('writeText') || call === 'write' || call === 'clear'), false)
+
+  unreadable.length = 0
+  session.restoreLast(); await settle(); session.press(); await settle()
+  assert.equal(phase(session), 'idle')
+  assert.deepEqual(inserted, ['recoverable dictated words'])
+  assert.deepEqual(history, [['recoverable dictated words', true]])
+  assert.equal(session.discarded, null)
+  session.restoreLast(); await settle()
+  assert.deepEqual(inserted, ['recoverable dictated words'], 'no second insertion after the successful recovery')
+  await flushHandback()
+  assert.equal(board.content, 'text/plain+text/html:original')
 })
 
 test('paste.ts: a clipboard that really is empty is empty again afterwards', async () => {

@@ -37,9 +37,13 @@ async function save(): Promise<ClipboardItem[]> {
   const copies: ClipboardItem[] = []
   for (const item of items) {
     const payload: Record<string, string | Blob | Electron.ClipboardBookmark> = {}
+    const unreadable: string[] = []
     for (const type of item.types) {
-      try { payload[type] = await item.getType(type) } catch { /* that form is gone already */ }
+      try { payload[type] = await item.getType(type) } catch { unreadable.push(type) }
     }
+    // A partial backup would lose the unreadable content when it came back.
+    // Only the system's text aliases can be made again from captured text/plain.
+    if (unreadable.some(type => payload['text/plain'] === undefined || !isTextAlias(type))) throw new Error('not all forms on the clipboard could be read')
     // The system's other names for the same text (Linux lists UTF8_STRING, TARGETS …) are views of text/plain, not content: written back by name they are no use.
     if (payload['text/plain'] !== undefined) for (const type of Object.keys(payload)) if (isTextAlias(type)) delete payload[type]
     if (Object.keys(payload).length > 0) copies.push(new ClipboardItem(payload as never))
