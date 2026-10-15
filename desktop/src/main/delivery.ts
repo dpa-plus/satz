@@ -1,6 +1,7 @@
 import { de } from '../core/language'
 import type { CleanupOutcome } from '../core/session'
 import type { Foreground } from './foreground'
+import type { HistoryPersistenceIssue, HistoryPersistenceResult } from '../core/history'
 
 /**
  * A finished text on its way to where the user was typing: back to the
@@ -8,7 +9,7 @@ import type { Foreground } from './foreground'
  * it, then the paste. It lives apart from main.ts so a test can run it (unit
  * tests do not reach main.ts).
  */
-export interface Outcome { pasted: boolean; reason?: string }
+export interface Outcome { pasted: boolean; reason?: string; historyIssue?: HistoryPersistenceIssue }
 
 export interface DeliveryDeps {
   /** Test mode: texts are recorded instead of pasted. */
@@ -20,7 +21,7 @@ export interface DeliveryDeps {
   writeClipboard(text: string): void | Promise<void>
   keepsOnClipboard(): boolean
   /** `cleanup`: what cleanup did, when it was on (the original and "ok" or why it failed). */
-  addHistory(text: string, pasted: boolean, cleanup?: CleanupOutcome): void
+  addHistory(text: string, pasted: boolean, cleanup?: CleanupOutcome): HistoryPersistenceResult | void
   /** The text is done with: noted for tests, and the windows that show the history are told. */
   delivered(text: string): void
   log(message: string): void
@@ -36,8 +37,17 @@ export function makeDelivery(deps: DeliveryDeps) {
    * restore pasted it a second time.
    */
   const done = (text: string, pasted: boolean, cleanup?: CleanupOutcome) => {
-    try { deps.addHistory(text, pasted, cleanup) } catch (error) { deps.log(`history: not saved (${(error as Error)?.message ?? error})`) }
+    let historyIssue: HistoryPersistenceIssue | undefined
+    try {
+      const saved = deps.addHistory(text, pasted, cleanup)
+      if (saved?.status === 'failed') historyIssue = saved.issue
+    } catch (error) {
+      deps.log(`history: not saved (${(error as Error)?.message ?? error})`)
+      historyIssue = 'saveFailed'
+    }
+    if (historyIssue) deps.log(`history: not saved (${historyIssue})`)
     deps.delivered(text)
+    return historyIssue ? { historyIssue } : {}
   }
   /**
    * @param target where this dictation started, noted when it began. Handed
@@ -48,8 +58,7 @@ export function makeDelivery(deps: DeliveryDeps) {
    */
   return async function deliver(text: string, target: Promise<string | null>, cleanup?: CleanupOutcome): Promise<Outcome> {
     if (deps.records) {
-      done(text, true, cleanup)
-      return { pasted: true }
+      return { pasted: true, ...done(text, true, cleanup) }
     }
     await sleep(120)
     // Back to the window the dictation started in, or onto the clipboard:
@@ -58,8 +67,7 @@ export function makeDelivery(deps: DeliveryDeps) {
     if (window && !(await deps.windows.restore(window))) {
       await deps.writeClipboard(text)
       deps.log('paste: the window the dictation started in is gone or would not come back')
-      done(text, false, cleanup)
-      return { pasted: false, reason: de('Auf der Zwischenablage, das Fenster ist nicht mehr da.', 'On the clipboard, the window is gone.') }
+      return { pasted: false, reason: de('Auf der Zwischenablage, das Fenster ist nicht mehr da.', 'On the clipboard, the window is gone.'), ...done(text, false, cleanup) }
     }
     // The right window says nothing about the field in it: the user may have
     // clicked into another one while the text was on its way, or the page
@@ -68,13 +76,11 @@ export function makeDelivery(deps: DeliveryDeps) {
     if (window && deps.windows.restoreField && !(await deps.windows.restoreField(window))) {
       await deps.writeClipboard(text)
       deps.log('paste: the text field the dictation started in is gone or would not take the keyboard back')
-      done(text, false, cleanup)
-      return { pasted: false, reason: de('Auf der Zwischenablage, das Textfeld ließ sich nicht mehr auswählen.', 'On the clipboard, the text field could not be selected again.') }
+      return { pasted: false, reason: de('Auf der Zwischenablage, das Textfeld ließ sich nicht mehr auswählen.', 'On the clipboard, the text field could not be selected again.'), ...done(text, false, cleanup) }
     }
     const terminal = window ? await deps.windows.isTerminal(window) : false
     const outcome = await deps.paste(text, () => deps.keyTap(terminal), deps.keepsOnClipboard(), deps.log)
     deps.log(`paste: ${outcome.pasted ? 'sent Ctrl+V' : 'clipboard only'}, ${text.length} characters`)
-    done(text, outcome.pasted, cleanup)
-    return outcome
+    return { ...outcome, ...done(text, outcome.pasted, cleanup) }
   }
 }

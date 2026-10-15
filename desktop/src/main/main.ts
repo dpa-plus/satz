@@ -4,6 +4,7 @@ import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import { de, setLanguage } from '../core/language'
+import { historyIssueText, type HistoryPersistenceResult } from '../core/history'
 import { isCleanupLevel, levelChange, trySample } from '../core/cleanup'
 import { chosenModel, cleanupBase, cleanupProviders, defaultCleanupProvider, isCleanupProvider, type CleanupProviderId } from '../core/cleanupProviders'
 import { Session, type AudioSource } from '../core/session'
@@ -323,6 +324,7 @@ async function start() {
       click: () => { clipboard.writeText(entry.text) },
     }))
     const menu = Menu.buildFromTemplate([
+      ...(store.persistenceIssue ? [{ label: historyIssueText(store.persistenceIssue, store.prefs.language).title, enabled: false }, { type: 'separator' as const }] : []),
       ...(recent.length ? [{ label: de('Zuletzt (klicken zum Kopieren)', 'Recent (click to copy)'), enabled: false }, ...recent] : []),
       { label: de(`Ganzer Verlauf (${store.history.length})…`, `All history (${store.history.length})…`), click: openHistory },
       { type: 'separator' as const },
@@ -364,14 +366,15 @@ async function start() {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel)
   }
   /** The tray and an open window show the change at once. */
-  function historyChanged() {
+  function historyChanged(result?: HistoryPersistenceResult) {
     refreshTray()
     tellWindow('history:changed')
+    if (result?.status === 'failed') session.showHistoryWarning(result.issue)
   }
-  ipcMain.handle('history:get', () => ({ entries: store.history, limit: store.prefs.historyLimit, language: store.prefs.language }))
-  ipcMain.handle('history:remove', (_e, id: string) => { store.removeHistory(id); historyChanged() })
+  ipcMain.handle('history:get', () => ({ entries: store.history, limit: store.prefs.historyLimit, language: store.prefs.language, persistenceIssue: store.persistenceIssue }))
+  ipcMain.handle('history:remove', (_e, id: string) => { const result = store.removeHistory(id); historyChanged(result); return result })
   ipcMain.handle('history:copy', (_e, text: string) => { clipboard.writeText(text) })
-  ipcMain.handle('history:set-limit', (_e, limit: number) => { store.setHistoryLimit(limit); historyChanged() })
+  ipcMain.handle('history:set-limit', (_e, limit: number) => { const result = store.setHistoryLimit(limit); historyChanged(result); return result })
   ipcMain.handle('history:open-settings', () => openSettings())
   ipcMain.handle('history:open', () => openHistory())
 
@@ -514,7 +517,7 @@ async function start() {
     return { outcome: run.outcome, answer: run.answer ?? (run.outcome === 'ok' ? run.text : undefined), rejected: run.rejected, seconds: run.seconds, dollars: run.dollars, cancelled, provider: run.provider, model: run.model }
   })
   ipcMain.handle('cleanup:cancel-try', () => { tryRun?.abort(); tryRun = null })
-  ipcMain.handle('settings:clear-history', () => { store.clearHistory(); historyChanged() })
+  ipcMain.handle('settings:clear-history', () => { const result = store.clearHistory(); historyChanged(result); return result })
   ipcMain.handle('settings:start-at-login', (_e, on: boolean) => { startAtLogin.set(on); store.update({ startsAtLogin: on }); return startAtLogin.get() })
   ipcMain.handle('settings:open-log', () => shell.openPath(path.join(app.getPath('userData'), 'satz.log')))
 
@@ -663,6 +666,7 @@ function startDevControl(port: number, session: Session, card: CardWindow, deliv
           window: card.window.getBounds(),
           visible: card.window.isVisible(),
           discarded: session.discarded?.preview ?? null,
+          historyPersistenceIssue: store.persistenceIssue,
           ...cleanup.state(),
         }
     }

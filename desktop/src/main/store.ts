@@ -1,10 +1,11 @@
 import { app } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { customAddress, keyRefusal } from '../core/browse'
 import { historyFields, type CleanupLevel } from '../core/cleanup'
 import { cleanupAccounts, type CleanupProviderId } from '../core/cleanupProviders'
-import { readHistory, type HistoryEntry } from '../core/history'
+import { readHistory, type HistoryEntry, type HistoryPersistenceIssue, type HistoryPersistenceResult } from '../core/history'
 import { setLanguage, systemLanguage, type Language } from '../core/language'
 import { standardReplacements, swapPredefined, type Replacement } from '../core/replacements'
 import type { CleanupOutcome } from '../core/session'
@@ -130,6 +131,7 @@ function writeJSON(name: string, value: unknown, mode?: number) {
 export class Store {
   prefs: Preferences
   history: HistoryEntry[]
+  persistenceIssue: HistoryPersistenceIssue | null = null
   /** history.json is there but can be neither read nor moved aside: it stays as it is, and the history lives in memory until satz quits (readHistory logged it, once). */
   private historyKept: boolean
 
@@ -166,7 +168,9 @@ export class Store {
     setLanguage(this.prefs.language)
     const read = readHistoryFile(log)
     this.historyKept = read.kept
+    this.persistenceIssue = read.kept ? 'protected' : null
     this.history = readHistory(read.entries, this.prefs.historyLimit, newId)
+    if (this.prefs.historyLimit === 0) this.clearHistory()
   }
 
   save() { writeJSON('preferences.json', this.prefs) }
@@ -250,35 +254,69 @@ export class Store {
 
   // MARK: - History
 
-  addHistory(text: string, pasted: boolean, cleanup?: CleanupOutcome) {
+  addHistory(text: string, pasted: boolean, cleanup?: CleanupOutcome): HistoryPersistenceResult {
     // Off means nothing is written, not written and then forgotten.
-    if (!text || this.prefs.historyLimit === 0) return
+    if (!text || this.prefs.historyLimit === 0) return { status: 'off' }
     this.history = [{ id: newId(), text, date: new Date().toISOString(), pasted, ...historyFields(text, cleanup) }, ...this.history].slice(0, this.prefs.historyLimit)
-    this.writeHistory()
+    return this.writeHistory()
   }
 
   /** Every write of history.json goes through here: none while the file is one satz could not read and must not replace. */
-  private writeHistory() {
-    if (!this.historyKept) writeJSON('history.json', this.history, 0o600)
+  private writeHistory(): HistoryPersistenceResult {
+    if (this.historyKept) return this.historyFailure('protected')
+    let ownedTemporary: string | null = null
+    try {
+      fs.mkdirSync(dir(), { recursive: true })
+      const temporary = file(`.history-${randomUUID()}.new`)
+      // Exclusive creation proves ownership: a failed save must not remove a
+      // preexisting file or leave its transcript in an abandoned temporary.
+      const handle = fs.openSync(temporary, 'wx', 0o600)
+      ownedTemporary = temporary
+      try { fs.writeFileSync(handle, JSON.stringify(this.history, null, 2)) } finally { fs.closeSync(handle) }
+      fs.renameSync(temporary, file('history.json'))
+      ownedTemporary = null
+      this.persistenceIssue = null
+      return { status: 'saved' }
+    } catch { return this.historyFailure('saveFailed') }
+    finally { if (ownedTemporary) { try { fs.rmSync(ownedTemporary) } catch { /* the failure remains visible */ } } }
+  }
+
+  private historyFailure(issue: HistoryPersistenceIssue): HistoryPersistenceResult {
+    this.persistenceIssue = issue
+    return { status: 'failed', issue }
   }
 
   /** Lowering it drops the oldest at once, from disk too. */
-  setHistoryLimit(limit: number) {
-    this.update({ historyLimit: limit })
+  setHistoryLimit(limit: number): HistoryPersistenceResult {
+    const previous = this.prefs
+    try { this.update({ historyLimit: limit }) }
+    catch {
+      this.prefs = previous
+      // The setting notice must not hide that existing text is only in
+      // memory, or that the previous file could not be cleared or read.
+      this.persistenceIssue ??= 'limitFailed'
+      return { status: 'failed', issue: 'limitFailed' }
+    }
     if (limit === 0) return this.clearHistory()
     this.history = this.history.slice(0, limit)
-    this.writeHistory()
+    return this.writeHistory()
   }
 
   removeHistory(id: string) {
     this.history = this.history.filter(entry => entry.id !== id)
-    this.writeHistory()
+    return this.writeHistory()
   }
 
-  clearHistory() {
+  clearHistory(): HistoryPersistenceResult {
     this.history = []
     // The file that was not readable holds what the user cannot see here: not deleted either.
-    if (this.historyKept) return
-    try { fs.rmSync(file('history.json')) } catch { /* already gone */ }
+    if (this.historyKept) return this.historyFailure('protected')
+    try {
+      fs.rmSync(file('history.json'))
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return this.historyFailure('clearFailed')
+    }
+    this.persistenceIssue = null
+    return { status: 'saved' }
   }
 }

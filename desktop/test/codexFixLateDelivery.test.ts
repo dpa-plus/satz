@@ -114,7 +114,9 @@ test('F06: a pasted text whose history entry cannot be written stays pasted, and
     const { session, sources } = setup(['already pasted once'], { deliver: text => delivery(text, Promise.resolve('window')) })
     session.press(); await settle(); sources[0].say(); session.press(); await settle()
     assert.deepEqual(pasted, ['already pasted once'])
-    assert.equal(phase(session), 'idle', 'no "Not pasted" for a text that was pasted')
+    assert.equal(phase(session), 'failed', 'a non-retry history warning, not a failed insertion')
+    assert.equal(session.phase.kind === 'failed' && session.phase.canRetry, false)
+    assert.equal(session.phase.kind === 'failed' && session.phase.message, 'History not saved')
     assert.equal(session.discarded, null, 'nothing kept to paste a second time')
     assert.ok(logs.some(line => line.startsWith('history: not saved')), logs.join('\n'))
   } finally { fs.rmSync(scratch, { recursive: true, force: true }) }
@@ -129,7 +131,7 @@ test('F06: the history failing does not change the outcome of the other two path
     addHistory: () => { throw new Error('ENOSPC: no space left on device') },
     delivered: (text: string) => told.push(text), log() {}, sleep: async () => {},
   }
-  assert.deepEqual(await makeDelivery({ ...deps, records: true })('test mode', Promise.resolve(null)), { pasted: true })
+  assert.deepEqual(await makeDelivery({ ...deps, records: true })('test mode', Promise.resolve(null)), { pasted: true, historyIssue: 'saveFailed' })
   const gone = await makeDelivery({ ...deps, records: false })('window gone', Promise.resolve('window'))
   assert.equal(gone.pasted, false)
   assert.deepEqual(told, ['test mode', 'window gone'], 'the windows showing the history are still told')

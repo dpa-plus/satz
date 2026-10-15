@@ -4,6 +4,28 @@
  */
 export interface HistoryEntry { id: string; text: string; date: string; pasted: boolean; original?: string; cleanup?: string }
 
+export type HistoryPersistenceIssue = 'saveFailed' | 'clearFailed' | 'protected' | 'limitFailed'
+export type HistoryPersistenceResult = { status: 'saved' | 'off' } | { status: 'failed'; issue: HistoryPersistenceIssue }
+
+/** A completed insertion stays completed; this warning is about keeping its history across restarts. */
+export function historyIssueText(issue: HistoryPersistenceIssue, language: 'de' | 'en') {
+  const t = (de: string, en: string) => language === 'de' ? de : en
+  if (issue === 'limitFailed') return {
+    title: t('Einstellung nicht gespeichert', 'Setting not saved'),
+    detail: t('Die Verlaufseinstellung konnte nicht gespeichert werden. Die bisherige Einstellung gilt weiterhin.', 'The history setting could not be saved. The previous setting still applies.'),
+  }
+  if (issue === 'clearFailed') return {
+    title: t('Verlauf nicht gelöscht', 'History not cleared'),
+    detail: t('Gespeicherte Texte konnten hier nicht gelöscht werden. Sie können beim nächsten Start wieder erscheinen.', 'Saved text could not be deleted here. It may appear again when satz next starts.'),
+  }
+  return {
+    title: t('Verlauf nicht gespeichert', 'History not saved'),
+    detail: issue === 'protected'
+      ? t('Die bisherige Verlaufsdatei bleibt unverändert. Neue Texte bleiben nur bis zum Beenden in satz. Kopiere wichtige Texte vorher.', 'The previous history file is left unchanged. New text is kept in satz only until you quit. Copy important text first.')
+      : t('Neue Texte und Änderungen bleiben nur bis zum Beenden in satz. Kopiere wichtige Texte vorher.', 'New text and changes are kept in satz only until you quit. Copy important text first.'),
+  }
+}
+
 /**
  * The history file as read. Apart from store.ts, which needs Electron, so a
  * test can read a file from an older satz through it: entries from before

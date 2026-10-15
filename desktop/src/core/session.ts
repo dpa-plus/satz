@@ -4,6 +4,7 @@ import { applyReplacements, type Replacement } from './replacements'
 import { hasSpeech } from './speech'
 import { fit } from './textFitting'
 import { TranscriptionFailure } from './transcriber'
+import { historyIssueText, type HistoryPersistenceIssue } from './history'
 
 /**
  * One dictation, from the shortcut to the paste. A port of the Mac app's
@@ -66,7 +67,7 @@ export interface SessionDeps {
   endpointMissing(): boolean
   triggerMode(): 'tap' | 'hold'
   /** Pastes; false with a reason when the text only reached the clipboard. `cleanup` when cleanup was on. */
-  deliver(text: string, cleanup?: CleanupOutcome): Promise<{ pasted: boolean; reason?: string }>
+  deliver(text: string, cleanup?: CleanupOutcome): Promise<{ pasted: boolean; reason?: string; historyIssue?: HistoryPersistenceIssue }>
   /** Cleanup is on: the text goes to the cleanup model before it is pasted. */
   cleansText?(): boolean
   /**
@@ -323,6 +324,15 @@ export class Session {
     if (this.phase.kind === 'failed' && this.phase.canRetry) this.finish()
   }
 
+  /** Persistence failed after delivery or a history action; never offers to insert the text again. */
+  showHistoryWarning(issue: HistoryPersistenceIssue) {
+    if (this.phase.kind !== 'idle') return
+    this.phase = { kind: 'failed', message: de(historyIssueText(issue, 'de').title, historyIssueText(issue, 'en').title), canRetry: false }
+    this.onOpen()
+    this.changed()
+    this.closeLater(5000)
+  }
+
   // MARK: - Clicks in the text
 
   /** A click while listening moves where speech goes; any click counts for after a pause. */
@@ -556,7 +566,7 @@ export class Session {
     const snapshot: Snapshot = { doc: this.doc.clone(), segments: new Map(this.segments), activeID: this.activeID, nextID: this.nextID, preview: output }
     // Gone before pasting, so the keyboard is back with the app it belongs to.
     this.close()
-    let outcome: { pasted: boolean; reason?: string }
+    let outcome: { pasted: boolean; reason?: string; historyIssue?: HistoryPersistenceIssue }
     try {
       outcome = cleaned ? await this.deps.deliver(cleaned.text, cleaned.cleanup) : await this.deps.deliver(output)
     } catch (error) {
@@ -591,6 +601,10 @@ export class Session {
       this.onOpen()
       this.changed()
       this.closeLater(4000)
+      return
+    }
+    if (outcome.historyIssue) {
+      this.showHistoryWarning(outcome.historyIssue)
       return
     }
     if (cleaned && cleaned.cleanup.outcome !== 'ok') {

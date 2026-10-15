@@ -1,5 +1,6 @@
 import { satz } from './bridge'
 import { KEEP_ALL } from '../core/historyLimits'
+import { historyIssueText, type HistoryPersistenceIssue } from '../core/history'
 
 /**
  * Everything dictated, newest first, by day. What opens when satz is started
@@ -11,7 +12,7 @@ const COPY_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="
 const COPIED_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 /** `original`: as said, where cleanup changed it; `cleanup`: "ok" or why it failed, while cleanup was on. */
 interface Entry { id: string; text: string; date: string; pasted: boolean; original?: string; cleanup?: string }
-interface Info { entries: Entry[]; limit: number; language: 'de' | 'en' }
+interface Info { entries: Entry[]; limit: number; language: 'de' | 'en'; persistenceIssue?: HistoryPersistenceIssue | null }
 
 const app = document.getElementById('history-page')!
 let info: Info
@@ -75,6 +76,14 @@ function row(entry: Entry): HTMLElement {
 function render() {
   const children: Node[] = []
 
+  if (info.persistenceIssue) {
+    const warning = historyIssueText(info.persistenceIssue, info.language)
+    const banner = el('div', { className: 'history-warning' },
+      el('strong', { textContent: warning.title }), el('p', { textContent: warning.detail }))
+    banner.setAttribute('role', 'status')
+    children.push(banner)
+  }
+
   if (info.entries.length > 0) {
     // Kept when the page is drawn again, with the cursor where it was.
     const search = el('input', { type: 'text', id: 'search', className: 'search', placeholder: t('Suchen', 'Search'), value: query })
@@ -109,7 +118,7 @@ function render() {
     }
     children.push(list)
   }
-  if (info.limit > 0) {
+  if (info.limit > 0 && !info.persistenceIssue) {
     children.push(el('footer', { textContent: info.limit >= KEEP_ALL
       ? t('Alles wird behalten. Ändern in den Einstellungen.', 'Everything is kept. Change it in Settings.')
       : t(`Die letzten ${info.limit} werden behalten. Ändern in den Einstellungen.`, `The last ${info.limit} are kept. Change it in Settings.`) }))

@@ -1,5 +1,7 @@
 /* On top of settings.css: same colours and controls. */
 #history-page { padding-bottom: 16px; gap: 14px; }
+.history-warning { padding: 12px 14px; border: 1px solid var(--secondary); border-radius: 10px; font-size: 14px; }
+.history-warning p { margin: 5px 0 0; color: var(--secondary); line-height: 1.45; }
 header { display: flex; align-items: center; justify-content: space-between; }
 input.search { width: 100%; padding: 9px 12px; }
 .list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding-bottom: 4px; }
