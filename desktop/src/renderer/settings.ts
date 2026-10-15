@@ -4,7 +4,7 @@ import { choiceFor, type ModelChoice } from '../core/models'
 import { addressRefusal, customAddress, keyRefusal, localRowAction, providerLabel, providerNeeds, providerOrder, shortcutHint, switchRow, useLocalModel } from '../core/browse'
 import { hasCleanMode, keyPages, microsoftHost, microsoftRegions, providers, type Provider } from '../core/transcriber'
 import { HISTORY_LIMITS, KEEP_ALL } from '../core/historyLimits'
-import { cleanupLevels, levelChange, levelTexts, systemPrompt, trySample, type CleanupLevel } from '../core/cleanup'
+import { cleanupLevels, levelChange, levelInstructions, levelTexts, systemPrompt, trySample, type CleanupLevel } from '../core/cleanup'
 import {
   chosenModel, cleanupMissing, cleanupNeeds, cleanupProviderLabel, cleanupProviderOrder, cleanupProviders, cleanupSwitchRow, usableAddress, type CleanupProviderId,
 } from '../core/cleanupProviders'
@@ -459,12 +459,16 @@ function cleanupSection(): HTMLElement {
     levelBox.append(el('div', { className: 'row prompt-row' }, editor),
       el('div', { className: 'hint', textContent: t('Der diktierte Text wird angehängt, dein Wortschatz auch.', 'The dictated text is added after it, and so is your vocabulary.') }))
   } else {
-    // Nothing hidden: the exact prompt satz sends for this level.
+    const title = levelTexts[p.cleanupLevel][language].title
+    // Lead with what changes between presets; the shared rules remain available below.
+    const instructions = el('div', { className: 'preset-instructions' },
+      el('div', { className: 'preset-instructions-title', textContent: t(`Anweisungen für „${title}“`, `Instructions for “${title}”`) }),
+      el('p', { textContent: levelInstructions[p.cleanupLevel] }))
     const details = el('details', { id: 'cleanup-prompt-details', open: showsPrompt },
-      el('summary', { textContent: t('Prompt ansehen', 'Show prompt') }),
+      el('summary', { textContent: t(`Vollständigen Prompt für „${title}“ ansehen`, `Show full prompt for “${title}”`) }),
       el('pre', { className: 'prompt', textContent: systemPrompt(p.cleanupLevel, p.words) }))
     details.ontoggle = () => { showsPrompt = details.open }
-    levelBox.append(el('div', { className: 'disclosure' }, details))
+    levelBox.append(el('div', { className: 'disclosure' }, instructions, details))
   }
 
   // The provider, its key, address and model, and what a dictation costs there.

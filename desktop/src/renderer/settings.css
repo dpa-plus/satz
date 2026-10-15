@@ -90,6 +90,9 @@ label.choice input { margin: 3px 0 0; width: 16px; height: 16px; flex-shrink: 0;
 .disclosure { padding: 8px 14px 10px; border-top: 1px solid var(--line); }
 .disclosure summary { cursor: pointer; color: var(--secondary); font-size: 12.5px; width: fit-content; }
 .disclosure summary:hover, .disclosure summary:focus-visible { color: var(--ink); }
+.preset-instructions { margin-bottom: 10px; user-select: text; }
+.preset-instructions-title { font-size: 13px; font-weight: 600; }
+.preset-instructions p { margin: 6px 0 0; font-size: 13px; line-height: 1.5; }
 pre.prompt { margin: 8px 0 0; padding: 10px 12px; max-height: 260px; overflow-y: auto; background: rgba(0,0,0,.18); border: 1px solid var(--line); border-radius: 8px;
   font: 11.5px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 textarea { background: rgba(0,0,0,.18); color: var(--ink); border: 1px solid var(--control); border-radius: 8px; padding: 8px 10px; font: inherit; min-width: 0; }

@@ -116,7 +116,8 @@ private struct CleanupLevels: View {
             if preferences.cleanupLevel == .custom {
                 CustomPromptEditor(preferences: preferences)
             } else {
-                PromptPreview(prompt: CleanupPrompt.system(preferences.cleanupLevel, vocabulary: preferences.words))
+                PromptPreview(level: preferences.cleanupLevel,
+                              prompt: CleanupPrompt.system(preferences.cleanupLevel, vocabulary: preferences.words))
             }
         }
     }
@@ -153,8 +154,10 @@ private struct LevelRow: View {
     }
 }
 
-/// The exact system prompt satz sends for the level, so nothing is hidden.
+/// Put the selected instruction first: the full prompts share a long opening
+/// that otherwise makes the presets look identical.
 private struct PromptPreview: View {
+    let level: CleanupLevel
     let prompt: String
     @Environment(\.theme) private var theme
     @Environment(\.showsCleanupPrompt) private var startsOpen
@@ -163,13 +166,26 @@ private struct PromptPreview: View {
     var body: some View {
         let isOpen = open ?? startsOpen
         VStack(alignment: .leading, spacing: 8) {
+            Text(de("Anweisungen für „\(level.title())“", en: "Instructions for “\(level.title())”"))
+                .font(Typography.text(13, .semibold))
+                .foregroundStyle(theme.ink)
+            if let instructions = level.instructions {
+                Text(instructions)
+                    .font(Typography.text(13))
+                    .foregroundStyle(theme.ink)
+                    .lineSpacing(2)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Button { open = !isOpen } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 9, weight: .bold))
                         .rotationEffect(.degrees(isOpen ? 90 : 0))
-                    Text(de("Prompt ansehen", en: "Show prompt"))
+                    Text(de("Vollständigen Prompt für „\(level.title())“ ansehen",
+                            en: "Show full prompt for “\(level.title())”"))
                         .font(Typography.text(13, .medium))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .foregroundStyle(theme.inkSecondary)
                 .contentShape(Rectangle())
