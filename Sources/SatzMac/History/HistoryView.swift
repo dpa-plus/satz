@@ -29,8 +29,17 @@ struct HistoryView: View {
                 // ImageRenderer draws a ScrollView's content as nothing.
                 list
             } else {
-                ScrollView { list }
+                ScrollView { list.padding(.bottom, 12) }
                     .scrollIndicators(.automatic)
+                    // Ease the card into the footer instead of cutting through
+                    // a line of text. The inset lets the last row clear the fade.
+                    .overlay(alignment: .bottom) {
+                        LinearGradient(colors: [theme.ground.opacity(0), theme.ground],
+                                       startPoint: .top, endPoint: .bottom)
+                            .frame(height: 12)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
             }
 
             Spacer(minLength: 0)
