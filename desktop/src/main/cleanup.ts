@@ -76,6 +76,8 @@ export class Cleaner {
   private fetchingList = false
   private listFailed = -Infinity
   private installed = new Map<string, Installed>()
+  private installedAsk = 0
+  private installedAnswered = new Map<string, number>()
 
   constructor(private deps: CleanerDeps) {
     this.samples = this.read<Record<string, Sample[]>>('cleanup-speeds.json') ?? {}
@@ -238,6 +240,7 @@ export class Cleaner {
 
   private async listInstalled(provider: CleanupProviderId, base: string): Promise<string[]> {
     const id = `${provider}|${base}`
+    const ask = ++this.installedAsk
     const before = this.installed.get(id)
     this.installed.set(id, { state: 'loading', models: before?.models ?? [], fetched: before?.fetched ?? 0 })
     let next: Installed
@@ -250,6 +253,10 @@ export class Cleaner {
     } catch {
       next = { state: 'down', models: [], fetched: this.now }
     }
+    // Settings and Try may ask the same server together. A late older reply
+    // cannot replace a newer list or a newer failure.
+    if (ask <= (this.installedAnswered.get(id) ?? 0)) return this.installed.get(id)?.models ?? []
+    this.installedAnswered.set(id, ask)
     this.installed.set(id, next)
     if (before?.state !== next.state || before.models.join() !== next.models.join()) this.deps.changed()
     return next.models

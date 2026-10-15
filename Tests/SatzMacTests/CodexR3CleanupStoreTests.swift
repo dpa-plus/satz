@@ -419,6 +419,95 @@ struct CodexR3DiscardedCleanupTests {
     }
 }
 
+@Suite(.serialized) @MainActor
+struct CleanupTryInputTests {
+    @Test func aLateTryAnswerDoesNotAppearUnderAnotherProvider() async {
+        let gate = Gate()
+        let store = CleanupStore(folder: nil, speedsFile: nil)
+        store.client = CleanupClient(apple: { _ in
+            await gate.wait()
+            return "Hallo Welt, wie geht es dir?"
+        })
+        let preferences = Preferences(defaults: nil)
+        preferences.cleanupProvider = .apple
+        store.tryOut("hallo welt wie geht es dir", preferences)
+        await until { gate.isEntered }
+        store.looking = .ollama
+        gate.release()
+        await until { !store.trying }
+        #expect(store.tried == nil)
+        #expect(store.speeds.count(.apple, model: "apple") == 0)
+    }
+
+    @Test func changesToTheShownSettingsOrSampleRemoveACompletedTry() async {
+        let said = "hallo welt wie geht es dir"
+        let changes: [(CleanupStore, Preferences) -> String] = [
+            { store, _ in store.looking = .ollama; return said },
+            { _, preferences in preferences.setCleanupModel("second", for: .custom); return said },
+            { _, preferences in preferences.setCleanupAddress("http://127.0.0.1:10/v1", for: .custom); return said },
+            { _, preferences in preferences.chooseCleanupLevel(.polished); return said },
+            { _, preferences in preferences.cleanupPrompt = "Add punctuation."; return said },
+            { _, preferences in preferences.words = ["Syntheticword"]; return said },
+            { _, _ in "another synthetic sample" },
+        ]
+        for change in changes {
+            let store = CleanupStore(folder: nil, speedsFile: nil)
+            store.client = CleanupClient(session: CountingStub.session)
+            let preferences = Preferences(defaults: nil)
+            preferences.cleanupProvider = .custom
+            preferences.setCleanupAddress("http://127.0.0.1:9/v1", for: .custom)
+            preferences.setCleanupModel("stand-in", for: .custom)
+            preferences.chooseCleanupLevel(.custom)
+            preferences.cleanupPrompt = "Keep every word."
+            store.tryOut(said, preferences)
+            await until { !store.trying }
+            #expect(store.tried != nil)
+            // The same transition CleanupTryBox delivers through onChange.
+            store.discardStaleTry(change(store, preferences), preferences)
+            #expect(store.tried == nil && !store.trying)
+        }
+    }
+
+    @Test func invalidatingAPendingTryDoesNotLetItsLateAnswerReplaceANewTry() async {
+        let gate = Gate()
+        let store = CleanupStore(folder: nil, speedsFile: nil)
+        store.client = CleanupClient(apple: { _ in await gate.wait(); return "Hallo Welt, wie geht es dir?" })
+        let preferences = Preferences(defaults: nil)
+        preferences.cleanupProvider = .apple
+        let said = "hallo welt wie geht es dir"
+        store.tryOut(said, preferences)
+        await until { gate.isEntered }
+        preferences.chooseCleanupLevel(.polished)
+        store.discardStaleTry(said, preferences)
+        #expect(!store.trying && store.tried == nil)
+        store.client = CleanupClient(apple: { _ in "Hallo Welt, wie geht es dir?" })
+        store.tryOut(said, preferences)
+        await until { !store.trying }
+        let fresh = store.tried
+        #expect(fresh?.result.failure == nil && fresh != nil)
+        gate.release()
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(store.tried == fresh && store.speeds.count(.apple, model: "apple") == 1)
+    }
+
+    @Test func aPriceOrDiscoveryUpdateDoesNotInvalidateTheSameInput() async {
+        let store = CleanupStore(folder: nil, speedsFile: nil)
+        store.client = CleanupClient(session: CountingStub.session)
+        store.stage(installed: [.ollama: ["before"]])
+        let preferences = Preferences(defaults: nil)
+        preferences.cleanupProvider = .ollama
+        store.tryOut("hallo welt wie geht es dir", preferences)
+        await until { !store.trying }
+        let kept = store.tried
+        #expect(kept != nil)
+        store.fetchModels = { _ in Data(#"{"data":[{"id":"after"}]}"#.utf8) }
+        await store.refreshInstalled(.ollama, address: "")
+        preferences.cleanupPrompt = "Unused at the light level."
+        store.discardStaleTry("hallo welt wie geht es dir", preferences)
+        #expect(store.tried == kept && !store.trying)
+    }
+}
+
 // MARK: - MS3-02: the line under the switch
 
 @Suite(.serialized) @MainActor

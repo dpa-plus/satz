@@ -318,6 +318,30 @@ test('a Try whose call is rejected settles: the box is free again, with a line t
   assert.match(page(), /Second try/)
 })
 
+test('a provider change while the Try saves its prompt prevents the old request from starting', async () => {
+  await open({ cleanupLevel: 'custom', cleanupPrompt: 'Keep every word.' })
+  const bridge = (globalThis as unknown as { window: { satz: { invoke: (channel: string, ...args: unknown[]) => Promise<unknown> } } }).window.satz
+  const real = bridge.invoke
+  let release: (() => void) | undefined
+  bridge.invoke = (channel, ...args) => channel === 'settings:update' && (args[0] as Prefs).cleanupPrompt
+    ? new Promise(resolve => { release = () => { void real(channel, ...args).then(resolve) } })
+    : real(channel, ...args)
+  try {
+    await type('cleanup-prompt', 'Keep every word and add punctuation.')
+    await press('cleanup-try-button')
+    assert.ok(release, 'the prompt save is pending')
+    assert.equal(tries.length, 0)
+    await choose('cleanup-provider', 'groq')
+    release()
+    await settle()
+    const started = tries.length
+    for (const pending of tries) pending.resolve(answer('Old provider answer'))
+    await settle()
+    assert.equal(started, 0, 'a Try for the provider left behind must never start')
+    assert.equal(shownResult(), undefined)
+  } finally { bridge.invoke = real }
+})
+
 test('a Try whose call is rejected says so in German too, and a rejected cancel is not an unhandled rejection', async () => {
   await open({ language: 'de' })
   await press('cleanup-try-button')

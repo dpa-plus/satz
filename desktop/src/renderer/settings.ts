@@ -663,14 +663,15 @@ function dropStaleTry(draw = true) {
 
 async function runTry(text: string, provider: CleanupProviderId) {
   const mine = ++tryToken
+  const input = tryKey(text)
   try {
     await savePrompt()
     // Another click or a change of the page came first.
-    if (mine !== tryToken) return
+    if (mine !== tryToken || input !== tryKey()) return
     trying = true
     tryResult = null
     const p = info.prefs
-    tryMade = { key: tryKey(text), provider, model: chosenModel(provider, p.cleanupModels?.[provider], info.cleanup.installed?.models) }
+    tryMade = { key: input, provider, model: chosenModel(provider, p.cleanupModels?.[provider], info.cleanup.installed?.models) }
     redrawTry()
     const result = await satz.invoke('cleanup:try', text, provider) as TryResult | null
     // Cancelled, or another try started meanwhile: this one's answer is not shown.

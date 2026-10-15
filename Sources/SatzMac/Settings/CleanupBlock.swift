@@ -614,6 +614,7 @@ private struct CleanupTryBox: View {
         }
         .padding(12)
         .onAppear { if sample.isEmpty { sample = CleanupSample.text(for: preferences.spokenLanguage) } }
+        .onChange(of: store.tryInput(text, preferences)) { store.discardStaleTry(text, preferences) }
     }
 
     private var text: String { sample.isEmpty ? CleanupSample.text(for: preferences.spokenLanguage) : sample }

@@ -31,6 +31,17 @@ final class CleanupStore {
         let result: CleanupResult
     }
 
+    /// Chosen values, not discovery or prices arriving while a Try runs.
+    struct TryInput: Equatable {
+        let provider: CleanupProvider
+        let model: String
+        let address: String
+        let level: CleanupLevel
+        let prompt: String
+        let vocabulary: [String]
+        let text: String
+    }
+
     /// One server: the provider and its address as `CleanupAddress.url`
     /// reduces it ("localhost:11434/v1/" and "http://localhost:11434/v1" are
     /// the same one). nil for a provider that has no list, or an address
@@ -54,6 +65,7 @@ final class CleanupStore {
     }
 
     @ObservationIgnored private var tryTask: Task<Void, Never>?
+    @ObservationIgnored private var triedInput: TryInput?
     /// The server each provider was asked last. An answer counts only while
     /// its server is that one, and only if no later answer of the same server
     /// is in already: Settings asks again for every address typed, and the
@@ -219,19 +231,22 @@ final class CleanupStore {
     /// not be the ones in use. Again while it runs: stops it.
     func tryOut(_ text: String, _ preferences: Preferences, then done: @escaping () -> Void = {}) {
         if trying {
-            tryTask?.cancel()
-            tryTask = nil
-            trying = false
+            cancelTry()
             return
         }
         let provider = shown(preferences)
         if provider == .apple { appleState = AppleCleanup.state }
         let job = job(provider, preferences)
+        let input = tryInput(text, preferences)
+        triedInput = input
         trying = true
         tried = nil
         tryTask = Task {
             let result = await client.run(job, text: text)
             guard !Task.isCancelled else { return }
+            // A preference can change before SwiftUI delivers its onChange.
+            discardStaleTry(text, preferences)
+            guard triedInput == input else { return }
             record(job, result)
             Log.note("cleanup try: \(result.failure?.code ?? "ok") by \(provider.rawValue) \(job.model.id)\(result.seconds.map { String(format: " after %.2f s", $0) } ?? "")\(result.detail.map { ", \($0)" } ?? "")")
             tried = Tried(provider: provider, model: job.model.id, result: result)
@@ -239,6 +254,28 @@ final class CleanupStore {
             tryTask = nil
             done()
         }
+    }
+
+    func tryInput(_ text: String, _ preferences: Preferences) -> TryInput {
+        let provider = shown(preferences)
+        return TryInput(provider: provider, model: preferences.cleanupModel(for: provider),
+                        address: preferences.cleanupAddress(for: provider), level: preferences.cleanupLevel,
+                        prompt: preferences.cleanupLevel == .custom ? preferences.cleanupPrompt : "",
+                        vocabulary: preferences.words, text: text)
+    }
+
+    /// A result belongs only to the settings and sample it was made for.
+    func discardStaleTry(_ text: String, _ preferences: Preferences) {
+        guard let triedInput, triedInput != tryInput(text, preferences) else { return }
+        cancelTry()
+    }
+
+    private func cancelTry() {
+        tryTask?.cancel()
+        tryTask = nil
+        triedInput = nil
+        trying = false
+        tried = nil
     }
 
     private func record(_ job: CleanupJob, _ result: CleanupResult) {
