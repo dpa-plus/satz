@@ -89,8 +89,9 @@ public enum AppleCleanup {
             }
             let session = LanguageModelSession(transcript: Transcript(entries: entries))
             do {
+                // Keep the macOS 26 SDK spelling; macOS 27 retains it as an alias.
                 // Greedy: the same text gives the same answer every time.
-                return try await session.respond(to: last.content, options: GenerationOptions(samplingMode: .greedy)).content
+                return try await session.respond(to: last.content, options: GenerationOptions(sampling: .greedy)).content
             } catch let error as LanguageModelSession.GenerationError {
                 switch error {
                 case .guardrailViolation, .refusal: throw CleanupFailure.answerRefused
