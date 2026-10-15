@@ -1,0 +1,584 @@
+[
+  {
+    "note": "signed values swapped",
+    "input": "das minimum ist -20 und das maximum ist 20",
+    "output": "Das Minimum ist 20 und das Maximum ist -20.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "same digit order labels swapped",
+    "input": "das minimum ist -20 und das maximum ist 20",
+    "output": "Das Maximum ist -20 und das Minimum ist 20.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "same digit order people swapped",
+    "input": "anna erhält 10 euro und ben erhält 20 euro",
+    "output": "Ben erhält 10 Euro und Anna erhält 20 Euro.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "positive values swapped",
+    "input": "anna erhält 10 euro und ben erhält 20 euro",
+    "output": "Anna erhält 20 Euro und Ben erhält 10 Euro.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "number duplicated in second role",
+    "input": "anna erhält 10 euro und ben erhält 20 euro",
+    "output": "Anna erhält 10 Euro und Ben erhält 10 Euro.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "repeated numeric occurrence dropped",
+    "input": "anna erhält 10 euro und ben erhält 10 euro heute",
+    "output": "Anna erhält 10 Euro und Ben erhält Euro heute.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "numeric occurrence added",
+    "input": "anna erhält 10 euro und ben erhält 20 euro",
+    "output": "Anna erhält 10 Euro und Ben erhält 20 Euro und 10 Euro.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "units reassociated",
+    "input": "tank a enthält 10 liter und tank b enthält 20 kilogramm",
+    "output": "Tank a enthält 10 Kilogramm und Tank b enthält 20 Liter.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "currency symbols reassociated",
+    "input": "anna erhält 10 € und ben erhält 20 $",
+    "output": "Anna erhält 10 $ und Ben erhält 20 €.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "percent dropped",
+    "input": "der rabatt beträgt 20 % für den kunden",
+    "output": "Der Rabatt beträgt 20 für den Kunden.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "percent changed to permille",
+    "input": "der rabatt beträgt 20 % für den kunden",
+    "output": "Der Rabatt beträgt 20 ‰ für den Kunden.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "comparison reversed",
+    "input": "der wert ist < 20 und das limit ist > 30",
+    "output": "Der Wert ist > 20 und das Limit ist < 30.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "comparison dropped",
+    "input": "der wert ist < 20 für den kunden",
+    "output": "Der Wert ist 20 für den Kunden.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "comparison changed to equals",
+    "input": "der wert ist < 20 für den kunden",
+    "output": "Der Wert ist = 20 für den Kunden.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "arithmetic operator changed",
+    "input": "die summe lautet 3+5 für den test",
+    "output": "Die Summe lautet 3-5 für den Test.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "fraction changed to ratio",
+    "input": "wir nehmen 1/2 liter für den test",
+    "output": "Wir nehmen 1:2 Liter für den Test.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "fraction changed to division",
+    "input": "wir nehmen 1/2 liter für den test",
+    "output": "Wir nehmen 1÷2 Liter für den Test.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "degree unit dropped",
+    "input": "die temperatur beträgt 20 °C im zimmer",
+    "output": "Die Temperatur beträgt 20 C im Zimmer.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "decimal pieces swapped",
+    "input": "der betrag ist 3,5 euro und das limit ist 5,3 euro",
+    "output": "Der Betrag ist 5,3 Euro und das Limit ist 3,5 Euro.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "decimal separator dropped",
+    "input": "der betrag ist 3,5 euro für den kunden",
+    "output": "Der Betrag ist 3 5 Euro für den Kunden.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "ambiguous comma dot change",
+    "input": "das paket wiegt 1,234 kilogramm",
+    "output": "Das Paket wiegt 1.234 Kilogramm.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "spoken values swapped",
+    "input": "anna erhält zehn euro und ben erhält zwanzig euro",
+    "output": "Anna erhält zwanzig Euro und Ben erhält zehn Euro.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "spoken roles swapped during digit conversion",
+    "input": "anna erhält zehn euro und ben erhält zwanzig euro",
+    "output": "Ben erhält 10 Euro und Anna erhält 20 Euro.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "mixed digit and spoken roles swapped",
+    "input": "anna erhält 10 euro und ben erhält zwanzig euro",
+    "output": "Anna erhält 20 Euro und Ben erhält 10 Euro.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "signed spoken values swapped on conversion",
+    "input": "das minimum ist minus zwanzig und das maximum ist zwanzig",
+    "output": "Das Minimum ist 20 und das Maximum ist -20.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "numeric spelling change retained conservatively",
+    "input": "die rechung kostet 10 euro",
+    "output": "Die Rechnung kostet 10 Euro.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "vocabulary cannot mask people swapped",
+    "input": "anna erhält 10 euro und ben erhält 20 euro",
+    "output": "Ben erhält 10 Euro und Anna erhält 20 Euro.",
+    "acceptLevels": [],
+    "vocabulary": [
+      "Anna",
+      "Ben"
+    ]
+  },
+  {
+    "note": "one letter names cannot swap",
+    "input": "anna erhält 10 euro und anne erhält 20 euro",
+    "output": "Anne erhält 10 Euro und Anna erhält 20 Euro.",
+    "acceptLevels": [],
+    "vocabulary": [
+      "Anna",
+      "Anne"
+    ]
+  },
+  {
+    "note": "signed punctuation control",
+    "input": "das minimum ist -20 und das maximum ist 20",
+    "output": "Das Minimum ist -20 und das Maximum ist 20.",
+    "acceptLevels": [
+      "punctuation",
+      "light",
+      "smooth",
+      "polished"
+    ],
+    "vocabulary": []
+  },
+  {
+    "note": "exact currency control",
+    "input": "anna erhält 10 € und ben erhält 20 $",
+    "output": "Anna erhält 10 € und Ben erhält 20 $.",
+    "acceptLevels": [
+      "punctuation",
+      "light",
+      "smooth",
+      "polished"
+    ],
+    "vocabulary": []
+  },
+  {
+    "note": "percent comparison control",
+    "input": "der rabatt ist < 20 % und das limit ist > 30 %",
+    "output": "Der Rabatt ist < 20 % und das Limit ist > 30 %.",
+    "acceptLevels": [
+      "punctuation",
+      "light",
+      "smooth",
+      "polished"
+    ],
+    "vocabulary": []
+  },
+  {
+    "note": "decimal preserved control",
+    "input": "der betrag ist 3,5 euro für den kunden",
+    "output": "Der Betrag ist 3,5 Euro für den Kunden.",
+    "acceptLevels": [
+      "punctuation",
+      "light",
+      "smooth",
+      "polished"
+    ],
+    "vocabulary": []
+  },
+  {
+    "note": "fraction preserved control",
+    "input": "wir nehmen 1/2 liter für den test",
+    "output": "Wir nehmen 1/2 Liter für den Test.",
+    "acceptLevels": [
+      "punctuation",
+      "light",
+      "smooth",
+      "polished"
+    ],
+    "vocabulary": []
+  },
+  {
+    "note": "filler removed control",
+    "input": "ähm anna erhält 10 euro und ben erhält 20 euro",
+    "output": "Anna erhält 10 Euro und Ben erhält 20 Euro.",
+    "acceptLevels": [
+      "light",
+      "smooth",
+      "polished"
+    ],
+    "vocabulary": []
+  },
+  {
+    "note": "adjacent stutter removed control",
+    "input": "anna erhält erhält 10 euro",
+    "output": "Anna erhält 10 Euro.",
+    "acceptLevels": [
+      "light",
+      "smooth",
+      "polished"
+    ],
+    "vocabulary": []
+  },
+  {
+    "note": "safe grouping addition control",
+    "input": "die rechnung kostet 1000 euro für den kunden",
+    "output": "Die Rechnung kostet 1.000 Euro für den Kunden.",
+    "acceptLevels": [
+      "light",
+      "smooth",
+      "polished"
+    ],
+    "vocabulary": []
+  },
+  {
+    "note": "space grouping removal control",
+    "input": "die rechnung kostet 1 000 euro für den kunden",
+    "output": "Die Rechnung kostet 1000 Euro für den Kunden.",
+    "acceptLevels": [
+      "light",
+      "smooth",
+      "polished"
+    ],
+    "vocabulary": []
+  },
+  {
+    "note": "German words control",
+    "input": "anna erhält zehn euro und ben erhält zwanzig euro",
+    "output": "Anna erhält 10 Euro und Ben erhält 20 Euro.",
+    "acceptLevels": [
+      "light",
+      "smooth",
+      "polished"
+    ],
+    "vocabulary": []
+  },
+  {
+    "note": "English words control",
+    "input": "anna gets ten euros and ben gets twenty euros",
+    "output": "Anna gets 10 euros and Ben gets 20 euros.",
+    "acceptLevels": [
+      "light",
+      "smooth",
+      "polished"
+    ],
+    "vocabulary": []
+  },
+  {
+    "note": "signed words control",
+    "input": "das minimum ist minus zwanzig grad",
+    "output": "Das Minimum ist -20 Grad.",
+    "acceptLevels": [
+      "light",
+      "smooth",
+      "polished"
+    ],
+    "vocabulary": []
+  },
+  {
+    "note": "million control",
+    "input": "das kostet zwei millionen euro für die kunden",
+    "output": "Das kostet 2.000.000 Euro für die Kunden.",
+    "acceptLevels": [
+      "light",
+      "smooth",
+      "polished"
+    ],
+    "vocabulary": []
+  },
+  {
+    "note": "article number control",
+    "input": "ein kunde zahlt 1000 euro",
+    "output": "1 Kunde zahlt 1000 Euro.",
+    "acceptLevels": [
+      "light",
+      "smooth",
+      "polished"
+    ],
+    "vocabulary": []
+  },
+  {
+    "note": "ordinal control",
+    "input": "the third of may is a holiday for us",
+    "output": "The 3rd of May is a holiday for us.",
+    "acceptLevels": [
+      "light",
+      "smooth",
+      "polished"
+    ],
+    "vocabulary": []
+  },
+  {
+    "note": "numbered list control",
+    "input": "wir brauchen drei äpfel",
+    "output": "Wir brauchen:\n1. 3 Äpfel",
+    "acceptLevels": [
+      "light",
+      "smooth",
+      "polished"
+    ],
+    "vocabulary": []
+  },
+  {
+    "note": "umlaut formatting control",
+    "input": "ich zahle uebermorgen 10 euro",
+    "output": "Ich zahle übermorgen 10 Euro.",
+    "acceptLevels": [
+      "punctuation",
+      "light",
+      "smooth",
+      "polished"
+    ],
+    "vocabulary": []
+  },
+  {
+    "note": "ordinal suffix cannot disappear",
+    "input": "the 1st customer gets the box",
+    "output": "The 1 customer gets the box.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "ambiguous punctuation grouping removal",
+    "input": "die rechnung kostet 2,500 euro für den kunden",
+    "output": "Die Rechnung kostet 2500 Euro für den Kunden.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "micro unit cannot change",
+    "input": "die dosis beträgt 20 µg für den test",
+    "output": "Die Dosis beträgt 20 mg für den Test.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "numeric superscript cannot disappear",
+    "input": "der ausdruck lautet 5² für den test",
+    "output": "Der Ausdruck lautet 52 für den Test.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "articles alone allow prose reorder",
+    "input": "ich habe eine frage wir starten morgen",
+    "output": "Morgen starten wir. Ich habe eine Frage.",
+    "acceptLevels": [
+      "light",
+      "smooth",
+      "polished"
+    ],
+    "vocabulary": []
+  },
+  {
+    "note": "ordinal suffix conversion control",
+    "input": "the first customer gets ten boxes",
+    "output": "The 1st customer gets 10 boxes.",
+    "acceptLevels": [
+      "light",
+      "smooth",
+      "polished"
+    ],
+    "vocabulary": []
+  },
+  {
+    "note": "article currency allocation swapped",
+    "input": "anna zahlt einen euro an ben",
+    "output": "Ben zahlt einen Euro an Anna.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "article volume allocation swapped",
+    "input": "anna gibt einen liter an ben",
+    "output": "Ben gibt einen Liter an Anna.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "article time allocation swapped",
+    "input": "anna gibt eine stunde an ben",
+    "output": "Ben gibt eine Stunde an Anna.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "article currency symbol allocation swapped",
+    "input": "anna gibt einen € an ben",
+    "output": "Ben gibt einen € an Anna.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "huge signed value with million does not overflow",
+    "input": "die angabe ist -9223372036854775808 million",
+    "output": "Die Angabe ist -9223372036854775808 million.",
+    "acceptLevels": [
+      "punctuation",
+      "light",
+      "smooth",
+      "polished"
+    ],
+    "vocabulary": []
+  },
+  {
+    "note": "article prozent allocation swapped",
+    "input": "anna gibt ein prozent an ben",
+    "output": "Ben gibt ein prozent an Anna.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "article promille allocation swapped",
+    "input": "anna gibt ein promille an ben",
+    "output": "Ben gibt ein promille an Anna.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "article grad allocation swapped",
+    "input": "anna gibt ein grad an ben",
+    "output": "Ben gibt ein grad an Anna.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "article milligramm allocation swapped",
+    "input": "anna gibt ein milligramm an ben",
+    "output": "Ben gibt ein milligramm an Anna.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "article mikrogramm allocation swapped",
+    "input": "anna gibt ein mikrogramm an ben",
+    "output": "Ben gibt ein mikrogramm an Anna.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "ordinal million cannot become cardinal",
+    "input": "anna bekommt die erste million",
+    "output": "Anna bekommt die eine Million.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "ordinal million preserved control",
+    "input": "anna bekommt die erste million",
+    "output": "Anna bekommt die erste Million.",
+    "acceptLevels": [
+      "punctuation",
+      "light",
+      "smooth",
+      "polished"
+    ],
+    "vocabulary": []
+  },
+  {
+    "note": "leading zero identities cannot swap roles",
+    "input": "die kennung ist 007 und der zielwert ist 7",
+    "output": "Die Kennung ist 7 und der Zielwert ist 007.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "recognized article million recipient cannot change",
+    "input": "anna zahlt eine million euro an ben",
+    "output": "Ben zahlt eine Million Euro an Anna.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "recognized article million conversion control",
+    "input": "anna zahlt eine million euro an ben",
+    "output": "Anna zahlt 1.000.000 Euro an Ben.",
+    "acceptLevels": [
+      "light",
+      "smooth",
+      "polished"
+    ],
+    "vocabulary": []
+  },
+  {
+    "note": "explicit signed article recipient cannot change",
+    "input": "anna sagt minus eine zu ben",
+    "output": "Ben sagt minus eine zu Anna.",
+    "acceptLevels": [],
+    "vocabulary": []
+  },
+  {
+    "note": "explicit signed article conversion control",
+    "input": "anna sagt plus eine zu ben",
+    "output": "Anna sagt +1 zu Ben.",
+    "acceptLevels": [
+      "light",
+      "smooth",
+      "polished"
+    ],
+    "vocabulary": []
+  }
+]

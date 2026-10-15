@@ -192,14 +192,14 @@ private let meaningChanged: [(said: String, answer: String, why: String)] = [
         #expect(!accepts("Ich will 15 Euro für das Essen heute Abend, danke.", "ich will 5 euro für das essen heute abend danke", level))
         #expect(!accepts("Die Nummer ist 12345679 und gilt nur heute, danke.", "die nummer ist 12345678 und gilt nur heute danke", level))
         #expect(!accepts("Es kostet 9.000 Euro im Monat, danke.", "es kostet 1000 euro im monat danke", level))
-        // The same digits are fine, wherever the separators stand.
+        // Existing decimal punctuation stays; punctuation must not infer a time.
         #expect(accepts("Wir brauchen noch 3,5 Stunden für das Projekt.", "wir brauchen noch 3,5 stunden für das projekt", level))
-        #expect(accepts("Es ist 10:30 Uhr, danke.", "es ist 10 30 uhr danke", level))
+        #expect(!accepts("Es ist 10:30 Uhr, danke.", "es ist 10 30 uhr danke", level))
     }
 
     @Test(arguments: [CleanupLevel.light, .smooth, .polished])
-    func aNumberMayDisappearWhenTheSpeakerCorrectsHerself(level: CleanupLevel) {
-        #expect(accepts("Wir treffen uns heute um 4 im Büro.", "wir treffen uns heute um 3 nein um 4 im büro", level))
+    func aNumericSelfCorrectionKeepsTheOriginal(level: CleanupLevel) {
+        #expect(!accepts("Wir treffen uns heute um 4 im Büro.", "wir treffen uns heute um 3 nein um 4 im büro", level))
     }
 
     @Test func digitsInAnyScriptCount() {
@@ -226,7 +226,7 @@ private let meaningChanged: [(said: String, answer: String, why: String)] = [
     @Test(arguments: [CleanupLevel.light, .smooth, .polished])
     func oneThousandIsOneThousandInEitherDirection(level: CleanupLevel) {
         #expect(accepts("Die Summe ist 1.000 Euro für die Rechnung, danke.", "die summe ist 1000 euro für die rechnung danke", level))
-        #expect(accepts("Die Summe ist 2500 Euro für die Rechnung, danke.", "die summe ist 2,500 euro für die rechnung danke", level))
+        #expect(!accepts("Die Summe ist 2500 Euro für die Rechnung, danke.", "die summe ist 2,500 euro für die rechnung danke", level))
         #expect(accepts("Es kostet 1.000.000 Euro im Monat, danke.", "es kostet 1 000 000 euro im monat danke", level))
         // Another number, or one group more, is still another number.
         #expect(!accepts("Die Summe ist 9.000 Euro für die Rechnung, danke.", "die summe ist 1000 euro für die rechnung danke", level))
@@ -443,9 +443,9 @@ private let meaningChanged: [(said: String, answer: String, why: String)] = [
         #expect(!accepts("Wir brauchen 3 Exemplare für 4 Kunden.", said, .light))
         // The same number twice is two places.
         #expect(!accepts("Wir brauchen 3 Exemplare für 3 Kunden.", said, .light))
-        // Two number words, two numbers, in either order; the same value twice needs it said twice.
+        // Each number word is used once, in order, with its surrounding context.
         #expect(accepts("Um 3 oder 4 Uhr.", "um drei oder vier uhr", .polished))
-        #expect(accepts("Um 4 oder 3 Uhr.", "um drei oder vier uhr", .polished))
+        #expect(!accepts("Um 4 oder 3 Uhr.", "um drei oder vier uhr", .polished))
         #expect(!accepts("Um 3 oder 3 Uhr.", "um drei oder vier uhr", .polished))
         #expect(!accepts("Um 3 oder 5 Uhr.", "um drei oder vier uhr", .polished))
         #expect(!accepts("Um 3, 4 oder 5 Uhr.", "um drei oder vier uhr", .polished))
@@ -844,10 +844,10 @@ private let meaningChanged: [(said: String, answer: String, why: String)] = [
         #expect(accepts("1000 Euro.", "1000 euro", .light))
         #expect(accepts("1.000 Euro", "1000 euro", .light))
         // "1.000" is "1" and "000" to the words, and one number to the digits.
-        #expect(accepts("1000", "1.000", .light))
+        #expect(!accepts("1000", "1.000", .light))
         #expect(!accepts("Euro.", "1.000", .light))
         // Two numbers said, one left.
-        #expect(accepts("3, 4", "drei vier", .light))
+        #expect(!accepts("3, 4", "drei vier", .light))
         #expect(!accepts("3", "drei vier", .light))
         #expect(!accepts("Drei.", "drei vier", .light))
         // A million is its own number, and the "zwei" in front of it is part of it.

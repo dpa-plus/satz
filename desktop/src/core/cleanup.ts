@@ -302,9 +302,14 @@ function signBefore(characters: string[], start: number): string {
  * not a number, and is left out.
  */
 export function numberRuns(text: string, listMarkers = false): string[] {
+  return numberSpans(text, listMarkers).filter(span => !span.marker).map(span => span.value)
+}
+
+interface NumberSpan { start: number; digits: number; end: number; value: string; marker: boolean }
+function numberSpans(text: string, listMarkers: boolean): NumberSpan[] {
   // Lowercase, for the words "minus" and "plus" (digits have no case).
   const characters = Array.from(lowered(text))
-  const result: string[] = []
+  const result: NumberSpan[] = []
   // Nothing but spaces and tabs since the line began.
   let atLineStart = true
   let i = 0
@@ -318,6 +323,12 @@ export function numberRuns(text: string, listMarkers = false): string[] {
     }
     const startsLine = atLineStart
     atLineStart = false
+    const digits = i
+    let start = i
+    let at = i - 1
+    if (at >= 0 && signGaps.has(characters[at])) at--
+    if (at >= 0 && (minusSigns.has(characters[at]) || characters[at] === '+') &&
+        !(at > 0 && isWordCharacter(characters[at - 1]))) start = at
     let number = signBefore(characters, i)
     while (i < characters.length && isDigit(characters[i])) number += characters[i++]
     // A separator and exactly three digits: a group of the same number.
@@ -330,7 +341,7 @@ export function numberRuns(text: string, listMarkers = false): string[] {
       i += 4
     }
     const marker = listMarkers && startsLine && i < characters.length && (characters[i] === '.' || characters[i] === ')')
-    if (!marker) result.push(number)
+    result.push({ start, digits, end: i, value: number, marker })
   }
   return result
 }
@@ -558,6 +569,94 @@ export function keepsSigns(original: string, answer: string): boolean {
 }
 
 /**
+ * Numeric context stays in place, including names, units and repeated values.
+ * A set of numbers cannot see Anna/Ben swapping allocations. Larger edits of
+ * a numeric sentence therefore fall back to the original; Custom opts out.
+ */
+interface NumericToken { kind: 'word' | 'number' | 'symbol' | 'separator'; value: string; format?: string; ordinal?: boolean; literal?: string }
+
+function numericContext(text: string, answer: boolean, flexible: boolean): NumericToken[] {
+  const scalars = Array.from(lowered(text))
+  const parts: NumericToken[] = []
+  const appendWords = (chunk: string) => {
+    const characters = Array.from(chunk)
+    const plain = foldUmlauts(characters.filter((character, i) =>
+      !(wordApostrophes.has(character) && i > 0 && i + 1 < characters.length &&
+        isWordCharacter(characters[i - 1]) && isWordCharacter(characters[i + 1]))).join(''))
+    for (const match of plain.matchAll(/[\p{L}\p{N}]+|[^\s]/gu)) {
+      const value = match[0]
+      if (/^[\p{L}\p{N}]+$/u.test(value)) parts.push({ kind: 'word', value })
+      else if ('.,:'.includes(value)) parts.push({ kind: 'separator', value })
+      else if (/\p{S}/u.test(value) || '%‰‱°/\^*+-−–'.includes(value)) {
+        parts.push({ kind: 'symbol', value: minusSigns.has(value) ? '-' : value })
+      }
+    }
+  }
+  let end = 0
+  for (const span of numberSpans(text, answer)) {
+    appendWords(scalars.slice(end, span.start).join(''))
+    end = span.end
+    if (span.marker) continue
+    const suffix = /^(st|nd|rd|th)(?![\p{L}\p{N}])/u.exec(scalars.slice(end).join(''))
+    if (suffix) end += suffix[0].length
+    const ordinal = suffix !== null || /^\.\s+[\p{L}]/u.test(scalars.slice(end).join(''))
+    const raw = scalars.slice(span.digits, span.end).join('')
+    parts.push({ kind: 'number', value: plainValue(span.value) ?? span.value,
+      format: /[.,]/.test(raw) ? raw : undefined, ordinal, literal: span.value })
+  }
+  appendWords(scalars.slice(end).join(''))
+
+  const converted: NumericToken[] = []
+  for (const part of parts) {
+    const value = part.kind === 'word' ? numberWordValue(part.value) : undefined
+    let token: NumericToken = value === undefined ? part : { kind: 'number', value: String(value),
+      ordinal: englishOrdinals.has(part.value) || germanOrdinal(part.value) !== undefined }
+    const previous = converted[converted.length - 1]
+    if (token.kind === 'number' && previous?.kind === 'word' && (previous.value === 'minus' || previous.value === 'plus')) {
+      converted.pop()
+      token = { ...token, value: (previous.value === 'minus' ? '-' : '+') + unsigned(token.value) }
+    }
+    if (token.kind === 'word' && (token.value === 'million' || token.value === 'millionen') && previous?.kind === 'number' && !previous.ordinal) {
+      const times = Number(previous.value)
+      if (Number.isInteger(times) && Math.abs(times) >= 1 && Math.abs(times) <= 999) {
+        converted.pop()
+        token = { kind: 'number', value: signOf(previous.value) + String(Math.abs(times) * 1_000_000) }
+      }
+    }
+    converted.push(token)
+  }
+  const foldedFillers = new Set([...fillers].map(foldUmlauts))
+  const kept = converted.filter((part, i) => {
+    if (part.kind === 'separator') return converted[i - 1]?.kind === 'number' && converted[i + 1]?.kind === 'number'
+    return !(flexible && part.kind === 'word' && foldedFillers.has(part.value) && part.value !== 'um')
+  })
+  return kept.filter((part, i) => !(flexible && part.kind === 'word' &&
+    kept[i - 1]?.kind === 'word' && kept[i - 1].value === part.value))
+}
+
+function keepsNumericContext(original: string, answer: string, flexible: boolean): boolean {
+  // German articles alone are prose, not a reason to restrict smoothing.
+  const articles = new Set(['ein', 'eine', 'einen', 'einem', 'einer'])
+  const units = new Set('euro euros eur dollar dollars usd pfund franken sekunde sekunden minute minuten stunde stunden tag tage tagen woche wochen monat monate monaten jahr jahre jahren meter metern kilometer kilometern zentimeter millimeter liter litern milliliter gramm gramme grammen kilogramm tonne tonnen m cm mm km g kg mg µg μg l ml s min h second seconds hour hours day days week weeks month months year years pound pounds ounce ounces liter liters litre litres milliliter milliliters gram grams kilogram kilograms ton tons prozent prozente prozenten promille grad grade graden celsius fahrenheit milligramm milligramme milligrammen mikrogramm mikrogramme mikrogrammen percent percentage permille degree degrees milligram milligrams microgram micrograms'.split(' '))
+  const numeric = (text: string) => {
+    const list = words(text).map(foldUmlauts)
+    return numberRuns(text).length > 0 ||
+      numberWords(list).some(entry => entry.sign !== '' || !articles.has(list[entry.position])) ||
+      list.some((word, i) => articles.has(word) && units.has(list[i + 1])) ||
+      /\b(?:ein|eine|einen|einem|einer)\s*[\p{Sc}%‰‱°]/u.test(lowered(text))
+  }
+  if (!numeric(original) && !numeric(answer)) return true
+  const said = numericContext(original, false, flexible), out = numericContext(answer, true, flexible)
+  if (![...said, ...out].some(part => part.kind === 'number')) return true
+  return said.length === out.length && said.every((part, i) => {
+    const kept = out[i]
+    return part.kind === kept.kind && part.value === kept.value && (part.ordinal === true) === (kept.ordinal === true) &&
+      (part.format === undefined || part.format === kept.format) &&
+      (part.literal === undefined || kept.literal === undefined || part.literal === kept.literal)
+  })
+}
+
+/**
  * A dictation of a word or two keeps every word it had (v4, Codex R4): "nein
  * danke" became "Danke." and the denial was gone, every word of the answer
  * being one that was said. A word is still there when the answer has it, or
@@ -709,7 +808,8 @@ export function guard(original: string, answer: string, level: CleanupLevel, voc
   if (level === 'custom') return true
   // Whatever the preset: no number that was not said (a number word only as the
   // number it is, a sign with its number), no negation lost or added.
-  if (!keepsNumbers(original, answer) || !keepsNegations(original, answer)) return false
+  if (!keepsNumbers(original, answer) || !keepsNegations(original, answer) ||
+      !keepsNumericContext(original, answer, level !== 'punctuation')) return false
   // The words never see a "-" (they are letters and digits), so the signs are
   // held to the same places on their own.
   if (level === 'punctuation') return keepsSigns(original, answer) && sameWordsInOrder(strictWords(original), strictWords(answer), new Set(vocabulary.flatMap(strictWords)))

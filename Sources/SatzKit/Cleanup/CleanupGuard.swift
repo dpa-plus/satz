@@ -60,7 +60,8 @@ public enum CleanupGuard {
         // Whatever the preset: no number that was not said (a number word only
         // as the number it is, a sign with its number), no negation lost or
         // added.
-        guard keepsNumbers(original, answer), keepsNegations(original, answer) else { return false }
+        guard keepsNumbers(original, answer), keepsNegations(original, answer),
+              keepsNumericContext(original, answer, flexible: level != .punctuation) else { return false }
         // "Every word stays": the same words in the same places, so no word
         // added, dropped, merged, moved or said fewer times. Only a spelling
         // fix may differ, or a word of the vocabulary. The words never see a
@@ -236,9 +237,19 @@ public enum CleanupGuard {
     /// directly followed by "." or ")" is a list marker ("1. Milch"), not a
     /// number, and is left out.
     static func numberRuns(_ text: String, dropListMarkers: Bool = false) -> [Word] {
+        numberSpans(text, dropListMarkers: dropListMarkers).filter { !$0.marker }.map(\.value)
+    }
+
+    private struct NumberSpan {
+        let start: Int, digits: Int, end: Int
+        let value: Word
+        let marker: Bool
+    }
+
+    private static func numberSpans(_ text: String, dropListMarkers: Bool) -> [NumberSpan] {
         // Lowercase, for the words "minus" and "plus" (digits have no case).
         let scalars = Array(lowered(text).unicodeScalars)
-        var result: [Word] = []
+        var result: [NumberSpan] = []
         // Nothing but spaces and tabs since the line began.
         var atLineStart = true
         var i = 0
@@ -255,6 +266,11 @@ public enum CleanupGuard {
             }
             let startsLine = atLineStart
             atLineStart = false
+            let digits = i
+            var start = i, at = i - 1
+            if at >= 0, signGaps.contains(scalars[at]) { at -= 1 }
+            if at >= 0, minusSigns.contains(scalars[at]) || scalars[at] == "+",
+               !(at > 0 && isWordScalar(scalars[at - 1])) { start = at }
             var number: Word = signBefore(scalars, digitsAt: i).map { [$0] } ?? []
             while i < scalars.count, isDigitScalar(scalars[i]) { number.append(scalars[i]); i += 1 }
             // A separator and exactly three digits: a group of the same number.
@@ -265,7 +281,7 @@ public enum CleanupGuard {
                 i += 4
             }
             let marker = dropListMarkers && startsLine && i < scalars.count && (scalars[i] == "." || scalars[i] == ")")
-            if !marker { result.append(number) }
+            result.append(NumberSpan(start: start, digits: digits, end: i, value: number, marker: marker))
         }
         return result
     }
@@ -503,6 +519,120 @@ public enum CleanupGuard {
     static func keepsSigns(_ original: String, _ answer: String) -> Bool {
         let said = numberRuns(original).map(signOf), kept = numberRuns(answer).map(signOf)
         return said.count != kept.count || said == kept
+    }
+
+    /// A set of numbers cannot see Anna/Ben swapping allocations. Keep the
+    /// surrounding words, units and numeric occurrences in place; larger edits
+    /// of a numeric sentence safely fall back to the original. Custom opts out.
+    private struct NumericToken {
+        enum Kind { case word, number, symbol, separator }
+        var kind: Kind
+        var value: String
+        var format: String?
+        var ordinal = false
+        var literal: String?
+    }
+
+    private static func numericContext(_ text: String, answer: Bool, flexible: Bool) -> [NumericToken] {
+        let scalars = Array(lowered(text).unicodeScalars)
+        var parts: [NumericToken] = []
+        func appendWords(_ chunk: Word) {
+            let plain = folded(chunk.enumerated().filter { index, scalar in
+                !(wordApostrophes.contains(scalar) && index > 0 && index + 1 < chunk.count
+                  && isWordScalar(chunk[index - 1]) && isWordScalar(chunk[index + 1]))
+            }.map(\.element))
+            var current: Word = []
+            func flush() {
+                if !current.isEmpty {
+                    parts.append(NumericToken(kind: .word, value: String(String.UnicodeScalarView(current))))
+                    current = []
+                }
+            }
+            for scalar in plain {
+                if isWordScalar(scalar) { current.append(scalar); continue }
+                flush()
+                if [".", ",", ":"].contains(scalar) {
+                    parts.append(NumericToken(kind: .separator, value: String(scalar)))
+                } else {
+                    let symbol: Bool
+                    switch scalar.properties.generalCategory {
+                    case .mathSymbol, .currencySymbol, .modifierSymbol, .otherSymbol: symbol = true
+                    default: symbol = #"%‰‱°/\^*+-−–"#.unicodeScalars.contains(scalar)
+                    }
+                    if symbol { parts.append(NumericToken(kind: .symbol, value: minusSigns.contains(scalar) ? "-" : String(scalar))) }
+                }
+            }
+            flush()
+        }
+        var end = 0
+        for span in numberSpans(text, dropListMarkers: answer) {
+            appendWords(Array(scalars[end ..< span.start]))
+            end = span.end
+            if span.marker { continue }
+            let tail = String(String.UnicodeScalarView(scalars[end...]))
+            let suffix = tail.range(of: #"^(st|nd|rd|th)(?![\p{L}\p{N}])"#, options: .regularExpression)
+            if let suffix { end += tail[suffix].unicodeScalars.count }
+            let remaining = String(String.UnicodeScalarView(scalars[end...]))
+            let ordinal = suffix != nil || remaining.range(of: #"^\.\s+[\p{L}]"#, options: .regularExpression) != nil
+            let raw = String(String.UnicodeScalarView(scalars[span.digits ..< span.end]))
+            parts.append(NumericToken(kind: .number, value: plainValue(span.value) ?? String(String.UnicodeScalarView(span.value)),
+                                      format: raw.contains(".") || raw.contains(",") ? raw : nil, ordinal: ordinal,
+                                      literal: String(String.UnicodeScalarView(span.value))))
+        }
+        appendWords(Array(scalars[end...]))
+        var converted: [NumericToken] = []
+        for part in parts {
+            let word = Array(part.value.unicodeScalars)
+            let value = part.kind == .word ? numberWordValue(word) : nil
+            var token = value.map { NumericToken(kind: .number, value: String($0),
+                                                ordinal: englishOrdinals[word] != nil || germanOrdinal(word) != nil) } ?? part
+            let previous = converted.last
+            if token.kind == .number, let previous, previous.kind == .word, ["minus", "plus"].contains(previous.value) {
+                converted.removeLast()
+                let digits = token.value.hasPrefix("-") || token.value.hasPrefix("+") ? String(token.value.dropFirst()) : token.value
+                token.value = (previous.value == "minus" ? "-" : "+") + digits
+            }
+            if token.kind == .word, ["million", "millionen"].contains(token.value), let previous, previous.kind == .number, !previous.ordinal,
+               let times = Int(previous.value), (-999 ... 999).contains(times), times != 0 {
+                converted.removeLast()
+                let sign = previous.value.hasPrefix("-") ? "-" : previous.value.hasPrefix("+") ? "+" : ""
+                token = NumericToken(kind: .number, value: sign + String(abs(times) * 1_000_000))
+            }
+            converted.append(token)
+        }
+        let foldedFillers = Set(fillers.map { String(String.UnicodeScalarView(folded(Array($0.unicodeScalars)))) })
+        let kept = converted.enumerated().filter { index, part in
+            if part.kind == .separator {
+                return index > 0 && index + 1 < converted.count && converted[index - 1].kind == .number && converted[index + 1].kind == .number
+            }
+            return !(flexible && part.kind == .word && foldedFillers.contains(part.value) && part.value != "um")
+        }.map(\.element)
+        return kept.enumerated().filter { index, part in
+            !(flexible && part.kind == .word && index > 0 && kept[index - 1].kind == .word && kept[index - 1].value == part.value)
+        }.map(\.element)
+    }
+
+    private static func keepsNumericContext(_ original: String, _ answer: String, flexible: Bool) -> Bool {
+        // German articles alone must not restrict ordinary prose smoothing.
+        let articles: Set<Word> = Set(["ein", "eine", "einen", "einem", "einer"].map(word))
+        let units = Set("euro euros eur dollar dollars usd pfund franken sekunde sekunden minute minuten stunde stunden tag tage tagen woche wochen monat monate monaten jahr jahre jahren meter metern kilometer kilometern zentimeter millimeter liter litern milliliter gramm gramme grammen kilogramm tonne tonnen m cm mm km g kg mg µg μg l ml s min h second seconds hour hours day days week weeks month months year years pound pounds ounce ounces liter liters litre litres milliliter milliliters gram grams kilogram kilograms ton tons prozent prozente prozenten promille grad grade graden celsius fahrenheit milligramm milligramme milligrammen mikrogramm mikrogramme mikrogrammen percent percentage permille degree degrees milligram milligrams microgram micrograms".split(separator: " ").map(String.init))
+        func numeric(_ text: String) -> Bool {
+            let list = words(text).map(folded)
+            return !numberRuns(text).isEmpty || numberWords(list).contains { !$0.sign.isEmpty || !articles.contains(list[$0.position]) }
+                || list.enumerated().contains { index, word in
+                    articles.contains(word) && index + 1 < list.count
+                        && units.contains(String(String.UnicodeScalarView(list[index + 1])))
+                } || lowered(text).range(of: #"\b(?:ein|eine|einen|einem|einer)\s*[\p{Sc}%‰‱°]"#, options: .regularExpression) != nil
+        }
+        if !numeric(original), !numeric(answer) { return true }
+        let said = numericContext(original, answer: false, flexible: flexible)
+        let out = numericContext(answer, answer: true, flexible: flexible)
+        if !said.contains(where: { $0.kind == .number }), !out.contains(where: { $0.kind == .number }) { return true }
+        return said.count == out.count && zip(said, out).allSatisfy { part, kept in
+            part.kind == kept.kind && part.value == kept.value && part.ordinal == kept.ordinal
+                && (part.format == nil || part.format == kept.format)
+                && (part.literal == nil || kept.literal == nil || part.literal == kept.literal)
+        }
     }
 
     /// A dictation of a word or two keeps every word it had (v4, Codex R4):

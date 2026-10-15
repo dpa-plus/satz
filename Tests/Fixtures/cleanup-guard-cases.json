@@ -305,8 +305,8 @@
   "input": "wir treffen uns am montag nein am dienstag um drei im büro äh im großen besprechungsraum",
   "output": "Wir treffen uns am Dienstag um drei im Büro, im großen Besprechungsraum.",
   "vocabulary": [],
-  "accept": true,
-  "note": "deepseek/deepseek-v4.1-flash de-selfcorrect"
+  "accept": false,
+  "note": "deepseek/deepseek-v4.1-flash de-selfcorrect; follow-up: numeric context keeps the full correction, retain original"
  },
  {
   "level": "light",
@@ -390,16 +390,16 @@
   "input": "wir treffen uns am montag nein am dienstag um drei im büro äh im großen besprechungsraum",
   "output": "Wir treffen uns am Dienstag um drei im großen Besprechungsraum.",
   "vocabulary": [],
-  "accept": true,
-  "note": "google/gemini-3.5-flash-lite de-selfcorrect"
+  "accept": false,
+  "note": "google/gemini-3.5-flash-lite de-selfcorrect; follow-up: numeric context keeps the full correction, retain original"
  },
  {
   "level": "smooth",
   "input": "also zum stand vom projekt ähm wir haben letzte woche die erste version fertig gemacht und äh die tests laufen jetzt eigentlich auch alle durch aber es gibt noch so ein paar sachen die wir uns anschauen müssen zum beispiel das login das ist manchmal langsam und dann noch die übersetzungen die sind halt noch nicht ganz fertig und ja ich würde sagen wir können nächste woche dann mit dem kunden reden",
   "output": "Zum Stand vom Projekt: Wir haben letzte Woche die erste Version fertiggestellt, und die Tests laufen jetzt eigentlich alle durch. Es gibt aber noch ein paar Sachen, die wir uns anschauen müssen, zum Beispiel das Login, das manchmal langsam ist. Außerdem sind die Übersetzungen noch nicht ganz fertig. Ich würde sagen, wir können nächste Woche dann mit dem Kunden reden.",
   "vocabulary": [],
-  "accept": true,
-  "note": "anthropic/claude-haiku-5.5 de-long"
+  "accept": false,
+  "note": "anthropic/claude-haiku-5.5 de-long; follow-up: ordinal context keeps surrounding wording, retain original"
  },
  {
   "level": "smooth",
@@ -475,16 +475,16 @@
   "input": "wir treffen uns am montag nein am dienstag um drei im büro äh im großen besprechungsraum",
   "output": "Wir treffen uns am Dienstag um drei im Büro, äh, im großen Besprechungsraum.",
   "vocabulary": [],
-  "accept": true,
-  "note": "openai/gpt-5.6-luna de-selfcorrect"
+  "accept": false,
+  "note": "openai/gpt-5.6-luna de-selfcorrect; follow-up: numeric context keeps the full correction, retain original"
  },
  {
   "level": "polished",
   "input": "also zum stand vom projekt ähm wir haben letzte woche die erste version fertig gemacht und äh die tests laufen jetzt eigentlich auch alle durch aber es gibt noch so ein paar sachen die wir uns anschauen müssen zum beispiel das login das ist manchmal langsam und dann noch die übersetzungen die sind halt noch nicht ganz fertig und ja ich würde sagen wir können nächste woche dann mit dem kunden reden",
   "output": "Zum Stand des Projekts: Wir haben letzte Woche die erste Version fertig gemacht, und die Tests laufen jetzt eigentlich auch alle durch. Es gibt noch ein paar Sachen, die wir uns anschauen müssen, zum Beispiel das Login. Das ist manchmal langsam. Dann noch die Übersetzungen, die sind halt noch nicht ganz fertig. Und ja, ich würde sagen, wir können nächste Woche mit dem Kunden reden.",
   "vocabulary": [],
-  "accept": true,
-  "note": "openai/gpt-5.6-luna de-long"
+  "accept": false,
+  "note": "openai/gpt-5.6-luna de-long; follow-up: ordinal context keeps surrounding wording, retain original"
  },
  {
   "level": "polished",
@@ -712,8 +712,8 @@
   "input": "wir treffen uns um 3 nein um 4",
   "output": "Wir treffen uns um 4.",
   "vocabulary": [],
-  "accept": true,
-  "note": "Codex CC-2: self-correction: the 3 may go, the 4 was said"
+  "accept": false,
+  "note": "Codex CC-2: self-correction: the 3 may go, the 4 was said; follow-up: numeric occurrences stay, including corrections, retain original"
  },
  {
   "level": "light",
@@ -824,8 +824,8 @@
   "input": "wir treffen uns um 3 nein um 4",
   "output": "Wir treffen uns um 4.",
   "vocabulary": [],
-  "accept": true,
-  "note": "Codex CC-2: self-correction: the 3 may go, the 4 was said"
+  "accept": false,
+  "note": "Codex CC-2: self-correction: the 3 may go, the 4 was said; follow-up: numeric occurrences stay, including corrections, retain original"
  },
  {
   "level": "polished",
@@ -1008,8 +1008,8 @@
   "input": "the price is 2,500 dollars for the whole thing",
   "output": "The price is 2500 dollars for the whole thing.",
   "vocabulary": [],
-  "accept": true,
-  "note": "Codex CC-2 v3: the separator may go as well"
+  "accept": false,
+  "note": "Codex CC-2 v3: the separator may go as well; follow-up: source comma grouping is ambiguous, retain original"
  },
  {
   "level": "light",
@@ -1529,8 +1529,8 @@
   "input": "um drei oder vier uhr",
   "output": "Um 4 oder 3 Uhr.",
   "vocabulary": [],
-  "accept": true,
-  "note": "Codex CC-2 v3.1: two number words, two numbers, in either order"
+  "accept": false,
+  "note": "Codex CC-2 v3.1: two number words, two numbers, in either order; follow-up: numeric order stays, retain original"
  },
  {
   "level": "polished",
@@ -2707,8 +2707,8 @@
   "input": "drei vier",
   "output": "3, 4",
   "vocabulary": [],
-  "accept": true,
-  "note": "Codex R4 v4: both numbers said in words, both in digits"
+  "accept": false,
+  "note": "Codex R4 v4: both numbers said in words, both in digits; follow-up: comma addition between quantities is ambiguous, retain original"
  },
  {
   "level": "light",
