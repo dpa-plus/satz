@@ -15,6 +15,7 @@ struct HistoryView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+            HistoryStorageWarning(history: history)
             if !history.entries.isEmpty { search }
 
             if history.limit == 0 && history.entries.isEmpty {
@@ -133,7 +134,10 @@ struct HistoryView: View {
     }
 
     private var keeping: String {
-        switch history.limit {
+        if history.storageFailure != nil {
+            return de("Dieser Verlauf ist nur für diese Sitzung aktuell.", en: "This history is current for this session only.")
+        }
+        return switch history.limit {
         case History.keepAll: de("Alles wird behalten. Ändern in den Einstellungen.", en: "Everything is kept. Change it in Settings.")
         default: de("Die letzten \(history.limit) werden behalten. Ändern in den Einstellungen.", en: "The last \(history.limit) are kept. Change it in Settings.")
         }

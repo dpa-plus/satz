@@ -22,14 +22,17 @@ struct MacHistoryDeliveryTests {
         session.press()
         for _ in 0..<100 where delivered.isEmpty { try? await Task.sleep(for: .milliseconds(10)) }
         #expect(delivered == ["Synthetic delivered words."])
-        #expect(session.phase == .idle)
+        if case .failed(_, let canRetry) = session.phase { #expect(!canRetry) }
+        else { Issue.record("The completed paste did not show its history warning") }
         #expect(history.entries.first?.text == "Synthetic delivered words.")
         #expect(discarded.last == nil)
         session.retry()
         await Task.yield()
         #expect(delivered == ["Synthetic delivered words."])
         // The failed write must not leave a temporary transcript behind.
-        #expect(!FileManager.default.fileExists(atPath: folder.appendingPathComponent(".history.json.new").path))
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folder.path).filter {
+            $0.hasPrefix(".history.json.") && $0.hasSuffix(".new")
+        }.isEmpty)
     }
 
     @Test func aWorkingHistorySaveSurvivesANewInstance() throws {

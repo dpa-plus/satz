@@ -480,14 +480,14 @@ private func clip(_ name: String, seconds: Double, tone: Bool = true) -> URL {
 @MainActor
 private final class Dictation {
     let preferences = Preferences(defaults: nil)
-    let history = History()
+    let history: History
     let discarded = Discarded()
     let session: Session
     var delivered: [String] = []
 
     /// - Parameter clips: what the microphone plays, one per recording.
     init(clips: [URL], mode: TriggerMode = .tap, model: String = "m", address: String = "https://provider.test/v1",
-         script: [(TimeInterval, Int, String)] = []) {
+         script: [(TimeInterval, Int, String)] = [], historyFile: URL? = nil) {
         _ = NSApplication.shared
         // Never the real keys.
         Secrets.directory = audioFolder.appendingPathComponent("keys", isDirectory: true)
@@ -499,6 +499,7 @@ private final class Dictation {
         preferences.triggerMode = mode
         preferences.usesReplacements = false
         AudioSources.testFiles = clips
+        history = History(file: historyFile)
         session = Session(preferences: preferences, history: history, discarded: discarded)
         session.takesEscape = false
         session.deliverOverride = { [unowned self] text in delivered.append(text) }
@@ -686,6 +687,31 @@ private final class FakeCleaner {
 }
 
 extension SessionTests {
+
+    @Test func aHistorySaveFailureAfterTranscriptionCannotRepeatTheInsertionOrModels() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("satz-history-transcription-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent("history.json")
+        try FileManager.default.createDirectory(at: file, withIntermediateDirectories: true)
+        let d = Dictation(clips: [clip("history-save-failure", seconds: 2)],
+                          script: [(0, 200, #"{"text":"synthetic original words"}"#)], historyFile: file)
+        d.preferences.cleansText = true
+        let cleaner = FakeCleaner { _ in CleanupResult(text: "Synthetic original words.", cleaned: "Synthetic original words.") }
+        cleaner.attach(to: d)
+        d.session.deliverOverride = nil
+        var insertions = 0
+        d.session.pasteText = { _, _, _, _, _, _ in insertions += 1; return .pasted }
+        await d.dictate()
+        #expect(await eventually(8) { d.isFailed })
+        #expect(d.failureCanRetry == false)
+        #expect(d.history.storageFailure == .saving)
+        #expect(d.history.entries.first?.original == "synthetic original words")
+        #expect(!d.session.hasRealText && d.discarded.last == nil)
+        d.session.retry()
+        await Task.yield()
+        #expect(insertions == 1 && SessionStub.requests == 1 && cleaner.given.count == 1)
+        d.session.discard()
+    }
 
     @Test func anInterruptedDeliveryKeepsAudioAndRetriesWithoutTranscribingAgain() async {
         let d = Dictation(clips: [clip("delivery-interrupted", seconds: 2)],

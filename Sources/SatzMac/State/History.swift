@@ -41,6 +41,32 @@ final class History {
         .appendingPathComponent("satz/history.json")
 
     private(set) var entries: [Entry] = []
+    enum StorageFailure: Equatable {
+        case saving
+        case deleting
+    }
+    /// The displayed entries remain usable even when their disk update fails.
+    private(set) var storageFailure: StorageFailure?
+
+    var storageWarningTitle: String? {
+        switch storageFailure {
+        case .saving: de("Verlauf nicht gespeichert", en: "History not saved")
+        case .deleting: de("Verlauf nicht gelöscht", en: "History not cleared")
+        case nil: nil
+        }
+    }
+
+    var storageWarningDetail: String? {
+        switch storageFailure {
+        case .saving:
+            de("Neue Texte und Änderungen bleiben nur bis zum Beenden in satz. Kopiere wichtige Texte vorher.",
+               en: "New text and changes are kept in satz only until you quit. Copy important text first.")
+        case .deleting:
+            de("Gespeicherte Texte konnten hier nicht gelöscht werden. Sie können beim nächsten Start wieder erscheinen.",
+               en: "Saved text could not be deleted here. It may appear again when satz next starts.")
+        case nil: nil
+        }
+    }
     @ObservationIgnored private let file: URL?
     /// How many are kept. Lowering it drops the oldest at once, from disk too.
     var limit: Int {
@@ -55,6 +81,7 @@ final class History {
            let stored = try? JSONDecoder().decode([Entry].self, from: data) {
             self.entries = Array(stored.prefix(max(limit, 0)))
         }
+        if limit <= 0 { clear() }
     }
 
     func add(_ text: String, app: String?, pasted: Bool, at date: Date = .now, original: String? = nil, cleanup: String? = nil) {
@@ -79,7 +106,22 @@ final class History {
 
     func clear() {
         entries.removeAll()
-        if let file { try? FileManager.default.removeItem(at: file) }
+        guard let file else { storageFailure = nil; return }
+        do {
+            let manager = FileManager.default
+            var directory: ObjCBool = false
+            if manager.fileExists(atPath: file.path, isDirectory: &directory), directory.boolValue {
+                // A history file is never a directory. Do not recursively
+                // delete something else that appeared at the same path.
+                throw CocoaError(.fileWriteNoPermission)
+            }
+            try manager.removeItem(at: file)
+            storageFailure = nil
+        } catch let error as CocoaError where error.code == .fileNoSuchFile {
+            storageFailure = nil
+        } catch {
+            storageFailure = .deleting
+        }
     }
 
     private func trim() {
@@ -89,16 +131,28 @@ final class History {
     }
 
     private func save() {
-        guard let file, let data = try? JSONEncoder().encode(entries) else { return }
+        guard let file else { storageFailure = nil; return }
         let manager = FileManager.default
-        try? manager.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true,
-                                     attributes: [.posixPermissions: 0o700])
         // Written beside it at 0600, so the text is never on disk with looser
         // permissions, then moved over the old file in one step: written in
         // place, an interrupted save left an empty history.
-        let temporary = file.deletingLastPathComponent().appendingPathComponent(".\(file.lastPathComponent).new")
-        try? manager.removeItem(at: temporary)
-        guard manager.createFile(atPath: temporary.path, contents: data, attributes: [.posixPermissions: 0o600]) else { return }
-        if rename(temporary.path, file.path) != 0 { try? manager.removeItem(at: temporary) }
+        let temporary = file.deletingLastPathComponent().appendingPathComponent(".\(file.lastPathComponent).\(UUID().uuidString).new")
+        defer { try? manager.removeItem(at: temporary) }
+        do {
+            let data = try JSONEncoder().encode(entries)
+            try manager.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true,
+                                        attributes: [.posixPermissions: 0o700])
+            guard manager.createFile(atPath: temporary.path, contents: data, attributes: [.posixPermissions: 0o600]) else {
+                throw CocoaError(.fileWriteUnknown)
+            }
+            guard rename(temporary.path, file.path) == 0 else {
+                throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+            }
+            storageFailure = nil
+        } catch {
+            // A failed history update must never turn a completed paste into
+            // Retry. Keep the entries usable and report disk state separately.
+            storageFailure = .saving
+        }
     }
 }

@@ -21,6 +21,7 @@ struct PopoverView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             problem
+            HistoryStorageWarning(history: history)
 
             if let latest = history.entries.first {
                 LatestCard(entry: latest, canInsert: actions.canInsert, insert: actions.insert)

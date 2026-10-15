@@ -638,7 +638,8 @@ final class Session {
             deliverOverride(output)
             // Test mode keeps its own history file, so this never reaches the user's.
             history.add(output, app: origin?.localizedName, pasted: true, original: original, cleanup: cleaned)
-            if notCleaned { tellNotCleaned() }
+            if history.storageFailure != nil { tellHistoryNotSaved() }
+            else if notCleaned { tellNotCleaned() }
             if startNext { begin() }
             return
         }
@@ -697,6 +698,8 @@ final class Session {
             phase = .clipboard
             onOpen()
             closeLater(after: .seconds(3))
+        } else if history.storageFailure != nil {
+            tellHistoryNotSaved()
         } else if cleaned != nil, cleaned != "ok" {
             tellNotCleaned()
         }
@@ -710,6 +713,15 @@ final class Session {
         phase = .notCleaned
         onOpen()
         closeLater(after: .seconds(3))
+    }
+
+    private func tellHistoryNotSaved() {
+        guard phase == .idle, let message = history.storageWarningTitle else { return }
+        // Delivery is complete and its draft has been cleared. This notice
+        // offers no Retry and can never send those words a second time.
+        phase = .failed(message, canRetry: false)
+        onOpen()
+        closeLater(after: .seconds(5))
     }
 
     // MARK: - Sending
