@@ -97,6 +97,11 @@ final class Session {
     @ObservationIgnored var onRecord: () -> Void = {}
     /// Test mode: receives the finished text instead of it being pasted.
     @ObservationIgnored var deliverOverride: ((String) -> Void)?
+    /// The external paste boundary; injected checks never send real keys.
+    @ObservationIgnored var pasteText: @MainActor (String, NSRunningApplication?, AXUIElement?, AXUIElement?, Bool, () -> Bool) -> Paster.Outcome = {
+        Paster.deliver($0, into: $1, window: $2, field: $3, keepsOnClipboard: $4, shouldPaste: $5)
+    }
+    @ObservationIgnored var cardHasKeyboard: () -> Bool = { NSApp.keyWindow != nil }
     /// Cleans up the finished text while cleanup is on; the app's runs the
     /// provider in use (`CleanupStore.clean`), tests put in their own.
     @ObservationIgnored var cleaner: (@MainActor (String) async -> CleanupResult)?
@@ -167,6 +172,14 @@ final class Session {
     }
     /// The shortcut was pressed while the last dictation was being written.
     @ObservationIgnored private var startWhenDone = false
+    /// A delivery interrupted by a newer clipboard copy can be tried again
+    /// without asking either model to rewrite the same words again.
+    private struct PendingDelivery {
+        let output: String
+        let original: String?
+        let cleanup: CleanupResult?
+    }
+    @ObservationIgnored private var pendingDelivery: PendingDelivery?
     /// Set by the app, for Escape while the menu bar panel is open.
     @ObservationIgnored var menuIsOpen: () -> Bool = { false }
     @ObservationIgnored var closeMenu: () -> Void = {}
@@ -374,6 +387,7 @@ final class Session {
     }
 
     func userDidEdit() {
+        pendingDelivery = nil
         textVersion += 1
     }
 
@@ -541,6 +555,10 @@ final class Session {
         phase = .finishing
         microphoneLost = false
         releaseEscape()
+        if let pendingDelivery {
+            deliver(pendingDelivery.output, original: pendingDelivery.original, cleanup: pendingDelivery.cleanup)
+            return
+        }
         let recorder = self.recorder
         self.recorder = nil
         let id = activeID
@@ -590,9 +608,6 @@ final class Session {
     /// Pastes `output`, the cleaned text or the original. `cleanup` is nil
     /// while cleanup is off.
     private func deliver(_ output: String, original: String? = nil, cleanup: CleanupResult? = nil) {
-        // Read before close() resets it.
-        let startNext = startWhenDone
-        defer { if startNext { begin() } }
         let window = originWindow, field = originField
         // This dictation's, or none: test mode's dump must not show an earlier one's.
         lastCleanup = cleanup.flatMap { cleanup in
@@ -603,48 +618,76 @@ final class Session {
             }
         }
         guard !output.isEmpty else {
+            let startNext = startWhenDone
             let seconds = Double(segments.values.map(\.audio.count).reduce(0, +)) / 16_000
             Log.note(String(format: "nothing heard in %.1f s of audio", seconds))
             reset()
             phase = .failed(de("Nichts gehört", en: "Nothing heard"), canRetry: false)
             closeLater(after: .seconds(3))
+            if startNext { begin() }
             return
         }
         let origin = self.origin
         // The card had the keyboard if the user clicked into its text.
-        let cardHadKeyboard = NSApp.keyWindow != nil
+        let cardHadKeyboard = cardHasKeyboard()
         let cleaned = cleanup.map { $0.outcome() }
         let notCleaned = cleanup?.failure != nil
-        // Gone before pasting, so the keyboard is back with the app it belongs to.
-        close()
         if let deliverOverride {
+            let startNext = startWhenDone
+            close()
             deliverOverride(output)
             // Test mode keeps its own history file, so this never reaches the user's.
             history.add(output, app: origin?.localizedName, pasted: true, original: original, cleanup: cleaned)
             if notCleaned { tellNotCleaned() }
+            if startNext { begin() }
             return
         }
+        // Hide the card to give the keyboard back, but keep the draft and
+        // audio until the delivery has a recoverable outcome.
+        onClose()
         guard cardHadKeyboard else {
-            paste(output, into: origin, window: window, field: field, original: original, cleanup: cleaned)
+            paste(output, into: origin, window: window, field: field, original: original, cleanup: cleanup)
             return
         }
         // The keyboard has to get back to the other app before ⌘V, or the
         // keystroke lands nowhere and the clipboard is then restored over it.
         origin?.activate()
+        let token = sessionToken
         Task {
             try? await Task.sleep(for: .milliseconds(150))
-            paste(output, into: origin, window: window, field: field, original: original, cleanup: cleaned)
+            guard token == sessionToken, phase == .finishing else { return }
+            paste(output, into: origin, window: window, field: field, original: original, cleanup: cleanup)
         }
     }
 
     private func paste(_ output: String, into origin: NSRunningApplication?, window: AXUIElement?, field: AXUIElement?,
-                       original: String? = nil, cleanup: String? = nil) {
+                       original: String? = nil, cleanup: CleanupResult? = nil) {
         // Which app is in front at the moment of ⌘V tells whether a paste
         // that did not arrive went to the wrong place or nowhere. Never the text.
         let front = NSWorkspace.shared.frontmostApplication?.localizedName ?? "?"
-        let outcome = Paster.deliver(output, into: origin, window: window, field: field, keepsOnClipboard: preferences.keepsOnClipboard)
+        let token = sessionToken
+        let outcome = pasteText(output, origin, window, field, preferences.keepsOnClipboard, {
+            token == self.sessionToken && self.phase == .finishing
+        })
+        let cleaned = cleanup.map { $0.outcome() }
+        // Paster runs the main loop while bringing the destination back. A
+        // discard or another session in that interval owns the card now.
+        guard token == sessionToken, phase == .finishing else {
+            if case .notPasted = outcome { return }
+            history.add(output, app: origin?.localizedName, pasted: outcome == .pasted, original: original, cleanup: cleaned)
+            return
+        }
+        if case .notPasted(let reason) = outcome {
+            pendingDelivery = PendingDelivery(output: output, original: original, cleanup: cleanup)
+            startWhenDone = false
+            phase = .failed(reason, canRetry: true)
+            onOpen()
+            return
+        }
+        let startNext = startWhenDone
+        close()
         Log.note("paste: \(outcome == .pasted ? "sent ⌘V" : "clipboard only") into \(origin?.localizedName ?? "?"), front was \(front), \(output.count) characters")
-        history.add(output, app: origin?.localizedName, pasted: outcome == .pasted, original: original, cleanup: cleanup)
+        history.add(output, app: origin?.localizedName, pasted: outcome == .pasted, original: original, cleanup: cleaned)
         if case .clipboardOnly(let reason) = outcome {
             Log.note(reason)
             // A new dictation started in the moment before: it stays.
@@ -654,9 +697,10 @@ final class Session {
             phase = .clipboard
             onOpen()
             closeLater(after: .seconds(3))
-        } else if cleanup != nil, cleanup != "ok" {
+        } else if cleaned != nil, cleaned != "ok" {
             tellNotCleaned()
         }
+        if startNext { begin() }
     }
 
     /// "Nicht aufgeräumt" for a moment after the paste, like the clipboard's
@@ -1013,6 +1057,7 @@ final class Session {
     }
 
     private func reset() {
+        pendingDelivery = nil
         startWhenDone = false
         microphoneLost = false
         edit { text.setAttributedString(NSAttributedString()) }

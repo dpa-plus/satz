@@ -32,6 +32,7 @@ private final class StandInField: KeyboardPlace {
     var lateBy = 0
     /// The field stops answering once ⌘V has arrived.
     var silentAfterKeys = false
+    var onEditability: (() -> Void)?
     private(set) var keys = 0
     private(set) var asked = 0
     private(set) var reads = 0
@@ -51,6 +52,7 @@ private final class StandInField: KeyboardPlace {
 
     func editability(of field: AXUIElement) -> Paster.Editability {
         asked += 1
+        onEditability?()
         return editability
     }
 
@@ -219,6 +221,40 @@ extension ClipboardTests {
         }
 
         // MARK: Never twice
+
+        @Test func aNewerClipboardBeforeTheKeystrokeIsNotPastedAsTheTranscript() {
+            let board = board(); defer { Paster.restorePendingNow(on: board); board.releaseGlobally() }
+            copyByUser("user's own copy", to: board)
+            let ours = Paster.put("[SATZ AUDIT ALPHA]", on: board)
+            // Activation and field restoration let the run loop run. A user
+            // copy in that interval belongs to the user, not this delivery.
+            copyByUser("newer user copy", to: board)
+            let place = StandInField(.editable)
+            let outcome = Paster.paste(ours, on: board, into: F.field, in: place,
+                                       keepsOnClipboard: false, settle: 0.08, keys: place.press)
+            #expect(outcome != .pasted)
+            #expect(place.keys == 0)
+            #expect(board.string(forType: .string) == "newer user copy")
+        }
+
+        @Test func aCancellationBeforeTheKeystrokeSendsNothingAndGivesBackOnlyOurLoan() {
+            for newerCopy in [false, true] {
+                let board = board(); defer { Paster.restorePendingNow(on: board); board.releaseGlobally() }
+                copyByUser("user's own copy", to: board)
+                let ours = Paster.put("[SATZ AUDIT ALPHA]", on: board)
+                var current = true
+                let place = StandInField(.editable)
+                place.onEditability = {
+                    current = false
+                    if newerCopy { copyByUser("newer user copy", to: board) }
+                }
+                let outcome = Paster.paste(ours, on: board, into: F.field, in: place,
+                                           keepsOnClipboard: false, shouldPaste: { current }, keys: place.press)
+                #expect(outcome != .pasted)
+                #expect(place.keys == 0)
+                #expect(board.string(forType: .string) == (newerCopy ? "newer user copy" : "user's own copy"))
+            }
+        }
 
         @Test func noCaseSendsTheKeystrokeTwice() {
             let cases: [StandInField] = [

@@ -20,6 +20,9 @@ enum Paster {
         case pasted
         /// On the clipboard but not inserted, with a reason to show the user.
         case clipboardOnly(String)
+        /// Not inserted, and the transcript is not the clipboard fallback.
+        /// The caller keeps it for another try, unless already cancelled.
+        case notPasted(String)
     }
 
     /// - Parameters:
@@ -33,23 +36,24 @@ enum Paster {
     ///     started; brought back first if the user went to another window of
     ///     the same app meanwhile.
     static func deliver(_ text: String, into origin: NSRunningApplication?, window: AXUIElement? = nil, field: AXUIElement? = nil,
-                        keepsOnClipboard: Bool = false) -> Outcome {
+                        keepsOnClipboard: Bool = false, shouldPaste: () -> Bool = { true }) -> Outcome {
         guard !text.isEmpty else { return .pasted }
+        guard shouldPaste() else { return .notPasted(de("Abgebrochen", en: "Cancelled")) }
 
         let pasteboard = NSPasteboard.general
         let ours = put(text, on: pasteboard)
 
         if let blocker = whatIsBlockingPaste() {
             // Leave the transcript on the clipboard: it is the fallback.
-            return abandon(ours, .clipboardOnly(blocker))
+            return abandon(ours, .clipboardOnly(blocker), on: pasteboard)
         }
         // Started while satz itself was in front (its settings, say): ⌘V
         // would go to satz, and with no field there the text went nowhere.
         guard let origin else {
-            return abandon(ours, .clipboardOnly(de("Auf der Zwischenablage.", en: "On the clipboard.")))
+            return abandon(ours, .clipboardOnly(de("Auf der Zwischenablage.", en: "On the clipboard.")), on: pasteboard)
         }
         guard !origin.isTerminated else {
-            return abandon(ours, .clipboardOnly(de("Auf der Zwischenablage, die App wurde beendet.", en: "On the clipboard, the app was closed.")))
+            return abandon(ours, .clipboardOnly(de("Auf der Zwischenablage, die App wurde beendet.", en: "On the clipboard, the app was closed.")), on: pasteboard)
         }
 
         if IsSecureEventInputEnabled() { Log.note("paste: Secure Input is on (held by \(secureInputHolder())), sending ⌘V anyway") }
@@ -57,18 +61,23 @@ enum Paster {
         // left open at the end of a dictation): ⌘V went to the menu.
         closeMenus()
         waitUntil(timeout: 0.2) { NSApp.keyWindow == nil }
-        guard bringForward(origin) else {
-            return abandon(ours, .clipboardOnly(de("Auf der Zwischenablage, die App ließ sich nicht aktivieren.", en: "On the clipboard, the app could not be brought forward.")))
+        guard shouldPaste() else { return cancel(ours, on: pasteboard) }
+        let activated = bringForward(origin)
+        guard shouldPaste() else { return cancel(ours, on: pasteboard) }
+        guard activated else {
+            return abandon(ours, .clipboardOnly(de("Auf der Zwischenablage, die App ließ sich nicht aktivieren.", en: "On the clipboard, the app could not be brought forward.")), on: pasteboard)
         }
         let keyboard = AppKeyboard(origin)
-        switch restoreKeyboard(window: window, field: field, in: keyboard) {
+        let restoration = restoreKeyboard(window: window, field: field, in: keyboard)
+        guard shouldPaste() else { return cancel(ours, on: pasteboard) }
+        switch restoration {
         case .restored: break
         case .windowGone:
-            return abandon(ours, .clipboardOnly(de("Auf der Zwischenablage, das Fenster ist nicht mehr da.", en: "On the clipboard, the window is gone.")))
+            return abandon(ours, .clipboardOnly(de("Auf der Zwischenablage, das Fenster ist nicht mehr da.", en: "On the clipboard, the window is gone.")), on: pasteboard)
         case .fieldRefused:
-            return abandon(ours, .clipboardOnly(de("Auf der Zwischenablage, das Textfeld ließ sich nicht mehr auswählen.", en: "On the clipboard, the text field could not be selected again.")))
+            return abandon(ours, .clipboardOnly(de("Auf der Zwischenablage, das Textfeld ließ sich nicht mehr auswählen.", en: "On the clipboard, the text field could not be selected again.")), on: pasteboard)
         }
-        return paste(ours, on: pasteboard, into: field, in: keyboard, keepsOnClipboard: keepsOnClipboard, keys: sendCommandV)
+        return paste(ours, on: pasteboard, into: field, in: keyboard, keepsOnClipboard: keepsOnClipboard, shouldPaste: shouldPaste, keys: sendCommandV)
     }
 
     // MARK: - Whether the field took it
@@ -127,20 +136,28 @@ enum Paster {
     /// wait took for a refusal and left the transcript over the clipboard.
     /// The handback's own second only starts after it.
     static func paste(_ ours: Int, on pasteboard: NSPasteboard, into field: AXUIElement?, in keyboard: some KeyboardPlace,
-                      keepsOnClipboard: Bool, settle: TimeInterval = 1.0, keys: () -> Void) -> Outcome {
+                      keepsOnClipboard: Bool, settle: TimeInterval = 1.0, shouldPaste: () -> Bool = { true }, keys: () -> Void) -> Outcome {
         let editability = field.map { keyboard.editability(of: $0) } ?? .unknown
+        guard shouldPaste() else { return cancel(ours, on: pasteboard) }
         if editability == .disabled {
-            return abandon(ours, .clipboardOnly(de("Auf der Zwischenablage, das Textfeld nimmt gerade keinen Text an.", en: "On the clipboard, the text field does not take text right now.")))
+            return abandon(ours, .clipboardOnly(de("Auf der Zwischenablage, das Textfeld nimmt gerade keinen Text an.", en: "On the clipboard, the text field does not take text right now.")), on: pasteboard)
         }
         // Read before ⌘V: afterwards it may already show the paste.
         let before = editability == .readOnly ? field.flatMap { keyboard.text(of: $0) } : nil
+        guard shouldPaste() else { return cancel(ours, on: pasteboard) }
+        // Activation and focus restoration run the main loop. A copy made
+        // meanwhile belongs to the user; sending ⌘V would insert that copy
+        // and incorrectly call this transcript delivered.
+        guard pasteboard.changeCount == ours else {
+            return abandon(ours, .notPasted(de("Zwischenablage geändert", en: "Clipboard changed")), on: pasteboard)
+        }
         keys()
         if let field, let before {
             waitUntil(timeout: settle) { keyboard.text(of: field) != before }
             // A field that stopped answering is taken at its word, as one
             // that never answered is.
             if keyboard.text(of: field) == before {
-                return abandon(ours, .clipboardOnly(de("Auf der Zwischenablage, das Textfeld hat den Text nicht angenommen.", en: "On the clipboard, the text field did not take the text.")))
+                return abandon(ours, .clipboardOnly(de("Auf der Zwischenablage, das Textfeld hat den Text nicht angenommen.", en: "On the clipboard, the text field did not take the text.")), on: pasteboard)
             }
         }
         if keepsOnClipboard {
@@ -189,9 +206,19 @@ enum Paster {
 
     /// The paste did not go out: the transcript stays on the clipboard as the
     /// fallback, and nothing is given back over it.
-    private static func abandon(_ ours: Int, _ outcome: Outcome) -> Outcome {
+    private static func abandon(_ ours: Int, _ outcome: Outcome, on pasteboard: NSPasteboard) -> Outcome {
         if loan?.ours == ours { loan = nil }
+        if case .clipboardOnly = outcome, pasteboard.changeCount != ours {
+            return .notPasted(de("Zwischenablage geändert", en: "Clipboard changed"))
+        }
         return outcome
+    }
+
+    /// No key was sent: cancel only this delivery's loan, never a newer
+    /// copy or another delivery that arrived while focus was being restored.
+    private static func cancel(_ ours: Int, on pasteboard: NSPasteboard) -> Outcome {
+        if loan?.ours == ours { restorePendingNow(on: pasteboard) }
+        return .notPasted(de("Abgebrochen", en: "Cancelled"))
     }
 
     /// Gives the clipboard back a second from now.

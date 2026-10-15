@@ -481,6 +481,7 @@ private func clip(_ name: String, seconds: Double, tone: Bool = true) -> URL {
 private final class Dictation {
     let preferences = Preferences(defaults: nil)
     let history = History()
+    let discarded = Discarded()
     let session: Session
     var delivered: [String] = []
 
@@ -498,7 +499,7 @@ private final class Dictation {
         preferences.triggerMode = mode
         preferences.usesReplacements = false
         AudioSources.testFiles = clips
-        session = Session(preferences: preferences, history: history, discarded: Discarded())
+        session = Session(preferences: preferences, history: history, discarded: discarded)
         session.takesEscape = false
         session.deliverOverride = { [unowned self] text in delivered.append(text) }
     }
@@ -685,6 +686,29 @@ private final class FakeCleaner {
 }
 
 extension SessionTests {
+
+    @Test func anInterruptedDeliveryKeepsAudioAndRetriesWithoutTranscribingAgain() async {
+        let d = Dictation(clips: [clip("delivery-interrupted", seconds: 2)],
+                          script: [(0, 200, #"{"text":"Synthetic retained words."}"#)])
+        d.history.limit = 0
+        d.session.deliverOverride = nil
+        var attempts = 0
+        d.session.pasteText = { _, _, _, _, _, _ in
+            attempts += 1
+            return attempts == 1 ? .notPasted("Synthetic clipboard change") : .pasted
+        }
+        await d.dictate()
+        #expect(await eventually(8) { d.isFailed })
+        #expect(d.session.plainText() == "Synthetic retained words.")
+        #expect(SessionStub.requests == 1)
+        d.session.discard()
+        #expect(d.discarded.last?.segments.values.contains { !$0.audio.isEmpty } == true)
+        d.session.undoDiscard()
+        d.session.press()
+        #expect(await eventually(8) { attempts == 2 && d.session.phase == .idle })
+        #expect(SessionStub.requests == 1)
+        #expect(d.history.entries.isEmpty)
+    }
 
     @Test func cleanupOnPastesTheCleanedTextAndTheHistoryKeepsTheOriginal() async {
         let d = Dictation(clips: [clip("c1", seconds: 2)], script: [(0, 200, #"{"text":"hallo welt wie geht es dir"}"#)])
