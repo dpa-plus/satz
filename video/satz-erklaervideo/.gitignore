@@ -1,0 +1,29 @@
+# Fertige Videos, Poster und Untertitel gehören ins CDN (ablage.py cdn), nicht ins Repo
+*.mp4
+*.webm
+*-poster.jpg
+Untertitel.srt
+Untertitel.vtt
+# Wird beim Bauen neu erzeugt
+js/audio-data.js
+js/fonts.js
+js/config.js
+js/assets-data.js
+js/timeline-data.js
+_build/mix/
+_build/vo/zeilen/
+_build/vo/bearbeitet/
+_build/vo/vo_track.wav
+_build/vo/vo_proc.wav
+_build/stimmprobe/
+_build/aussprache/
+_build/standbilder/
+_build/cues.json
+_build/cues.html
+_build/timeline.json
+_build/musik/*.wav
+# HyperFrames: wird beim Bauen und Rendern neu erzeugt
+film/index.html
+film/renders/
+film/.hyperframes/
+film/node_modules/

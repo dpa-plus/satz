@@ -1,0 +1,35 @@
+{
+ "hinweis": "Nur Assets mit geklärter Herkunft (quelle: nutzer|cdn|omni|kunde|eigen, fundort) werden eingebettet.",
+ "assets": [
+  {
+   "status": "vorhanden",
+   "id": "schriften",
+   "beschreibung": "Bitter, Source Sans 3, IBM Plex Mono (WOFF2, SIL OFL), kopiert nach film/assets/fonts/ samt Lizenztexten",
+   "quelle": "repo",
+   "fundort": "satz/Resources/Fonts/"
+  },
+  {
+   "status": "vorhanden",
+   "id": "satz-oberflaeche",
+   "beschreibung": "Karte, Menü, Einstellungen als Vorlage für den Nachbau in HTML (Maße, Farben, Radien, Beschriftungen aus dem Code, keine Screenshots im Video)",
+   "quelle": "repo",
+   "fundort": "satz/Sources/SatzMac (Design/Theme.swift, Design/Components.swift, Card/CardView.swift, Popover/PopoverView.swift, Settings/SettingsView.swift, Settings/ProviderMenu.swift), satz --snapshot"
+  },
+  {
+   "status": "vorhanden",
+   "id": "logo-dpa",
+   "beschreibung": "DPA+ Logo breit, orange (SVG), im Abspann klein",
+   "quelle": "cdn",
+   "fundort": "https://cdn.prozesshub.eu/assets/brand/v1/logo/wide-orange.svg",
+   "datei": "film/assets/logo/dpa-wide-orange.svg",
+   "geholt": "2026-10-16"
+  },
+  {
+   "status": "nicht verwendet",
+   "id": "logo-dpa-weiss",
+   "beschreibung": "DPA+ Logo breit, weiß transparent (für dunklen Grund; der Abspann ist hell, daher nicht nötig)",
+   "quelle": "cdn",
+   "fundort": "https://cdn.prozesshub.eu/assets/brand/v1/logo/wide-white-transparent.png"
+  }
+ ]
+}

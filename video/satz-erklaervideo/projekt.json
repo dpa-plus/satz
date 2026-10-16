@@ -1,0 +1,140 @@
+{
+ "name": "satz-erklaervideo",
+ "titel": "satz: Sprechen statt tippen",
+ "titel_html": "Sprechen statt <b>tippen</b>.",
+ "beschreibung": "60-Sekunden-Erklärvideo (16:9) für dpa.plus/satz und das satz-README: was satz ist, wie es geht, was es anders macht.",
+ "erstellt": "2026-10-16",
+ "sprache": "de",
+ "format": "16:9",
+ "laenge_s": 60,
+ "bild": "frei",
+ "stil": null,
+ "bild_beschreibung": "Motion Graphics mit HyperFrames: die echte satz-Oberfläche (Karte, Menü, Einstellungen) als HTML nachgebaut, mit Farben und Schriften aus dem Repo (Sand #FFEADE, Petrol #16303C, Orange #FF6100; Bitter, Source Sans 3, IBM Plex Mono). Nachgebaute neutrale App-Fenster als Bühne.",
+ "ziel": "Wer am Rechner viel schreibt, versteht in 60 Sekunden, was satz macht, und lädt es kostenlos herunter.",
+ "zielgruppe": "Menschen, die am Rechner viel schreiben (Mails, Chats, Code, KI-Chats), technikoffen, deutschsprachig.",
+ "kernaussagen": [
+  "Sprechen statt tippen: der Text landet dort, wo der Cursor ist, in jeder App.",
+  "Kürzel zweimal tippen, sprechen, nochmal tippen.",
+  "Eine kleine Karte zeigt den Text beim Sprechen: pausieren, Einfügestelle wählen, verwerfen.",
+  "Du wählst den Dienst mit eigenem Schlüssel oder ein lokales Modell ohne Internet. Kein satz-Konto, kein satz-Server.",
+  "Optional räumt satz den Text auf.",
+  "Kostenlos und Open Source, für Mac, Windows und Linux."
+ ],
+ "quellen": [
+  "satz/README.md (Why satz, Download, Cleaning up the text)",
+  "satz/AGENTS.md (kein satz-Server)",
+  "satz/Sources/SatzMac/Input/Trigger.swift (Standardkürzel: rechte Befehlstaste zweimal)"
+ ],
+ "no_gos": [
+  "keine Zahlen zu Tempo, Genauigkeit oder Preisen",
+  "nicht behaupten, dass satz von Haus aus offline läuft (lokal ist eine Option)",
+  "nicht behaupten, dass die Cloud-Dienste nichts kosten",
+  "keine fremden Logos nachzeichnen, Apps nur als Namen",
+  "nichts über Datenschutz versprechen, was über 'kein satz-Server, kein satz-Konto' hinausgeht"
+ ],
+ "pflichtwoerter": [
+  "satz",
+  "Mac",
+  "Windows",
+  "Linux",
+  "Slack",
+  "KI",
+  "Open Source",
+  "Cursor"
+ ],
+ "cta": {
+  "text": "Kostenlos laden",
+  "url": "dpa.plus/satz"
+ },
+ "ki_hinweis": "Stimme und Musik KI-generiert",
+ "stimme": {
+  "wunsch": {
+   "stimmlage": "weiblich",
+   "ton": "warm, friendly and confident; relaxed modern German, conversational, lightly upbeat, never salesy",
+   "anrede": "du"
+  },
+  "gewaehlt": {
+   "modell": "google/gemini-3.8-flash-tts",
+   "stimme": "Sulafat",
+   "provider": {
+    "options": {
+     "google-ai-studio": {
+      "speech_metadata": {
+       "style": "warm, friendly and confident; relaxed modern German, conversational, lightly upbeat, never salesy"
+      }
+     }
+    }
+   },
+   "stil": "warm, friendly and confident; relaxed modern German, conversational, lightly upbeat, never salesy",
+   "kosten_minute": 0.0174,
+   "woerter_pro_s": 2.61,
+   "probe": "_build/stimmprobe/03_gemini-3.8-flash-tts_Sulafat.wav",
+   "gewaehlt_am": "2026-10-16",
+   "grund": "Zuhörer google/gemini-3.8-flash: Audio 1 trifft die geforderte Tonalität perfekt: Die Stimme klingt modern, freundlich, warm und selbstbewusst, ohne dabei werblich zu wirken. Die Sprachmelodie ist sehr natürlich und flüssig, die Beto"
+  }
+ },
+ "musik": {
+  "stimmung": "friendly, light, modern electronic, soft plucks and warm pads, unobtrusive under a voice",
+  "teile": [
+   {
+    "id": "musik1"
+   }
+  ]
+ },
+ "untertitel": {
+  "einbrennen": false
+ },
+ "budget": {
+  "grenze": 2.0,
+  "rueckfrage": 1.0,
+  "freigegeben_bis": 0.0
+ },
+ "freigaben": [
+  "skript",
+  "stimme",
+  "storyboard",
+  "abnahme"
+ ],
+ "ausgabe": {
+  "dateiname": "satz-erklaervideo",
+  "untertitel": "Untertitel"
+ },
+ "ablage": {
+  "kennung": "dpa",
+  "kategorie": "marketing",
+  "thema": "satz-erklaervideo",
+  "quelle": "dpa-plus/satz, video/satz-erklaervideo/",
+  "cdn": {
+   "slug": "satz-erklaervideo",
+   "title": "satz: Sprechen statt tippen",
+   "language": "de",
+   "version": 1,
+   "durationSeconds": 55,
+   "created": "2026-10-16",
+   "video": "https://cdn.prozesshub.eu/assets/clients/dpa/videos/marketing/satz-erklaervideo/satz-erklaervideo-de-v1.mp4",
+   "formats": {
+    "16x9": "https://cdn.prozesshub.eu/assets/clients/dpa/videos/marketing/satz-erklaervideo/satz-erklaervideo-de-v1.mp4"
+   },
+   "poster": "https://cdn.prozesshub.eu/assets/clients/dpa/videos/marketing/satz-erklaervideo/satz-erklaervideo-de-v1-poster.jpg",
+   "captions": "https://cdn.prozesshub.eu/assets/clients/dpa/videos/marketing/satz-erklaervideo/satz-erklaervideo-de-v1.vtt",
+   "note": "Stimme und Musik KI-generiert. Quelle: dpa-plus/satz, video/satz-erklaervideo/",
+   "usedIn": [
+    "dpa.plus/satz, satz-README"
+   ]
+  }
+ },
+ "schnitt": {
+  "tempo": {},
+  "pause_standard": 0.14,
+  "pause_abschnitt": 0.45,
+  "pause_vor": {},
+  "start": 0.3,
+  "ende": 1.6
+ },
+ "ton": {
+  "deesser": {
+   "schwelle": 0.28,
+   "trennfrequenz": 4500
+  }
+ }
+}

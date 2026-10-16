@@ -1,0 +1,9 @@
+{
+ "dauer": 69.172,
+ "ende_s": 66.4,
+ "akkord_s": 64.8,
+ "modell": "google/lyria-3-pro-preview",
+ "prompt": "Instrumental background music for a short explainer video. Mood: friendly, light, modern electronic, soft plucks and warm pads, unobtrusive under a voice. Around 96–104 BPM, light and unobtrusive, mixed to sit under a voice-over: no vocals, no lyrics, no spoken words, no dominant lead melody in the midrange, soft transients. About 62 seconds long with a clear structure. It ends with a clear, warm final chord that rings out naturally for about three seconds.",
+ "roh": "musik1_roh.mp3",
+ "ende": "schlussakkord"
+}

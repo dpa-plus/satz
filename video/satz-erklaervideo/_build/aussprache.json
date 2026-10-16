@@ -1,0 +1,8 @@
+[
+ {"begriff": "satz", "satz": "Mit satz sprichst du, und der Text steht da.", "varianten": ["satz", "Satz"]},
+ {"begriff": "KI", "satz": "Oder der Chat mit einer KI.", "varianten": ["KI", "Ka-I"]},
+ {"begriff": "Cursor", "satz": "Der Text steht da, wo dein Cursor blinkt.", "varianten": ["Cursor", "Körser"]},
+ {"begriff": "Linux", "satz": "Auf Mac, Windows und Linux.", "varianten": ["Linux", "Linnux"]},
+ {"begriff": "Open Source", "satz": "satz ist kostenlos und Open Source.", "varianten": ["Open Source", "Oupen Sors"]},
+ {"begriff": "Code-Editor", "satz": "Ob Mail, Slack oder Code-Editor.", "varianten": ["Code-Editor", "Koud-Editor"]}
+]

@@ -1,0 +1,112 @@
+{
+ "abschnitt": "idee",
+ "n": 2,
+ "datei": "/Users/eli/Desktop/Desktop - MacBook Pro von DPA+/Projects/satz/video/satz-erklaervideo/_build/vo/abschnitte/idee_2.wav",
+ "check": {
+  "ok": true,
+  "abweichung": 0,
+  "erlaubt": 1,
+  "letztes_wort_ok": true,
+  "pflicht_fehlt": [],
+  "gehoert": "Mit Satz sprichst du und der Text steht da, wo dein Cursor blinkt. Auf Mac, Windows und Linux.",
+  "sprache": "de",
+  "dauer_s": 6.22,
+  "woerter_pro_s": 2.89,
+  "uebersteuert_anteil": 0.0,
+  "tonhoehe_hz": 200.0,
+  "stimmlage": "weiblich"
+ },
+ "words": [
+  {
+   "w": "Mit",
+   "a": 0.27,
+   "b": 0.31
+  },
+  {
+   "w": "Satz",
+   "a": 0.31,
+   "b": 0.63
+  },
+  {
+   "w": "sprichst",
+   "a": 0.63,
+   "b": 1.35
+  },
+  {
+   "w": "du",
+   "a": 1.35,
+   "b": 1.77
+  },
+  {
+   "w": "und",
+   "a": 1.77,
+   "b": 1.8
+  },
+  {
+   "w": "der",
+   "a": 1.8,
+   "b": 2.0
+  },
+  {
+   "w": "Text",
+   "a": 2.0,
+   "b": 2.31
+  },
+  {
+   "w": "steht",
+   "a": 2.31,
+   "b": 2.78
+  },
+  {
+   "w": "da,",
+   "a": 2.78,
+   "b": 3.02
+  },
+  {
+   "w": "wo",
+   "a": 3.02,
+   "b": 3.16
+  },
+  {
+   "w": "dein",
+   "a": 3.16,
+   "b": 3.36
+  },
+  {
+   "w": "Cursor",
+   "a": 3.36,
+   "b": 3.71
+  },
+  {
+   "w": "blinkt.",
+   "a": 3.71,
+   "b": 4.24
+  },
+  {
+   "w": "Auf",
+   "a": 4.56,
+   "b": 4.57
+  },
+  {
+   "w": "Mac,",
+   "a": 4.57,
+   "b": 4.87
+  },
+  {
+   "w": "Windows",
+   "a": 4.87,
+   "b": 5.34
+  },
+  {
+   "w": "und",
+   "a": 5.34,
+   "b": 5.58
+  },
+  {
+   "w": "Linux.",
+   "a": 5.58,
+   "b": 6.2
+  }
+ ],
+ "gueltig": true
+}

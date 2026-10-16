@@ -1,0 +1,87 @@
+{
+ "abschnitt": "aufraeumen",
+ "n": 2,
+ "datei": "/Users/eli/Desktop/Desktop - MacBook Pro von DPA+/Projects/satz/video/satz-erklaervideo/_build/vo/abschnitte/aufraeumen_2.wav",
+ "check": {
+  "ok": true,
+  "abweichung": 0,
+  "erlaubt": 1,
+  "letztes_wort_ok": true,
+  "pflicht_fehlt": [],
+  "gehoert": "Und wenn du willst, räumt Satz den Text noch auf. Satzzeichen, Füllwörter, Versprecher.",
+  "sprache": "de",
+  "dauer_s": 5.28,
+  "woerter_pro_s": 2.46,
+  "uebersteuert_anteil": 0.0,
+  "tonhoehe_hz": 190.5,
+  "stimmlage": "weiblich"
+ },
+ "words": [
+  {
+   "w": "Und",
+   "a": 0.17,
+   "b": 0.24
+  },
+  {
+   "w": "wenn",
+   "a": 0.24,
+   "b": 0.4
+  },
+  {
+   "w": "du",
+   "a": 0.4,
+   "b": 0.51
+  },
+  {
+   "w": "willst,",
+   "a": 0.51,
+   "b": 0.97
+  },
+  {
+   "w": "räumt",
+   "a": 0.97,
+   "b": 1.24
+  },
+  {
+   "w": "Satz",
+   "a": 1.24,
+   "b": 1.46
+  },
+  {
+   "w": "den",
+   "a": 1.46,
+   "b": 1.71
+  },
+  {
+   "w": "Text",
+   "a": 1.71,
+   "b": 1.86
+  },
+  {
+   "w": "noch",
+   "a": 1.86,
+   "b": 2.1
+  },
+  {
+   "w": "auf.",
+   "a": 2.1,
+   "b": 2.52
+  },
+  {
+   "w": "Satzzeichen,",
+   "a": 3.12,
+   "b": 3.52
+  },
+  {
+   "w": "Füllwörter,",
+   "a": 3.52,
+   "b": 4.43
+  },
+  {
+   "w": "Versprecher.",
+   "a": 4.43,
+   "b": 5.4
+  }
+ ],
+ "gueltig": true
+}

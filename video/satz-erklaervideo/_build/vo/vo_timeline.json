@@ -1,0 +1,815 @@
+{
+ "duration": 54.513,
+ "lines": [
+  {
+   "id": "h1",
+   "section": "hook",
+   "start": 0.3,
+   "end": 2.155,
+   "text": "Du denkst schneller, als du tippst.",
+   "file": "_build/vo/bearbeitet/h1.wav",
+   "words": [
+    {
+     "w": "Du",
+     "a": 0.35,
+     "b": 0.4
+    },
+    {
+     "w": "denkst",
+     "a": 0.4,
+     "b": 0.72
+    },
+    {
+     "w": "schneller,",
+     "a": 0.72,
+     "b": 1.28
+    },
+    {
+     "w": "als",
+     "a": 1.28,
+     "b": 1.43
+    },
+    {
+     "w": "du",
+     "a": 1.43,
+     "b": 1.53
+    },
+    {
+     "w": "tippst.",
+     "a": 1.53,
+     "b": 2.06
+    }
+   ]
+  },
+  {
+   "id": "h2",
+   "section": "hook",
+   "start": 2.295,
+   "end": 3.775,
+   "text": "Warum also nicht einfach sprechen?",
+   "file": "_build/vo/bearbeitet/h2.wav",
+   "words": [
+    {
+     "w": "Warum",
+     "a": 2.335,
+     "b": 2.525
+    },
+    {
+     "w": "also",
+     "a": 2.525,
+     "b": 2.705
+    },
+    {
+     "w": "nicht",
+     "a": 2.705,
+     "b": 2.935
+    },
+    {
+     "w": "einfach",
+     "a": 2.935,
+     "b": 3.255
+    },
+    {
+     "w": "sprechen?",
+     "a": 3.255,
+     "b": 3.775
+    }
+   ]
+  },
+  {
+   "id": "i1",
+   "section": "idee",
+   "start": 4.225,
+   "end": 10.209,
+   "text": "Mit satz sprichst du, und der Text steht da, wo dein Cursor blinkt. Auf Mac, Windows und Linux.",
+   "file": "_build/vo/bearbeitet/i1.wav",
+   "words": [
+    {
+     "w": "Mit",
+     "a": 4.265,
+     "b": 4.535
+    },
+    {
+     "w": "Satz",
+     "a": 4.535,
+     "b": 4.745
+    },
+    {
+     "w": "sprichst",
+     "a": 4.745,
+     "b": 5.315
+    },
+    {
+     "w": "du",
+     "a": 5.315,
+     "b": 5.485
+    },
+    {
+     "w": "und",
+     "a": 5.485,
+     "b": 5.705
+    },
+    {
+     "w": "der",
+     "a": 5.705,
+     "b": 5.925
+    },
+    {
+     "w": "Text",
+     "a": 5.925,
+     "b": 6.225
+    },
+    {
+     "w": "steht",
+     "a": 6.225,
+     "b": 6.685
+    },
+    {
+     "w": "da,",
+     "a": 6.685,
+     "b": 6.925
+    },
+    {
+     "w": "wo",
+     "a": 6.925,
+     "b": 7.065
+    },
+    {
+     "w": "dein",
+     "a": 7.065,
+     "b": 7.255
+    },
+    {
+     "w": "Cursor",
+     "a": 7.255,
+     "b": 7.565
+    },
+    {
+     "w": "blinkt.",
+     "a": 7.565,
+     "b": 8.105
+    },
+    {
+     "w": "Auf",
+     "a": 8.325,
+     "b": 8.365
+    },
+    {
+     "w": "Mac,",
+     "a": 8.365,
+     "b": 8.685
+    },
+    {
+     "w": "Windows",
+     "a": 8.685,
+     "b": 9.235
+    },
+    {
+     "w": "und",
+     "a": 9.235,
+     "b": 9.425
+    },
+    {
+     "w": "Linux.",
+     "a": 9.425,
+     "b": 10.045
+    }
+   ]
+  },
+  {
+   "id": "s1",
+   "section": "so",
+   "start": 10.659,
+   "end": 14.753,
+   "text": "Zweimal auf dein Kürzel tippen, lossprechen, noch einmal tippen. Fertig.",
+   "file": "_build/vo/bearbeitet/s1.wav",
+   "words": [
+    {
+     "w": "Zweimal",
+     "a": 10.739,
+     "b": 11.029
+    },
+    {
+     "w": "auf",
+     "a": 11.029,
+     "b": 11.189
+    },
+    {
+     "w": "dein",
+     "a": 11.189,
+     "b": 11.399
+    },
+    {
+     "w": "Kürzel",
+     "a": 11.399,
+     "b": 11.709
+    },
+    {
+     "w": "tippen,",
+     "a": 11.709,
+     "b": 12.159
+    },
+    {
+     "w": "lossprechen,",
+     "a": 12.159,
+     "b": 12.979
+    },
+    {
+     "w": "noch",
+     "a": 12.979,
+     "b": 13.279
+    },
+    {
+     "w": "einmal",
+     "a": 13.279,
+     "b": 13.539
+    },
+    {
+     "w": "tippen,",
+     "a": 13.539,
+     "b": 13.979
+    },
+    {
+     "w": "fertig.",
+     "a": 13.979,
+     "b": 14.519
+    }
+   ]
+  },
+  {
+   "id": "s2",
+   "section": "so",
+   "start": 14.893,
+   "end": 21.123,
+   "text": "Ob Mail, Slack, Code-Editor oder der Chat mit einer KI: Wo ein Cursor ist, schreibt satz hinein.",
+   "file": "_build/vo/bearbeitet/s2.wav",
+   "words": [
+    {
+     "w": "Ob",
+     "a": 14.923,
+     "b": 15.053
+    },
+    {
+     "w": "Mail,",
+     "a": 15.053,
+     "b": 15.543
+    },
+    {
+     "w": "Slack,",
+     "a": 15.543,
+     "b": 16.113
+    },
+    {
+     "w": "Code",
+     "a": 16.113,
+     "b": 16.443
+    },
+    {
+     "w": "Editor",
+     "a": 16.443,
+     "b": 16.973
+    },
+    {
+     "w": "oder",
+     "a": 16.973,
+     "b": 17.253
+    },
+    {
+     "w": "der",
+     "a": 17.253,
+     "b": 17.463
+    },
+    {
+     "w": "Chat",
+     "a": 17.463,
+     "b": 17.743
+    },
+    {
+     "w": "mit",
+     "a": 17.743,
+     "b": 17.953
+    },
+    {
+     "w": "einer",
+     "a": 17.953,
+     "b": 18.313
+    },
+    {
+     "w": "KI,",
+     "a": 18.313,
+     "b": 18.633
+    },
+    {
+     "w": "wo",
+     "a": 18.633,
+     "b": 18.953
+    },
+    {
+     "w": "ein",
+     "a": 18.953,
+     "b": 19.043
+    },
+    {
+     "w": "Cursor",
+     "a": 19.043,
+     "b": 19.503
+    },
+    {
+     "w": "ist,",
+     "a": 19.503,
+     "b": 19.973
+    },
+    {
+     "w": "schreibt",
+     "a": 19.973,
+     "b": 20.353
+    },
+    {
+     "w": "Satz",
+     "a": 20.353,
+     "b": 20.713
+    },
+    {
+     "w": "hinein.",
+     "a": 20.713,
+     "b": 21.113
+    }
+   ]
+  },
+  {
+   "id": "k1",
+   "section": "karte",
+   "start": 21.573,
+   "end": 28.868,
+   "text": "Beim Sprechen zeigt dir eine kleine Karte deinen Text. Du kannst pausieren, bestimmen, wo die nächsten Wörter landen, oder alles verwerfen.",
+   "file": "_build/vo/bearbeitet/k1.wav",
+   "words": [
+    {
+     "w": "Beim",
+     "a": 21.613,
+     "b": 21.783
+    },
+    {
+     "w": "Sprechen",
+     "a": 21.783,
+     "b": 22.193
+    },
+    {
+     "w": "zeigt",
+     "a": 22.193,
+     "b": 22.533
+    },
+    {
+     "w": "dir",
+     "a": 22.533,
+     "b": 22.613
+    },
+    {
+     "w": "eine",
+     "a": 22.613,
+     "b": 22.873
+    },
+    {
+     "w": "kleine",
+     "a": 22.873,
+     "b": 23.143
+    },
+    {
+     "w": "Karte",
+     "a": 23.143,
+     "b": 23.403
+    },
+    {
+     "w": "deinen",
+     "a": 23.403,
+     "b": 23.723
+    },
+    {
+     "w": "Text.",
+     "a": 23.723,
+     "b": 24.153
+    },
+    {
+     "w": "Du",
+     "a": 24.713,
+     "b": 24.753
+    },
+    {
+     "w": "kannst",
+     "a": 24.753,
+     "b": 24.773
+    },
+    {
+     "w": "pausieren,",
+     "a": 24.773,
+     "b": 25.673
+    },
+    {
+     "w": "bestimmen,",
+     "a": 25.673,
+     "b": 26.233
+    },
+    {
+     "w": "wo",
+     "a": 26.233,
+     "b": 26.353
+    },
+    {
+     "w": "die",
+     "a": 26.353,
+     "b": 26.533
+    },
+    {
+     "w": "nächsten",
+     "a": 26.533,
+     "b": 27.003
+    },
+    {
+     "w": "Wörter",
+     "a": 27.003,
+     "b": 27.353
+    },
+    {
+     "w": "landen",
+     "a": 27.353,
+     "b": 27.893
+    },
+    {
+     "w": "oder",
+     "a": 27.893,
+     "b": 27.923
+    },
+    {
+     "w": "alles",
+     "a": 27.923,
+     "b": 28.163
+    },
+    {
+     "w": "verwerfen.",
+     "a": 28.163,
+     "b": 28.773
+    }
+   ]
+  },
+  {
+   "id": "w1",
+   "section": "wahl",
+   "start": 29.318,
+   "end": 37.184,
+   "text": "Du entscheidest, wer zuhört: ein Dienst deiner Wahl mit deinem eigenen Schlüssel, oder ein Modell direkt auf deinem Rechner, ganz ohne Internet.",
+   "file": "_build/vo/bearbeitet/w1.wav",
+   "words": [
+    {
+     "w": "Du",
+     "a": 29.358,
+     "b": 29.408
+    },
+    {
+     "w": "entscheidest,",
+     "a": 29.408,
+     "b": 30.088
+    },
+    {
+     "w": "wer",
+     "a": 30.088,
+     "b": 30.268
+    },
+    {
+     "w": "zuhört.",
+     "a": 30.268,
+     "b": 30.698
+    },
+    {
+     "w": "Ein",
+     "a": 30.698,
+     "b": 30.998
+    },
+    {
+     "w": "Dienst",
+     "a": 30.998,
+     "b": 31.518
+    },
+    {
+     "w": "deiner",
+     "a": 31.518,
+     "b": 31.828
+    },
+    {
+     "w": "Wahl",
+     "a": 31.828,
+     "b": 32.048
+    },
+    {
+     "w": "mit",
+     "a": 32.048,
+     "b": 32.308
+    },
+    {
+     "w": "deinem",
+     "a": 32.308,
+     "b": 32.548
+    },
+    {
+     "w": "eigenen",
+     "a": 32.548,
+     "b": 32.938
+    },
+    {
+     "w": "Schlüssel",
+     "a": 32.938,
+     "b": 33.498
+    },
+    {
+     "w": "oder",
+     "a": 33.498,
+     "b": 34.058
+    },
+    {
+     "w": "ein",
+     "a": 34.058,
+     "b": 34.458
+    },
+    {
+     "w": "Modell",
+     "a": 34.458,
+     "b": 34.758
+    },
+    {
+     "w": "direkt",
+     "a": 34.758,
+     "b": 35.068
+    },
+    {
+     "w": "auf",
+     "a": 35.068,
+     "b": 35.218
+    },
+    {
+     "w": "deinem",
+     "a": 35.218,
+     "b": 35.518
+    },
+    {
+     "w": "Rechner,",
+     "a": 35.518,
+     "b": 36.148
+    },
+    {
+     "w": "ganz",
+     "a": 36.148,
+     "b": 36.168
+    },
+    {
+     "w": "ohne",
+     "a": 36.168,
+     "b": 36.368
+    },
+    {
+     "w": "Internet.",
+     "a": 36.368,
+     "b": 37.018
+    }
+   ]
+  },
+  {
+   "id": "w2",
+   "section": "wahl",
+   "start": 37.324,
+   "end": 42.773,
+   "text": "Ein satz-Konto brauchst du nicht. Du zahlst nur, was du beim Dienst verbrauchst, und lokal gar nichts.",
+   "file": "_build/vo/bearbeitet/w2.wav",
+   "words": [
+    {
+     "w": "Ein",
+     "a": 37.364,
+     "b": 37.464
+    },
+    {
+     "w": "Satzkonto",
+     "a": 37.464,
+     "b": 37.864
+    },
+    {
+     "w": "brauchst",
+     "a": 37.864,
+     "b": 38.244
+    },
+    {
+     "w": "du",
+     "a": 38.244,
+     "b": 38.324
+    },
+    {
+     "w": "nicht.",
+     "a": 38.324,
+     "b": 38.754
+    },
+    {
+     "w": "Du",
+     "a": 38.754,
+     "b": 38.864
+    },
+    {
+     "w": "zahlst",
+     "a": 38.864,
+     "b": 39.274
+    },
+    {
+     "w": "nur,",
+     "a": 39.274,
+     "b": 39.524
+    },
+    {
+     "w": "was",
+     "a": 39.524,
+     "b": 39.794
+    },
+    {
+     "w": "du",
+     "a": 39.794,
+     "b": 39.824
+    },
+    {
+     "w": "beim",
+     "a": 39.824,
+     "b": 40.074
+    },
+    {
+     "w": "Dienst",
+     "a": 40.074,
+     "b": 40.444
+    },
+    {
+     "w": "verbrauchst.",
+     "a": 40.444,
+     "b": 41.384
+    },
+    {
+     "w": "Und",
+     "a": 41.384,
+     "b": 41.634
+    },
+    {
+     "w": "lokal",
+     "a": 41.634,
+     "b": 41.934
+    },
+    {
+     "w": "gar",
+     "a": 41.934,
+     "b": 42.074
+    },
+    {
+     "w": "nichts.",
+     "a": 42.074,
+     "b": 42.664
+    }
+   ]
+  },
+  {
+   "id": "a1",
+   "section": "aufraeumen",
+   "start": 43.223,
+   "end": 48.328,
+   "text": "Und wenn du willst, räumt satz den Text noch auf: Satzzeichen, Füllwörter, Versprecher.",
+   "file": "_build/vo/bearbeitet/a1.wav",
+   "words": [
+    {
+     "w": "Und",
+     "a": 43.263,
+     "b": 43.413
+    },
+    {
+     "w": "wenn",
+     "a": 43.413,
+     "b": 43.593
+    },
+    {
+     "w": "du",
+     "a": 43.593,
+     "b": 43.653
+    },
+    {
+     "w": "willst,",
+     "a": 43.653,
+     "b": 44.153
+    },
+    {
+     "w": "räumt",
+     "a": 44.153,
+     "b": 44.443
+    },
+    {
+     "w": "Satz",
+     "a": 44.443,
+     "b": 44.733
+    },
+    {
+     "w": "den",
+     "a": 44.733,
+     "b": 44.733
+    },
+    {
+     "w": "Text",
+     "a": 44.733,
+     "b": 44.943
+    },
+    {
+     "w": "noch",
+     "a": 44.943,
+     "b": 45.153
+    },
+    {
+     "w": "auf.",
+     "a": 45.153,
+     "b": 45.543
+    },
+    {
+     "w": "Satzzeichen,",
+     "a": 46.023,
+     "b": 46.453
+    },
+    {
+     "w": "Füllwörter,",
+     "a": 46.453,
+     "b": 47.293
+    },
+    {
+     "w": "Versprecher.",
+     "a": 47.293,
+     "b": 48.283
+    }
+   ]
+  },
+  {
+   "id": "c1",
+   "section": "cta",
+   "start": 48.778,
+   "end": 50.608,
+   "text": "Kostenlos und Open Source.",
+   "file": "_build/vo/bearbeitet/c1.wav",
+   "words": [
+    {
+     "w": "Kostenlos",
+     "a": 48.818,
+     "b": 49.468
+    },
+    {
+     "w": "und",
+     "a": 49.468,
+     "b": 49.698
+    },
+    {
+     "w": "Open",
+     "a": 49.698,
+     "b": 50.008
+    },
+    {
+     "w": "Source.",
+     "a": 50.008,
+     "b": 50.478
+    }
+   ]
+  },
+  {
+   "id": "c2",
+   "section": "cta",
+   "start": 50.748,
+   "end": 52.913,
+   "text": "Hol dir satz und probier’s aus.",
+   "file": "_build/vo/bearbeitet/c2.wav",
+   "words": [
+    {
+     "w": "Hol",
+     "a": 50.758,
+     "b": 51.138
+    },
+    {
+     "w": "dir",
+     "a": 51.138,
+     "b": 51.218
+    },
+    {
+     "w": "Satz",
+     "a": 51.218,
+     "b": 51.448
+    },
+    {
+     "w": "und",
+     "a": 51.448,
+     "b": 51.638
+    },
+    {
+     "w": "probier's",
+     "a": 51.638,
+     "b": 52.298
+    },
+    {
+     "w": "aus.",
+     "a": 52.298,
+     "b": 52.788
+    }
+   ]
+  }
+ ]
+}

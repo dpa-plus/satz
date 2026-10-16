@@ -1,0 +1,72 @@
+{
+ "abschnitt": "cta",
+ "n": 9,
+ "datei": "/Users/eli/Desktop/Desktop - MacBook Pro von DPA+/Projects/satz/video/satz-erklaervideo/_build/vo/abschnitte/cta_9.wav",
+ "check": {
+  "ok": true,
+  "abweichung": 0,
+  "erlaubt": 1,
+  "letztes_wort_ok": true,
+  "pflicht_fehlt": [],
+  "gehoert": "Kostenlos und open source. Hol dir Satz und probier's aus.",
+  "sprache": "de",
+  "dauer_s": 4.29,
+  "woerter_pro_s": 2.33,
+  "uebersteuert_anteil": 6e-05,
+  "tonhoehe_hz": 195.1,
+  "stimmlage": "weiblich"
+ },
+ "words": [
+  {
+   "w": "Kostenlos",
+   "a": 0.31,
+   "b": 0.81
+  },
+  {
+   "w": "und",
+   "a": 0.81,
+   "b": 1.14
+  },
+  {
+   "w": "open",
+   "a": 1.14,
+   "b": 1.5
+  },
+  {
+   "w": "source.",
+   "a": 1.5,
+   "b": 2.0
+  },
+  {
+   "w": "Hol",
+   "a": 2.42,
+   "b": 2.43
+  },
+  {
+   "w": "dir",
+   "a": 2.43,
+   "b": 2.72
+  },
+  {
+   "w": "Satz",
+   "a": 2.72,
+   "b": 2.83
+  },
+  {
+   "w": "und",
+   "a": 2.83,
+   "b": 3.08
+  },
+  {
+   "w": "probier's",
+   "a": 3.08,
+   "b": 3.84
+  },
+  {
+   "w": "aus.",
+   "a": 3.84,
+   "b": 4.42
+  }
+ ],
+ "gueltig": true
+}

@@ -1,0 +1,141 @@
+{
+ "hinweis": "Sprechertext. 'text' = Anzeige/Untertitel, 'sprechen' = Aussprache. Keine URL im Sprechertext, der Link steht nur im Bild.",
+ "abschnitte": [
+  {
+   "id": "hook",
+   "zeilen": [
+    {
+     "id": "h1",
+     "text": "Du denkst schneller, als du tippst.",
+     "sprechen": null,
+     "gesprochen": true,
+     "im_bild": [
+      "Leere Mail, Cursor blinkt, mühsames Tippen mit Tippfehler"
+     ]
+    },
+    {
+     "id": "h2",
+     "text": "Warum also nicht einfach sprechen?",
+     "sprechen": null,
+     "gesprochen": true,
+     "im_bild": [
+      "Tippen stoppt, eine Tonwelle erscheint"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "idee",
+   "zeilen": [
+    {
+     "id": "i1",
+     "text": "Mit satz sprichst du, und der Text steht da, wo dein Cursor blinkt. Auf Mac, Windows und Linux.",
+     "sprechen": "Mit Satz sprichst du, und der Text steht da, wo dein Cursor blinkt. Auf Mac, Windows und Linux.",
+     "gesprochen": true,
+     "im_bild": [
+      "satz-Karte oben im Bild, Text fließt in die Mail",
+      "Chips: Mac · Windows · Linux"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "so",
+   "zeilen": [
+    {
+     "id": "s1",
+     "text": "Zweimal auf dein Kürzel tippen, lossprechen, noch einmal tippen. Fertig.",
+     "sprechen": null,
+     "gesprochen": true,
+     "im_bild": [
+      "Taste rechte ⌘ zweimal, Karte hört zu, nochmal tippen, Text eingefügt"
+     ]
+    },
+    {
+     "id": "s2",
+     "text": "Ob Mail, Slack, Code-Editor oder der Chat mit einer KI: Wo ein Cursor ist, schreibt satz hinein.",
+     "sprechen": "Ob Mail, Slack, Code-Editor oder der Chat mit einer KI: Wo ein Cursor ist, schreibt Satz hinein.",
+     "gesprochen": true,
+     "im_bild": [
+      "Schnelle Folge nachgebauter Fenster (nur Namen, keine fremden Logos)"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "karte",
+   "zeilen": [
+    {
+     "id": "k1",
+     "text": "Beim Sprechen zeigt dir eine kleine Karte deinen Text. Du kannst pausieren, bestimmen, wo die nächsten Wörter landen, oder alles verwerfen.",
+     "sprechen": null,
+     "gesprochen": true,
+     "im_bild": [
+      "Nahaufnahme der Karte: Pause, Klick in den Text, Verwerfen mit Rückgängig"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "wahl",
+   "zeilen": [
+    {
+     "id": "w1",
+     "text": "Du entscheidest, wer zuhört: ein Dienst deiner Wahl mit deinem eigenen Schlüssel, oder ein Modell direkt auf deinem Rechner, ganz ohne Internet.",
+     "sprechen": null,
+     "gesprochen": true,
+     "im_bild": [
+      "Einstellungen: Anbieter-Liste, Wechsel auf 'Lokal', Hinweis 'offline'"
+     ]
+    },
+    {
+     "id": "w2",
+     "text": "Ein satz-Konto brauchst du nicht. Du zahlst nur, was du beim Dienst verbrauchst, und lokal gar nichts.",
+     "sprechen": "Ein Satz-Konto brauchst du nicht. Du zahlst nur, was du beim Dienst verbrauchst, und lokal gar nichts.",
+     "gesprochen": true,
+     "im_bild": [
+      "Kein Konto · Kein satz-Server"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "aufraeumen",
+   "zeilen": [
+    {
+     "id": "a1",
+     "text": "Und wenn du willst, räumt satz den Text noch auf: Satzzeichen, Füllwörter, Versprecher.",
+     "sprechen": "Und wenn du willst, räumt Satz den Text noch auf: Satzzeichen, Füllwörter, Versprecher.",
+     "gesprochen": true,
+     "im_bild": [
+      "Vorher: 'ähm also wir treffen uns Montag nein Dienstag' → Nachher: 'Wir treffen uns Dienstag.'"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "cta",
+   "zeilen": [
+    {
+     "id": "c1",
+     "text": "Kostenlos und Open Source.",
+     "sprechen": null,
+     "gesprochen": true,
+     "im_bild": [
+      "Wortmarke satz, 'Kostenlos · Open Source'"
+     ]
+    },
+    {
+     "id": "c2",
+     "text": "Hol dir satz und probier’s aus.",
+     "sprechen": "Hol dir Satz und probier's aus.",
+     "gesprochen": true,
+     "im_bild": [
+      "dpa.plus/satz, 'Für Mac, Windows und Linux', DPA+ klein",
+      "Klein: Stimme und Musik KI-generiert"
+     ]
+    }
+   ]
+  }
+ ]
+}

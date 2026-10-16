@@ -1,0 +1,77 @@
+{
+ "abschnitt": "hook",
+ "n": 2,
+ "datei": "/Users/eli/Desktop/Desktop - MacBook Pro von DPA+/Projects/satz/video/satz-erklaervideo/_build/vo/abschnitte/hook_2.wav",
+ "check": {
+  "ok": true,
+  "abweichung": 0,
+  "erlaubt": 1,
+  "letztes_wort_ok": true,
+  "pflicht_fehlt": [],
+  "gehoert": "Du denkst schneller, als du tippst. Warum also nicht einfach sprechen?",
+  "sprache": "de",
+  "dauer_s": 3.58,
+  "woerter_pro_s": 3.07,
+  "uebersteuert_anteil": 5e-05,
+  "tonhoehe_hz": 200.0,
+  "stimmlage": "weiblich"
+ },
+ "words": [
+  {
+   "w": "Du",
+   "a": 0.01,
+   "b": 0.26
+  },
+  {
+   "w": "denkst",
+   "a": 0.26,
+   "b": 0.48
+  },
+  {
+   "w": "schneller,",
+   "a": 0.48,
+   "b": 1.14
+  },
+  {
+   "w": "als",
+   "a": 1.14,
+   "b": 1.31
+  },
+  {
+   "w": "du",
+   "a": 1.31,
+   "b": 1.44
+  },
+  {
+   "w": "tippst.",
+   "a": 1.44,
+   "b": 2.0
+  },
+  {
+   "w": "Warum",
+   "a": 2.0,
+   "b": 2.32
+  },
+  {
+   "w": "also",
+   "a": 2.32,
+   "b": 2.58
+  },
+  {
+   "w": "nicht",
+   "a": 2.58,
+   "b": 2.9
+  },
+  {
+   "w": "einfach",
+   "a": 2.9,
+   "b": 3.35
+  },
+  {
+   "w": "sprechen?",
+   "a": 3.35,
+   "b": 4.08
+  }
+ ],
+ "gueltig": true
+}

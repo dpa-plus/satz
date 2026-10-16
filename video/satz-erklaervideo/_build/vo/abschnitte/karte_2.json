@@ -1,0 +1,127 @@
+{
+ "abschnitt": "karte",
+ "n": 2,
+ "datei": "/Users/eli/Desktop/Desktop - MacBook Pro von DPA+/Projects/satz/video/satz-erklaervideo/_build/vo/abschnitte/karte_2.wav",
+ "check": {
+  "ok": true,
+  "abweichung": 0,
+  "erlaubt": 1,
+  "letztes_wort_ok": true,
+  "pflicht_fehlt": [],
+  "gehoert": "Beim Sprechen zeigt dir eine kleine Karte deinen Text. Du kannst pausieren, bestimmen, wo die nächsten Wörter landen oder alles verwerfen.",
+  "sprache": "de",
+  "dauer_s": 7.33,
+  "woerter_pro_s": 2.87,
+  "uebersteuert_anteil": 0.0,
+  "tonhoehe_hz": 197.5,
+  "stimmlage": "weiblich"
+ },
+ "words": [
+  {
+   "w": "Beim",
+   "a": 0.23,
+   "b": 0.3
+  },
+  {
+   "w": "Sprechen",
+   "a": 0.3,
+   "b": 0.68
+  },
+  {
+   "w": "zeigt",
+   "a": 0.68,
+   "b": 0.99
+  },
+  {
+   "w": "dir",
+   "a": 0.99,
+   "b": 1.22
+  },
+  {
+   "w": "eine",
+   "a": 1.22,
+   "b": 1.37
+  },
+  {
+   "w": "kleine",
+   "a": 1.37,
+   "b": 1.72
+  },
+  {
+   "w": "Karte",
+   "a": 1.72,
+   "b": 2.01
+  },
+  {
+   "w": "deinen",
+   "a": 2.01,
+   "b": 2.36
+  },
+  {
+   "w": "Text.",
+   "a": 2.36,
+   "b": 2.86
+  },
+  {
+   "w": "Du",
+   "a": 3.4,
+   "b": 3.41
+  },
+  {
+   "w": "kannst",
+   "a": 3.41,
+   "b": 3.62
+  },
+  {
+   "w": "pausieren,",
+   "a": 3.62,
+   "b": 4.34
+  },
+  {
+   "w": "bestimmen,",
+   "a": 4.34,
+   "b": 4.96
+  },
+  {
+   "w": "wo",
+   "a": 4.96,
+   "b": 5.05
+  },
+  {
+   "w": "die",
+   "a": 5.05,
+   "b": 5.22
+  },
+  {
+   "w": "nächsten",
+   "a": 5.22,
+   "b": 5.7
+  },
+  {
+   "w": "Wörter",
+   "a": 5.7,
+   "b": 6.06
+  },
+  {
+   "w": "landen",
+   "a": 6.06,
+   "b": 6.44
+  },
+  {
+   "w": "oder",
+   "a": 6.44,
+   "b": 6.63
+  },
+  {
+   "w": "alles",
+   "a": 6.63,
+   "b": 6.87
+  },
+  {
+   "w": "verwerfen.",
+   "a": 6.87,
+   "b": 7.46
+  }
+ ],
+ "gueltig": true
+}

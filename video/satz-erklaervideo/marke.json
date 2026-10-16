@@ -1,0 +1,27 @@
+{
+ "name": "satz",
+ "quelle": "satz-Repo: Sources/SatzMac/Design/Theme.swift (Theme 'Petrol': Grund #FFEADE, Tinte #16303C, Akzent #FF6100) und Resources/Fonts (Bitter, Source Sans 3, IBM Plex Mono, SIL OFL). Stand 16.10.2026.",
+ "farben": {
+  "tinte": "#16303c",
+  "tinte2": "#40545c",
+  "grau": "#5d7078",
+  "akzent": "#ff6100",
+  "akzentWeich": "#ffb27a",
+  "sand": "#ffeade",
+  "karte": "#ffffff"
+ },
+ "player": {
+  "hintergrund": "#16303c",
+  "hintergrund2": "#0f222b",
+  "text": "#ffeade",
+  "gedaempft": "#9fb0b6",
+  "akzentAufDunkel": "#ff8a3d"
+ },
+ "schriften": {
+  "titel": "Bitter",
+  "text": "Source Sans 3",
+  "mono": "IBM Plex Mono"
+ },
+ "maskottchen": null,
+ "logo": null
+}

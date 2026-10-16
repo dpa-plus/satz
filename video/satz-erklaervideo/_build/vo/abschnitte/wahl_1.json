@@ -1,0 +1,217 @@
+{
+ "abschnitt": "wahl",
+ "n": 1,
+ "datei": "/Users/eli/Desktop/Desktop - MacBook Pro von DPA+/Projects/satz/video/satz-erklaervideo/_build/vo/abschnitte/wahl_1.wav",
+ "check": {
+  "ok": true,
+  "abweichung": 0,
+  "erlaubt": 2,
+  "letztes_wort_ok": true,
+  "pflicht_fehlt": [],
+  "gehoert": "Du entscheidest, wer zuhört. Ein Dienst deiner Wahl, mit deinem eigenen Schlüssel oder ein Modell direkt auf deinem Rechner, ganz ohne Internet. Ein Satzkonto brauchst du nicht. Du zahlst nur, was du beim Dienst verbrauchst. Und lokal gar nichts.",
+  "sprache": "de",
+  "dauer_s": 14.1,
+  "woerter_pro_s": 2.77,
+  "uebersteuert_anteil": 0.0,
+  "tonhoehe_hz": 192.8,
+  "stimmlage": "weiblich"
+ },
+ "words": [
+  {
+   "w": "Du",
+   "a": 0.01,
+   "b": 0.31
+  },
+  {
+   "w": "entscheidest,",
+   "a": 0.31,
+   "b": 0.91
+  },
+  {
+   "w": "wer",
+   "a": 0.91,
+   "b": 1.07
+  },
+  {
+   "w": "zuhört.",
+   "a": 1.07,
+   "b": 1.66
+  },
+  {
+   "w": "Ein",
+   "a": 1.66,
+   "b": 2.12
+  },
+  {
+   "w": "Dienst",
+   "a": 2.12,
+   "b": 2.23
+  },
+  {
+   "w": "deiner",
+   "a": 2.23,
+   "b": 2.64
+  },
+  {
+   "w": "Wahl,",
+   "a": 2.64,
+   "b": 2.97
+  },
+  {
+   "w": "mit",
+   "a": 2.97,
+   "b": 3.16
+  },
+  {
+   "w": "deinem",
+   "a": 3.16,
+   "b": 3.58
+  },
+  {
+   "w": "eigenen",
+   "a": 3.58,
+   "b": 3.98
+  },
+  {
+   "w": "Schlüssel",
+   "a": 3.98,
+   "b": 4.62
+  },
+  {
+   "w": "oder",
+   "a": 4.62,
+   "b": 5.23
+  },
+  {
+   "w": "ein",
+   "a": 5.23,
+   "b": 5.64
+  },
+  {
+   "w": "Modell",
+   "a": 5.64,
+   "b": 5.96
+  },
+  {
+   "w": "direkt",
+   "a": 5.96,
+   "b": 6.36
+  },
+  {
+   "w": "auf",
+   "a": 6.36,
+   "b": 6.44
+  },
+  {
+   "w": "deinem",
+   "a": 6.44,
+   "b": 6.75
+  },
+  {
+   "w": "Rechner,",
+   "a": 6.75,
+   "b": 7.34
+  },
+  {
+   "w": "ganz",
+   "a": 7.34,
+   "b": 7.42
+  },
+  {
+   "w": "ohne",
+   "a": 7.42,
+   "b": 7.65
+  },
+  {
+   "w": "Internet.",
+   "a": 7.65,
+   "b": 8.28
+  },
+  {
+   "w": "Ein",
+   "a": 8.9,
+   "b": 8.9
+  },
+  {
+   "w": "Satzkonto",
+   "a": 8.9,
+   "b": 9.21
+  },
+  {
+   "w": "brauchst",
+   "a": 9.21,
+   "b": 9.53
+  },
+  {
+   "w": "du",
+   "a": 9.53,
+   "b": 9.65
+  },
+  {
+   "w": "nicht.",
+   "a": 9.65,
+   "b": 10.16
+  },
+  {
+   "w": "Du",
+   "a": 10.16,
+   "b": 10.28
+  },
+  {
+   "w": "zahlst",
+   "a": 10.28,
+   "b": 10.73
+  },
+  {
+   "w": "nur,",
+   "a": 10.73,
+   "b": 11.02
+  },
+  {
+   "w": "was",
+   "a": 11.02,
+   "b": 11.15
+  },
+  {
+   "w": "du",
+   "a": 11.15,
+   "b": 11.27
+  },
+  {
+   "w": "beim",
+   "a": 11.27,
+   "b": 11.54
+  },
+  {
+   "w": "Dienst",
+   "a": 11.54,
+   "b": 11.9
+  },
+  {
+   "w": "verbrauchst.",
+   "a": 11.9,
+   "b": 12.83
+  },
+  {
+   "w": "Und",
+   "a": 12.83,
+   "b": 12.97
+  },
+  {
+   "w": "lokal",
+   "a": 12.97,
+   "b": 13.28
+  },
+  {
+   "w": "gar",
+   "a": 13.28,
+   "b": 13.47
+  },
+  {
+   "w": "nichts.",
+   "a": 13.47,
+   "b": 14.24
+  }
+ ],
+ "gueltig": true
+}

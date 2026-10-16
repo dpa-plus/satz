@@ -1,0 +1,2 @@
+{"musik": [{"id": "musik1", "von": 0, "bis": "dauer", "ende": "schlussakkord", "akkord_bei": "c2:ende+0.3"}],
+ "sfx": [{"t": "s1:Zweimal", "typ": "klick"}, {"t": "s1:noch", "typ": "klick"}, {"t": "a1:Satzzeichen", "typ": "schimmer"}, {"t": "c1", "typ": "plopp_leise"}]}

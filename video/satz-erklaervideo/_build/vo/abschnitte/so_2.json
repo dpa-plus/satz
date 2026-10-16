@@ -1,0 +1,162 @@
+{
+ "abschnitt": "so",
+ "n": 2,
+ "datei": "/Users/eli/Desktop/Desktop - MacBook Pro von DPA+/Projects/satz/video/satz-erklaervideo/_build/vo/abschnitte/so_2.wav",
+ "check": {
+  "ok": true,
+  "abweichung": 0,
+  "erlaubt": 1,
+  "letztes_wort_ok": true,
+  "pflicht_fehlt": [],
+  "gehoert": "Zweimal auf dein Kürzel tippen, lossprechen, noch einmal tippen, fertig. Ob Mail, Slack, Code Editor oder der Chat mit einer KI, wo ein Cursor ist, schreibt Satz hinein.",
+  "sprache": "de",
+  "dauer_s": 10.54,
+  "woerter_pro_s": 2.66,
+  "uebersteuert_anteil": 2e-05,
+  "tonhoehe_hz": 200.0,
+  "stimmlage": "weiblich"
+ },
+ "words": [
+  {
+   "w": "Zweimal",
+   "a": 0.18,
+   "b": 0.42
+  },
+  {
+   "w": "auf",
+   "a": 0.42,
+   "b": 0.6
+  },
+  {
+   "w": "dein",
+   "a": 0.6,
+   "b": 0.86
+  },
+  {
+   "w": "Kürzel",
+   "a": 0.86,
+   "b": 1.23
+  },
+  {
+   "w": "tippen,",
+   "a": 1.23,
+   "b": 1.7
+  },
+  {
+   "w": "lossprechen,",
+   "a": 1.7,
+   "b": 2.5
+  },
+  {
+   "w": "noch",
+   "a": 2.5,
+   "b": 2.82
+  },
+  {
+   "w": "einmal",
+   "a": 2.82,
+   "b": 3.1
+  },
+  {
+   "w": "tippen,",
+   "a": 3.1,
+   "b": 3.55
+  },
+  {
+   "w": "fertig.",
+   "a": 3.55,
+   "b": 4.12
+  },
+  {
+   "w": "Ob",
+   "a": 4.78,
+   "b": 4.78
+  },
+  {
+   "w": "Mail,",
+   "a": 4.78,
+   "b": 5.05
+  },
+  {
+   "w": "Slack,",
+   "a": 5.05,
+   "b": 5.34
+  },
+  {
+   "w": "Code",
+   "a": 5.34,
+   "b": 5.67
+  },
+  {
+   "w": "Editor",
+   "a": 5.67,
+   "b": 6.16
+  },
+  {
+   "w": "oder",
+   "a": 6.16,
+   "b": 6.49
+  },
+  {
+   "w": "der",
+   "a": 6.49,
+   "b": 6.73
+  },
+  {
+   "w": "Chat",
+   "a": 6.73,
+   "b": 7.06
+  },
+  {
+   "w": "mit",
+   "a": 7.06,
+   "b": 7.3
+  },
+  {
+   "w": "einer",
+   "a": 7.3,
+   "b": 7.75
+  },
+  {
+   "w": "KI,",
+   "a": 7.75,
+   "b": 8.08
+  },
+  {
+   "w": "wo",
+   "a": 8.08,
+   "b": 8.25
+  },
+  {
+   "w": "ein",
+   "a": 8.25,
+   "b": 8.5
+  },
+  {
+   "w": "Cursor",
+   "a": 8.5,
+   "b": 8.83
+  },
+  {
+   "w": "ist,",
+   "a": 8.83,
+   "b": 9.26
+  },
+  {
+   "w": "schreibt",
+   "a": 9.26,
+   "b": 9.76
+  },
+  {
+   "w": "Satz",
+   "a": 9.76,
+   "b": 10.04
+  },
+  {
+   "w": "hinein.",
+   "a": 10.04,
+   "b": 10.72
+  }
+ ],
+ "gueltig": true
+}
