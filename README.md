@@ -19,6 +19,10 @@
   <img src="assets/showcase.png" alt="Die satz-Karte beim Sprechen, mit dem Satz bisher und einer Live-Wellenform, und das Menü mit den letzten Diktaten." width="90%">
 </p>
 
+<p align="center">
+  <a href="https://cdn.prozesshub.eu/assets/clients/dpa/videos/marketing/satz-erklaervideo/satz-erklaervideo-de-v1.mp4"><b>▶ Erklärvideo ansehen</b></a> (55 Sekunden, Stimme und Musik KI-generiert)
+</p>
+
 ## Warum satz
 
 Die meisten Diktier-Apps wollen erst etwas von dir: ein Konto, ein Abo oder eine zweite KI, die umschreibt, was du gesagt hast. satz macht eine Sache. Es nimmt dich auf, macht mit dem Modell deiner Wahl Text aus dem Audio und fügt das Ergebnis dort ein, wo dein Cursor steht. Das Modell läuft bei einem Transkriptionsdienst oder, wenn du magst, auf deinem eigenen Computer.
