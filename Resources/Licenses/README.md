@@ -1,90 +1,99 @@
-# Bundled software notices
+# Hinweise zur mitgelieferten Software
 
-satz's own MIT license is copied from the repository's `LICENSE` into the app's
-resources beside this directory. These files preserve the licenses and
-attributions of the third-party software used by the packaged apps. They do not
-change those components' licenses to MIT.
+Die MIT-Lizenz von satz selbst wird aus der `LICENSE` des Repositorys neben
+diesem Verzeichnis in die Ressourcen der App kopiert. Diese Dateien bewahren
+die Lizenzen und Namensnennungen der Software von Dritten, die in den
+verpackten Apps steckt. Sie ändern die Lizenzen dieser Komponenten nicht zu
+MIT.
 
-Both app builds carry this shared inventory. Some components apply to only one
-platform:
+Beide App-Builds tragen dieses gemeinsame Verzeichnis. Einige Komponenten
+gelten nur für eine Plattform:
 
-| Component | Version | Used by |
+| Komponente | Version | Verwendet von |
 |---|---|---|
-| WhisperKit, including its swift-transformers notices | 1.1.0 | Mac |
-| Swift Argument Parser, including the Runtime Library Exception | 1.8.2 | Mac dependency graph |
+| WhisperKit, einschließlich der Hinweise zu swift-transformers | 1.1.0 | Mac |
+| Swift Argument Parser, einschließlich der Runtime Library Exception | 1.8.2 | Abhängigkeitsgraph des Mac |
 | sherpa-onnx | 1.13.8 | Mac, Windows x64, Linux |
-| ONNX Runtime | 1.28.2 | sherpa-onnx native engine |
-| kaldi-native-fbank, kaldi-decoder, kaldifst, Eigen, simple-sentencepiece, OpenFST, hclust-cpp, KissFFT, nlohmann/json | See `SOURCES.json` | sherpa-onnx and its linked dependencies |
-| Transformers.js, Hugging Face Jinja and tokenizers | 4.3.1, 0.5.10, 0.2.0 | Windows and Linux JavaScript bundle |
-| ONNX Runtime node/common | 1.30.0 | Windows and Linux Whisper engine |
-| ONNX Runtime Web | 1.31.0-dev.20260914-8d85527a0 | JavaScript included by Transformers.js |
-| uiohook-napi, libuiohook, node-gyp-build | See `SOURCES.json` | Windows and Linux keyboard hook |
-| Piper phonemize, eSpeak NG and Unicode/uni-algo notices | See `SOURCES.json` | Desktop sherpa native packages, including their unused TTS code |
+| ONNX Runtime | 1.28.2 | native Engine von sherpa-onnx |
+| kaldi-native-fbank, kaldi-decoder, kaldifst, Eigen, simple-sentencepiece, OpenFST, hclust-cpp, KissFFT, nlohmann/json | Siehe `SOURCES.json` | sherpa-onnx und seine gelinkten Abhängigkeiten |
+| Transformers.js, Hugging Face Jinja und tokenizers | 4.3.1, 0.5.10, 0.2.0 | JavaScript-Bundle für Windows und Linux |
+| ONNX Runtime node/common | 1.30.0 | Whisper-Engine für Windows und Linux |
+| ONNX Runtime Web | 1.31.0-dev.20260914-8d85527a0 | JavaScript, das Transformers.js einbindet |
+| uiohook-napi, libuiohook, node-gyp-build | Siehe `SOURCES.json` | Tastatur-Hook für Windows und Linux |
+| Piper phonemize, eSpeak NG und die Unicode/uni-algo-Hinweise | Siehe `SOURCES.json` | Native sherpa-Pakete für den Desktop, einschließlich ihres ungenutzten TTS-Codes |
 | Microsoft Visual C++ runtime | 14.44.35211.0 | Windows |
 
-`SOURCES.json` records each notice's upstream version, URL and SHA-256. License
-files are copied without editing. Attribution excerpts retain their original
-wording; added headings identify their source files. The ONNX Runtime and Eigen notice
-files preserve the complete upstream license inventories, including optional
-components that may not be used by every platform build.
+`SOURCES.json` hält für jeden Hinweis die Upstream-Version, die URL und die
+SHA-256 fest. Lizenzdateien werden unverändert kopiert. Auszüge mit
+Namensnennungen behalten ihren Originalwortlaut; hinzugefügte Überschriften
+nennen ihre Quelldateien. Die Hinweisdateien von ONNX Runtime und Eigen
+enthalten die vollständigen Lizenzverzeichnisse des Upstreams, einschließlich
+optionaler Komponenten, die möglicherweise nicht in jedem Plattform-Build
+verwendet werden.
 
-The sherpa-onnx 1.13.8 macOS build manifest selects ONNX Runtime 1.28.2 in
-[`cmake/onnxruntime-osx-universal.cmake`](https://github.com/k2-fsa/sherpa-onnx/blob/11afbd009a7f8c08f4bcf2fc1b265d0df4670fbf/cmake/onnxruntime-osx-universal.cmake).
-Its linked dependency versions come from that release's CMake files. The
-cpp-base64 reference notice is included because sherpa's `base64-decode.cc`
-references that project; sherpa does not identify the original copied revision.
+Das Build-Manifest von sherpa-onnx 1.13.8 für macOS wählt ONNX Runtime 1.28.2
+in [`cmake/onnxruntime-osx-universal.cmake`](https://github.com/k2-fsa/sherpa-onnx/blob/11afbd009a7f8c08f4bcf2fc1b265d0df4670fbf/cmake/onnxruntime-osx-universal.cmake).
+Die Versionen der gelinkten Abhängigkeiten stammen aus den CMake-Dateien dieses
+Releases. Der Referenzhinweis zu cpp-base64 ist enthalten, weil `base64-decode.cc`
+von sherpa auf dieses Projekt verweist; sherpa nennt die ursprünglich kopierte
+Revision nicht.
 
-The keyboard hook's MIT wrapper and its LGPL-3.0-or-later libuiohook component
-have separate notices. libuiohook source revision
-`f259ff37e81125f6f91ebac5439e7cde1e78b296` is patched by uiohook-napi 1.5.5
-([wrapper source and patch](https://github.com/SnosMe/uiohook-napi/tree/44e0d868ac6fedd2a68c7f8ad8163c73a3f36fc3)).
-The package retains its `libuiohook` source directory, wrapper source and build
-files alongside the prebuilt native module. Source correspondence was checked;
-reproducibility of the upstream prebuilt binaries was not established.
+Der MIT-Wrapper des Tastatur-Hooks und seine Komponente libuiohook unter
+LGPL-3.0-or-later haben getrennte Hinweise. Die Quellrevision
+`f259ff37e81125f6f91ebac5439e7cde1e78b296` von libuiohook wird von
+uiohook-napi 1.5.5 gepatcht
+([Wrapper-Quellcode und Patch](https://github.com/SnosMe/uiohook-napi/tree/44e0d868ac6fedd2a68c7f8ad8163c73a3f36fc3)).
+Das Paket behält sein Quellverzeichnis `libuiohook`, den Wrapper-Quellcode und
+die Build-Dateien neben dem vorkompilierten nativen Modul. Die Übereinstimmung
+mit dem Quellcode wurde geprüft; ob sich die vorkompilierten Binärdateien des
+Upstreams reproduzieren lassen, wurde nicht festgestellt.
 
-The Microsoft runtime license is the unmodified English `license.rtf` resource
-from Microsoft's 14.44.35211.0 redistributable. Both packaged architectures'
-runtime DLLs were matched byte for byte to the installer recorded in
-`SOURCES.json`. This runtime has Microsoft's license, separately from satz's MIT
-license.
+Die Lizenz der Microsoft-Runtime ist die unveränderte englische Ressource
+`license.rtf` aus Microsofts Redistributable 14.44.35211.0. Die Runtime-DLLs
+beider verpackter Architekturen wurden Byte für Byte mit dem in
+`SOURCES.json` festgehaltenen Installer abgeglichen. Diese Runtime steht unter
+Microsofts Lizenz, getrennt von der MIT-Lizenz von satz.
 
-## Desktop native library source
+## Quellcode der nativen Desktop-Bibliothek
 
-The sherpa native libraries in the Windows x64 and Linux packages include
-Piper phonemize and eSpeak NG even though satz only uses speech recognition.
-The combined native libraries are distributed under the GNU GPL version 3 or,
-at your option, any later version, because they include eSpeak NG. See
-`espeak-ng/COPYING` and its source attributions. There is no warranty; the
-license permits copying, modification and redistribution on its terms.
-The Mac uses the separate no-TTS native build, and the Windows ARM package
-contains no sherpa native library. Satz-owned source remains available under
-MIT; the original licenses of all third-party components are retained here.
+Die nativen sherpa-Bibliotheken in den Paketen für Windows x64 und Linux
+enthalten Piper phonemize und eSpeak NG, obwohl satz nur die Spracherkennung
+nutzt. Die zusammengefassten nativen Bibliotheken werden unter der GNU GPL
+Version 3 oder, nach deiner Wahl, jeder späteren Version verteilt, weil sie
+eSpeak NG enthalten. Siehe `espeak-ng/COPYING` und seine Quellangaben. Es gibt
+keine Gewährleistung; die Lizenz erlaubt Kopieren, Ändern und Weiterverteilen
+zu ihren Bedingungen. Der Mac nutzt den getrennten nativen Build ohne TTS, und
+das Windows-ARM-Paket enthält keine native sherpa-Bibliothek. Der Quellcode, der
+satz selbst gehört, bleibt unter MIT verfügbar; die ursprünglichen Lizenzen
+aller Komponenten von Dritten bleiben hier erhalten.
 
-The corresponding source and build instructions for the desktop native
-libraries, including the Node addon and linked dependencies, are provided at
-no charge in
-[`satz-0.4.3-source.tar.gz`](https://github.com/dpa-plus/satz/releases/download/v0.4.3/satz-0.4.3-source.tar.gz)
-alongside the application downloads. That archive contains the source snapshots
-for satz 0.4.3 and 0.4.2, which use these same native package versions, plus
-upstream source archives and build scripts. Its `BUILDING.md` explains the
-source layout and how to rebuild or modify the components. Keep this source
-download available with the binary downloads.
+Der zugehörige Quellcode und die Bauanleitung für die nativen
+Desktop-Bibliotheken, einschließlich des Node-Addons und der gelinkten
+Abhängigkeiten, werden kostenlos bereitgestellt in
+[`satz-0.4.3-source.tar.gz`](https://github.com/dpa-plus/satz/releases/download/v0.4.3/satz-0.4.3-source.tar.gz),
+zusammen mit den Downloads der Anwendung. Dieses Archiv enthält die
+Quellcode-Stände für satz 0.4.3 und 0.4.2, die dieselben Versionen der nativen
+Pakete nutzen, dazu Upstream-Quellarchive und Build-Skripte. Seine
+`BUILDING.md` erklärt den Aufbau des Quellcodes und wie sich die Komponenten
+neu bauen oder ändern lassen. Dieser Quellcode-Download muss zusammen mit den
+Binär-Downloads verfügbar bleiben.
 
-Other notices already travel with their components:
+Weitere Hinweise reisen schon mit ihren Komponenten:
 
-- The Mac's `Fonts` directory carries the three SIL Open Font License texts.
-- `speedtest.txt` beside the sample audio records its LibriVox attribution.
-- Electron's platform packages carry `LICENSE.electron.txt` and
-  `LICENSES.chromium.html`; retain the platform-specific files supplied by
-  Electron.
-- Packaged npm modules retain their own license files, including native ONNX
-  helper dependencies. The additional copies here also cover code folded into
-  JavaScript bundles or native libraries.
-- Downloadable speech model weights are not included in the application; their
-  upstream licenses are linked in the main README.
+- Das Verzeichnis `Fonts` des Mac trägt die drei Texte der SIL Open Font License.
+- `speedtest.txt` neben dem Beispiel-Audio hält die Namensnennung an LibriVox fest.
+- Die Plattform-Pakete von Electron tragen `LICENSE.electron.txt` und
+  `LICENSES.chromium.html`; behalte die plattformspezifischen Dateien, die
+  Electron mitliefert.
+- Verpackte npm-Module behalten ihre eigenen Lizenzdateien, auch die
+  Abhängigkeiten für native ONNX-Helfer. Die zusätzlichen Kopien hier decken
+  auch Code ab, der in JavaScript-Bundles oder native Bibliotheken eingefaltet ist.
+- Herunterladbare Gewichte der Sprachmodelle sind nicht in der Anwendung
+  enthalten; ihre Upstream-Lizenzen sind in der Haupt-README verlinkt.
 
-When changing dependency pins or the Microsoft runtime download, refresh the
-affected notices and `SOURCES.json`, then inspect each resulting app package.
-In particular, the Microsoft download URL can change its contents even while
-the URL stays the same. This inventory records the versions checked for 0.4.3;
-it does not establish legal certification or binary reproducibility.
+Wenn du Abhängigkeits-Pins oder den Download der Microsoft-Runtime änderst,
+aktualisiere die betroffenen Hinweise und `SOURCES.json` und prüfe dann jedes
+entstandene App-Paket. Besonders kann sich der Inhalt des Microsoft-Downloads
+ändern, obwohl die URL gleich bleibt. Dieses Verzeichnis hält die für 0.4.3
+geprüften Versionen fest; es begründet weder eine rechtliche Zertifizierung
+noch die Reproduzierbarkeit der Binärdateien.
