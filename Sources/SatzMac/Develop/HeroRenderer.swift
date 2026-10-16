@@ -50,7 +50,7 @@ private struct StreamBanner: View {
                 Text("satz")
                     .font(Typography.display(80, .bold))
                     .foregroundStyle(ink)
-                Text("Speak, and it is written where your cursor is.")
+                Text("Sprich, und es steht da, wo dein Cursor ist.")
                     .font(Typography.text(22))
                     .foregroundStyle(muted)
             }
@@ -176,7 +176,7 @@ private struct TextWindow: View {
                     Circle().fill(Color(hex: hex).opacity(0.85)).frame(width: 10, height: 10)
                 }
             }
-            (Text("Thanks for the update. Thursday works for me")
+            (Text("Danke für das Update. Donnerstag passt mir")
                 .foregroundColor(ink)
              + Text(" |").foregroundColor(orange))
                 .font(Typography.text(17))

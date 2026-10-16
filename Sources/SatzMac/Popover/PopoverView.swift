@@ -362,6 +362,7 @@ private struct Footer: View {
     let preferences: Preferences
     let actions: PopoverActions
     @Environment(\.theme) private var theme
+    @Environment(\.isSnapshot) private var isSnapshot
     @State private var devices: [InputDevice] = []
 
     var body: some View {
@@ -417,6 +418,9 @@ private struct Footer: View {
         if let uid = preferences.inputDeviceUID, let device = devices.first(where: { $0.uid == uid }) {
             return device.name
         }
+        // Pictures name the same microphone in either language, not this
+        // Mac's, as the settings window does.
+        if isSnapshot { return de("MacBook Pro-Mikrofon", en: "MacBook Pro Microphone") }
         return InputDevices.systemDefault()?.name ?? de("Mikrofon", en: "Microphone")
     }
 }

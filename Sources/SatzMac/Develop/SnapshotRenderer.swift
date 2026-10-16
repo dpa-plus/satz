@@ -96,20 +96,21 @@ enum SnapshotRenderer {
         try png(of: icons).write(to: folder.appendingPathComponent("icons.png"))
     }
 
-    /// The README's picture: the card while talking, and the menu with what
-    /// was dictated. In English and made up, never anyone's real text.
+    /// The README's picture, also on dpa.plus/satz: the card while talking,
+    /// and the menu with what was dictated. In German, like the README, and
+    /// made up, never anyone's real text.
     static func writeShowcase(to path: String) throws {
-        Language.current = .english
+        Language.current = .german
         AppTheme.current = .dpa
         let history = History()
         let base = Date(timeIntervalSince1970: 1_791_000_000)
-        history.add("The test is red, please don't merge yet.", app: "Slack", pasted: true, at: base)
-        history.add("Let's move the call with Lena to Thursday at two.", app: "Mail", pasted: true, at: base + 600)
-        history.add("Write a function that reads every invoice in the Accounting folder and adds up the totals per customer.",
+        history.add("Der Test ist rot, bitte noch nicht mergen.", app: "Slack", pasted: true, at: base)
+        history.add("Lass uns den Call mit Lena auf Donnerstag um zwei verschieben.", app: "Mail", pasted: true, at: base + 600)
+        history.add("Schreib mir eine Funktion, die alle Rechnungen aus dem Ordner Buchhaltung liest und die Beträge pro Kunde summiert.",
                     app: "Claude", pasted: true, at: base + 1200)
         let sheet = HStack(alignment: .center, spacing: 40) {
             VStack(alignment: .trailing, spacing: 28) {
-                card(.listening, text: "Thanks for the update. Thursday at two works for me, and I'll bring the slides. ", marker: true)
+                card(.listening, text: "Danke für das Update. Donnerstag um zwei passt mir, ich bringe die Folien mit. ", marker: true)
                 card(.listening, marker: true)
             }
             PopoverView(history: history, discarded: Discarded(), setup: Setup(hasKey: true, microphone: .allowed, canPaste: true),
@@ -118,8 +119,9 @@ enum SnapshotRenderer {
         }
         .padding(.horizontal, 56)
         .padding(.vertical, 44)
-        // Rounded like the hero above it in the README.
-        .background(Color(hex: 0xE9DDD2), in: RoundedRectangle(cornerRadius: 32, style: .continuous))
+        // Rounded like the hero above it in the README, in the sand of the
+        // app and of dpa.plus, where it sits on that same sand.
+        .background(Color(hex: 0xFFEADE), in: RoundedRectangle(cornerRadius: 32, style: .continuous))
         try png(of: sheet.environment(\.isSnapshot, true)).write(to: URL(fileURLWithPath: path))
     }
 
