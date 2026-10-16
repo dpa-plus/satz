@@ -1,0 +1,57 @@
+name: CDN
+
+# Copies every published release to cdn.prozesshub.eu, where the README and
+# dpa.plus/satz link: GitHub's release downloads are slow on some networks.
+# Each version gets its own folder that never changes; latest/ follows the
+# newest release that is not a pre-release.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release to copy, for example v0.4.3
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cdn
+  cancel-in-progress: false
+
+jobs:
+  copy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+      TARGET: r2:cdn/assets/clients/dpa/downloads/satz
+      RCLONE_CONFIG_R2_TYPE: s3
+      RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+      RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      RCLONE_CONFIG_R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      RCLONE_CONFIG_R2_REGION: auto
+    steps:
+      - name: Install rclone
+        run: sudo apt-get update -q && sudo apt-get install -yq rclone
+      - name: Download the release
+        run: >
+          gh release download "$TAG" -R "$GITHUB_REPOSITORY" --dir release
+          --pattern 'satz-mac.zip' --pattern 'satz-windows-*.zip' --pattern 'satz-linux-*' --pattern 'SHA256SUMS.txt'
+      - name: Check the files
+        # The source archive stays on GitHub only, so its line is left out.
+        working-directory: release
+        run: grep -v -- '-source\.' SHA256SUMS.txt | sha256sum --check
+      - name: Copy to the version folder
+        run: rclone copy release "$TARGET/$TAG" --s3-no-check-bucket --transfers 8 --header-upload "Cache-Control: public, max-age=31536000, immutable"
+      - name: Copy to latest
+        # Short cache, because these names are replaced with every release.
+        run: |
+          if [ "$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json isPrerelease -q .isPrerelease)" = "true" ]; then
+            echo "Pre-release: latest/ stays as it is."
+            exit 0
+          fi
+          rclone copy release "$TARGET/latest" --s3-no-check-bucket --transfers 8 --header-upload "Cache-Control: public, max-age=300"
