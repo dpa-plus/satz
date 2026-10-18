@@ -50,17 +50,22 @@ public final class FileDownload: NSObject, URLSessionDownloadDelegate, @unchecke
     /// file was there already: a cancelled download must never count as done
     /// (it went on to be chosen, prepared and timed).
     public func run(_ model: SherpaModel, into folder: URL) async throws {
+        try await run(files: model.files, from: { model.url(of: $0) }, into: folder)
+    }
+
+    /// CoreML bundles use the same pinned, cancellable file download as ONNX.
+    public func run(files: [SherpaModel.File], from url: @Sendable (SherpaModel.File) -> URL, into folder: URL) async throws {
         try checkCancelled()
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
         lock.withLock {
             self.session = session
-            total = max(1, model.bytes)
+            total = max(1, files.reduce(0) { $0 + $1.bytes })
             finished = 0
             reported = 0
         }
         defer { session.finishTasksAndInvalidate() }
-        for file in model.files {
+        for file in files {
             try checkCancelled()
             let destination = folder.appendingPathComponent(file.name)
             if Self.size(of: destination) != nil {
@@ -74,7 +79,7 @@ public final class FileDownload: NSObject, URLSessionDownloadDelegate, @unchecke
             }
             // Qwen3's tokenizer files sit in a folder of their own.
             try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try await fetch(model.url(of: file), file: file, to: destination, session: session)
+            try await fetch(url(file), file: file, to: destination, session: session)
             lock.withLock { finished += file.bytes }
             progress(Double(lock.withLock { finished }) / Double(total))
         }

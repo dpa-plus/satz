@@ -1,0 +1,11 @@
+FluidAudio 0.17.3
+https://github.com/FluidInference/FluidAudio/tree/v0.17.3
+Apache-2.0. Upstream third-party notices are included.
+Satz uses Parakeet ASR, with the optional NemoTextProcessing trait disabled.
+
+Moondream Parakeet Ultra model, CC-BY-4.0, derived from NVIDIA Parakeet V3.
+https://huggingface.co/moondream/parakeet-ultra
+CoreML conversion by FluidInference:
+https://huggingface.co/FluidInference/parakeet-ultra-coreml/tree/95eaa59a39d4394f047a4dc5cce480388a60d1b6
+Satz downloads that conversion unchanged; model weights are not bundled with the app.
+https://creativecommons.org/licenses/by/4.0/

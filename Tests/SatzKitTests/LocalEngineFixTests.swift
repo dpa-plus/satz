@@ -257,6 +257,27 @@ private func scratchFolder() -> URL {
 
 @Suite(.serialized)
 struct PinnedDownloadTests {
+    @Test func coreMLDownloadKeepsNestedPathsAndRejectsDamagedWeights() async throws {
+        let folder = scratchFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = SherpaModel.File("Encoder.mlmodelc/weights/weight.bin", Int64(goodModel.count), sha256: sha256Hex(goodModel))
+        let base = URL(string: "https://huggingface.co/FluidInference/parakeet-ultra-coreml/resolve/pinned/")!
+        PinnedFiles.bodies = ["weight.bin": goodModel]
+        PinnedFiles.requested = []
+        try await PinnedFiles.download().run(files: [file], from: { base.appendingPathComponent($0.name) }, into: folder)
+        let destination = folder.appendingPathComponent(file.name)
+        #expect(try Data(contentsOf: destination) == goodModel)
+        #expect(PinnedFiles.requested.map(\.path) == ["/FluidInference/parakeet-ultra-coreml/resolve/pinned/Encoder.mlmodelc/weights/weight.bin"])
+        var damaged = goodModel
+        damaged[0] ^= 0xff
+        try damaged.write(to: destination)
+        PinnedFiles.bodies = ["weight.bin": damaged]
+        await #expect(throws: FileDownload.Failure.self) {
+            try await PinnedFiles.download().run(files: [file], from: { base.appendingPathComponent($0.name) }, into: folder)
+        }
+        #expect(!FileManager.default.fileExists(atPath: destination.path))
+    }
+
     @Test func bytesOfTheRightSizeAndAnotherChecksumAreRefusedAndLeaveNothing() async throws {
         let folder = scratchFolder()
         defer { try? FileManager.default.removeItem(at: folder) }

@@ -134,16 +134,19 @@ final class LocalModels {
         enum Engine {
             case whisper(WhisperKit)
             case sherpa(SherpaRecognizer)
+            case ultra(UltraRecognizer)
         }
 
         let engine: Engine
         init(_ whisper: WhisperKit) { engine = .whisper(whisper) }
         init(_ sherpa: SherpaRecognizer) { engine = .sherpa(sherpa) }
+        init(_ ultra: UltraRecognizer) { engine = .ultra(ultra) }
 
         /// WhisperKit's memory is given back by hand; sherpa-onnx's when the
         /// last reference to its recognizer goes.
         func unload() async {
             if case .whisper(let whisper) = engine { await whisper.unloadModels() }
+            if case .ultra(let ultra) = engine { await ultra.unload() }
         }
     }
 
@@ -254,6 +257,7 @@ final class LocalModels {
                 // pieces are not kept.
                 if Task.isCancelled || error is CancellationError {
                     if LocalCatalog.model(model)?.sherpa != nil { try? FileManager.default.removeItem(at: Self.sherpaFolder(model)) }
+                    if model == LocalCatalog.parakeetUltra { try? FileManager.default.removeItem(at: Self.ultraFolder) }
                     return Log.note("local: download of \(model) cancelled")
                 }
                 failed(model, error)
@@ -297,6 +301,16 @@ final class LocalModels {
     /// Hugging Face one by one for sherpa-onnx.
     private func fetch(_ model: String) async throws -> URL {
         let report = { @Sendable (fraction: Double) in _ = Task { @MainActor in self.progress(model, fraction) } }
+        if model == LocalCatalog.parakeetUltra {
+            let download = FileDownload(progress: report)
+            try await withTaskCancellationHandler {
+                try await download.run(files: UltraAssets.files,
+                                       from: { UltraAssets.baseURL.appendingPathComponent($0.name) }, into: Self.ultraFolder)
+            } onCancel: {
+                download.cancel()
+            }
+            return Self.ultraFolder
+        }
         guard let sherpa = LocalCatalog.model(model)?.sherpa else {
             return try await WhisperKit.download(variant: model, downloadBase: Self.base) { report($0.fractionCompleted) }
         }
@@ -634,6 +648,9 @@ final class LocalModels {
 
     /// The folder a finished download landed in; nil if there is none.
     nonisolated static func folder(of variant: String) -> URL? {
+        if variant == LocalCatalog.parakeetUltra {
+            return FileManager.default.fileExists(atPath: ultraFolder.appendingPathComponent(completeMark).path) ? ultraFolder : nil
+        }
         if LocalCatalog.model(variant)?.sherpa != nil {
             let folder = sherpaFolder(variant)
             return FileManager.default.fileExists(atPath: folder.appendingPathComponent(completeMark).path) ? folder : nil
@@ -656,9 +673,10 @@ final class LocalModels {
     }
 
     nonisolated private static let completeMark = ".complete"
+    nonisolated static let ultraFolder = root.appendingPathComponent("coreml/parakeet-ultra", isDirectory: true)
 
     nonisolated private static func markComplete(_ model: String, folder: URL) throws {
-        if LocalCatalog.model(model)?.sherpa != nil {
+        if LocalCatalog.model(model)?.sherpa != nil || model == LocalCatalog.parakeetUltra {
             try Data().write(to: folder.appendingPathComponent(completeMark))
         } else {
             try folder.path.write(to: marker(model), atomically: true, encoding: .utf8)
@@ -667,6 +685,11 @@ final class LocalModels {
 
     nonisolated private static func load(_ variant: String, folder given: URL?) async throws -> Kit {
         guard let folder = given ?? folder(of: variant) else { throw Failure.notDownloaded }
+        if variant == LocalCatalog.parakeetUltra {
+            let kit = Kit(try await UltraRecognizer(folder: folder))
+            Log.note("local: parakeet-ultra loaded through FluidAudio CoreML")
+            return kit
+        }
         if let sherpa = LocalCatalog.model(variant)?.sherpa {
             // Canary's language is set before each transcription (`run`).
             // A test copy on the user's own models folder only reads there:
@@ -685,6 +708,8 @@ final class LocalModels {
     nonisolated private static func run(_ samples: [Float], kit: Kit, model: String, vocabulary: [String], spoken: Language,
                                         told: String?) async throws -> String {
         switch kit.engine {
+        case .ultra(let recognizer):
+            return try await recognizer.transcribe(samples)
         case .whisper(let whisper):
             return try await whisperTranscribe(samples, whisper: whisper, vocabulary: vocabulary, spoken: spoken,
                                                englishOnly: LocalCatalog.model(model)?.isEnglishOnly ?? false)

@@ -33,6 +33,7 @@ public enum LocalCatalog {
 
     // Through sherpa-onnx.
     public static let parakeetV3 = "parakeet-v3"
+    public static let parakeetUltra = "parakeet-ultra"
     public static let parakeetV2 = "parakeet-v2"
     public static let canary = "canary-180m"
     public static let cohere = "cohere-transcribe"
@@ -46,6 +47,7 @@ public enum LocalCatalog {
     /// What runs a model.
     public enum Engine: Hashable, Sendable {
         case whisperKit
+        case fluidAudio
         case sherpa(SherpaModel)
         /// Apple's speech recognition, part of macOS 26.
         case apple
@@ -94,6 +96,7 @@ public enum LocalCatalog {
             case LocalCatalog.tiny: "Whisper Tiny"
             case LocalCatalog.apple: de("Apple Spracherkennung", en: "Apple speech recognition")
             case LocalCatalog.parakeetV3: "Parakeet V3"
+            case LocalCatalog.parakeetUltra: "Parakeet Ultra"
             case LocalCatalog.parakeetV2: "Parakeet V2"
             case LocalCatalog.canary: "Canary 180M Flash"
             case LocalCatalog.cohere: "Cohere Transcribe"
@@ -119,6 +122,8 @@ public enum LocalCatalog {
             case LocalCatalog.tiny: de("Am schnellsten, sehr ungenau.", en: "The fastest, very rough.")
             case LocalCatalog.apple: de("In macOS eingebaut, nichts zu laden.", en: "Built into macOS, nothing to download.")
             case LocalCatalog.parakeetV3: de("Schnell und genau. 25 europäische Sprachen.", en: "Fast and accurate. 25 European languages.")
+            case LocalCatalog.parakeetUltra: de("Schnell auf Apples Neural Engine. Erkennt 25 Sprachen automatisch, auch Deutsch und Englisch.",
+                                                en: "Fast on Apple's Neural Engine. Detects 25 languages automatically, including German and English.")
             case LocalCatalog.parakeetV2: de("Nur Englisch, das beste für Englisch.", en: "English only. The best for English.")
             case LocalCatalog.canary: de("Sehr schnell. Englisch, Deutsch, Spanisch, Französisch.", en: "Very fast. English, German, Spanish, French.")
             case LocalCatalog.cohere: de("Am genauesten auf Deutsch, aber groß. Hört die Sprache, die du einstellst.",
@@ -141,6 +146,7 @@ public enum LocalCatalog {
         public var maker: String {
             switch id {
             case LocalCatalog.apple: "Apple"
+            case LocalCatalog.parakeetUltra: "Moondream"
             case LocalCatalog.parakeetV3, LocalCatalog.parakeetV2, LocalCatalog.canary, LocalCatalog.canary1B: "NVIDIA"
             case LocalCatalog.cohere: "Cohere"
             case LocalCatalog.qwen3: "Qwen"
@@ -220,6 +226,7 @@ public enum LocalCatalog {
             .init("decoder.int8.onnx", 153_250_705, sha256: "8372ca6c8ff4db8b916ca3592f5c757a715e691b9edec751ba19b29fc854baf9"),
             .init("tokens.txt", 207_437, sha256: "013ede043ae2480e3a9205cc34550d9686100cc682bacc90f702facdfbb93035"),
         ]), bytes: 2_888_052_036, languages: cohereLanguages, accuracy: 0.92, speed: 0.80),
+        Model(parakeetUltra, engine: .fluidAudio, bytes: UltraAssets.bytes, languages: european, accuracy: 0.83, speed: 0.95),
         Model(parakeetV3, engine: sherpa(.nemoTransducer, "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8", revision: "2bda32ec70b097a55adaa07d9a7173915b43cc78", [
             .init("encoder.int8.onnx", 652_184_281, sha256: "acfc2b4456377e15d04f0243af540b7fe7c992f8d898d751cf134c3a55fd2247"),
             .init("decoder.int8.onnx", 11_845_275, sha256: "179e50c43d1a9de79c8a24149a2f9bac6eb5981823f2a2ed88d655b24248db4e"),
@@ -329,7 +336,7 @@ public enum LocalCatalog {
             // the faster ones cannot run.
             case turboCompatible: supported.contains(turboCompatible) && !supported.contains(turbo)
             case distilCompatible: supported.contains(distilCompatible) && !supported.contains(distil)
-            default: model.sherpa != nil || supported.contains(model.id)
+            default: model.sherpa != nil || model.engine == .fluidAudio || supported.contains(model.id)
             }
         }
     }

@@ -20,7 +20,7 @@ private let m1: Set<String> = [
 
 /// What both get besides their Turbo and Distil builds: sherpa-onnx's
 /// models between them, the small Whisper builds after.
-private let germanToo = [LocalCatalog.largeV3, LocalCatalog.cohere, LocalCatalog.parakeetV3, LocalCatalog.parakeetGerman,
+private let germanToo = [LocalCatalog.largeV3, LocalCatalog.cohere, LocalCatalog.parakeetUltra, LocalCatalog.parakeetV3, LocalCatalog.parakeetGerman,
                          LocalCatalog.canary1B, LocalCatalog.qwen3, LocalCatalog.canary]
 private let englishAndMore = [LocalCatalog.parakeetV2, LocalCatalog.moonshineBase, LocalCatalog.moonshineTiny, LocalCatalog.senseVoice]
 private let others = [LocalCatalog.small, LocalCatalog.base, LocalCatalog.tiny]
@@ -41,7 +41,7 @@ private let sherpaIDs = [LocalCatalog.cohere, LocalCatalog.parakeetV3, LocalCata
 @Test func appleIsOfferedOnlyWhereMacOSHasIt() {
     #expect(LocalCatalog.offered(supported: newerChip, hasApple: false).allSatisfy { !$0.isApple })
     // sherpa-onnx runs on every Mac, whatever WhisperKit supports there.
-    #expect(LocalCatalog.offered(supported: [], hasApple: true).map(\.id) == sherpaIDs + [LocalCatalog.apple])
+    #expect(LocalCatalog.offered(supported: [], hasApple: true).map(\.id) == [LocalCatalog.cohere, LocalCatalog.parakeetUltra] + sherpaIDs.dropFirst() + [LocalCatalog.apple])
 }
 
 @Test func theDefaultLeadsTheList() {

@@ -148,6 +148,7 @@ Ein paar Modelle, die OpenRouter listet, fehlen, weil sie beim Diktieren versage
 | Whisper Tiny | 77 MB, sehr grob. | 99 MB, sehr grob. |
 | Distil-Whisper Large v3 | 607 MB, nur Englisch, schnell. | 950 MB (v3.5), nur Englisch. |
 | Cohere Transcribe | 2,9 GB, über sherpa-onnx. Auf Deutsch am genauesten im Open ASR Leaderboard, 14 Sprachen: versteht die Sprache, die bei *Gesprochen auf* eingestellt ist. | 2,9 GB, dasselbe. |
+| Parakeet Ultra | 632 MB, über FluidAudio/CoreML auf Apples Neural Engine. Erkennt 25 Sprachen automatisch, darunter Deutsch und Englisch. | Nicht verfügbar: dieser CoreML-Build benötigt macOS. |
 | Parakeet V3 | 670 MB, über sherpa-onnx. Schnell und genau, 25 europäische Sprachen, darunter Deutsch. | 670 MB, dasselbe. |
 | Parakeet German (primeLine) | 671 MB, Parakeet V3, von primeLine für Deutsch nachtrainiert (ein Community-Export), nur Deutsch. | 671 MB, dasselbe. |
 | Canary 1B v2 | 1,4 GB (ein Community-Export), genau. Englisch, Deutsch, Spanisch, Französisch: versteht die bei *Gesprochen auf* eingestellte Sprache. | 1,4 GB, dasselbe. |
@@ -160,7 +161,9 @@ Ein paar Modelle, die OpenRouter listet, fehlen, weil sie beim Diktieren versage
 | Whisper Large v3 Turbo German | | 983 MB, nur Deutsch. |
 | Apples Spracherkennung | Eingebaut in macOS 26; macOS holt sich eventuell einmal sein Sprachpaket. Sofort da, versteht aber nur die bei *Gesprochen auf* eingestellte Sprache und nutzt deinen Wortschatz kaum. | |
 
-Parakeet, Canary, Moonshine, SenseVoice, Cohere Transcribe und Qwen3-ASR laufen über [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx); Windows auf ARM hat nur die Whisper-Modelle, weil sherpa-onnx dafür keinen Build hat. Die vier neuesten werden wie die anderen angeboten und laden nichts, bis du sie anklickst.
+Parakeet Ultra nutzt auf dem Mac [FluidAudio](https://github.com/FluidInference/FluidAudio) 0.17.3. Die 632 MB werden von einem festen Commit geladen und per SHA-256 geprüft. Nach dem Download läuft die Erkennung offline; die Sprache wird nicht erzwungen. Der CoreML-Build ist nur auf dem Mac verfügbar. Ultra stammt von [Moondream](https://huggingface.co/moondream/parakeet-ultra), basiert auf NVIDIA Parakeet V3 und steht unter CC-BY-4.0; den CoreML-Export erstellt FluidInference.
+
+Die anderen Parakeet-Modelle, Canary, Moonshine, SenseVoice, Cohere Transcribe und Qwen3-ASR laufen über [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx); Windows auf ARM hat nur die Whisper-Modelle, weil sherpa-onnx dafür keinen Build hat. Die vier neuesten werden wie die anderen angeboten und laden nichts, bis du sie anklickst.
 
 Auf dem Mac stammen die Fehlerraten von Argmax, für genau die Fassungen, die satz lädt (Englisch, und Deutsch, wo sie es gemessen haben); unter Windows und Linux ist es Deutsch auf FLEURS, für die Originalmodelle. Beide werden einmal am Tag geholt, mit den Zahlen, die satz mitbringt, als Rückfall. Bei den übrigen Modellen ist der Genauigkeits-Balken eine grobe Einschätzung (die von Handy). Klick auf den Tempo-Balken eines Modells auf deinem Computer, um es neu zu messen.
 

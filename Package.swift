@@ -1,4 +1,4 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.2
 import PackageDescription
 
 /// sherpa-onnx's libraries, fetched by `make sherpa` (see the Makefile).
@@ -14,6 +14,8 @@ let package = Package(
     dependencies: [
         // Whisper on the Mac's own chip, for the provider "Lokal".
         .package(url: "https://github.com/argmaxinc/WhisperKit.git", exact: "1.1.0"),
+        // Ultra uses CoreML. The optional speech-synthesis normalizer is unused.
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.17.3", traits: []),
     ],
     targets: [
         .target(name: "SatzKit"),
@@ -26,6 +28,7 @@ let package = Package(
                 "SatzKit",
                 "CSherpaOnnx",
                 .product(name: "WhisperKit", package: "WhisperKit"),
+                .product(name: "FluidAudio", package: "FluidAudio"),
             ],
             // The libraries sit in satz.app/Contents/Frameworks (make bundle).
             linkerSettings: [.unsafeFlags(["-L", sherpaLibraries, "-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]

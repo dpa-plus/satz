@@ -11,6 +11,7 @@ gelten nur für eine Plattform:
 
 | Komponente | Version | Verwendet von |
 |---|---|---|
+| FluidAudio, mit den Hinweisen zu seinen Komponenten | 0.17.3 | Mac |
 | WhisperKit, einschließlich der Hinweise zu swift-transformers | 1.1.0 | Mac |
 | Swift Argument Parser, einschließlich der Runtime Library Exception | 1.8.2 | Abhängigkeitsgraph des Mac |
 | sherpa-onnx | 1.13.8 | Mac, Windows x64, Linux |

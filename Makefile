@@ -51,6 +51,8 @@ bundle:
 	cp -R Resources/Licenses "$(STAGE)/Contents/Resources/Licenses"
 	cp Resources/AppIcon.icns "$(STAGE)/Contents/Resources/AppIcon.icns"
 	cp -R Resources/en.lproj Resources/de.lproj "$(STAGE)/Contents/Resources/"
+	# Use the same build as BIN, including when packaging a universal build.
+	cp -R "$(dir $(BIN))FluidAudio_FluidAudio.bundle" "$(STAGE)/Contents/Resources/"
 	# The clip a local model is timed with, and where it comes from.
 	cp Resources/speedtest.wav Resources/speedtest.txt "$(STAGE)/Contents/Resources/"
 	# Reads what is playing, from inside /usr/bin/perl (see now-playing.m).

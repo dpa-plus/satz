@@ -460,5 +460,47 @@
     "source": "https://registry.npmjs.org/uiohook-napi/-/uiohook-napi-1.5.5.tgz#package/LICENSE",
     "sha256": "071c22737c45e77621eb378db221ebf88cf86138474371dbcc06382d6606980f",
     "npmIntegrity": "sha512-oSlTdnECw2GBfsJPTbBQBeE4v/EXP0EZmX6BJq5nzH/JgFaBE8JpFwEA/kLhiEP7HxQw28FViWiYgdIZzWuuJQ=="
+  },
+  {
+    "file": "FluidAudio/LICENSE",
+    "package": "FluidAudio",
+    "version": "0.17.3",
+    "source": "https://raw.githubusercontent.com/FluidInference/FluidAudio/a6b826ce9a09028fc685a4b32a8927ec920c3188/LICENSE",
+    "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+  },
+  {
+    "file": "FluidAudio/ThirdPartyLicenses/JapaneseG2P-LICENSE.md",
+    "package": "FluidAudio",
+    "version": "0.17.3",
+    "source": "https://raw.githubusercontent.com/FluidInference/FluidAudio/a6b826ce9a09028fc685a4b32a8927ec920c3188/ThirdPartyLicenses/JapaneseG2P-LICENSE.md",
+    "sha256": "cb82031f608b056ffb378073d15fd840e070a1dd3063f8975556f9536d447103"
+  },
+  {
+    "file": "FluidAudio/ThirdPartyLicenses/KokoroAneSpanishFrenchG2P-LICENSE.md",
+    "package": "FluidAudio",
+    "version": "0.17.3",
+    "source": "https://raw.githubusercontent.com/FluidInference/FluidAudio/a6b826ce9a09028fc685a4b32a8927ec920c3188/ThirdPartyLicenses/KokoroAneSpanishFrenchG2P-LICENSE.md",
+    "sha256": "82b80894661fb61209fc39f91bb50b2ed5d0c8628f9d1460ccc853b8bcf12043"
+  },
+  {
+    "file": "FluidAudio/ThirdPartyLicenses/NemoTextProcessing-LICENSE.md",
+    "package": "FluidAudio",
+    "version": "0.17.3",
+    "source": "https://raw.githubusercontent.com/FluidInference/FluidAudio/a6b826ce9a09028fc685a4b32a8927ec920c3188/ThirdPartyLicenses/NemoTextProcessing-LICENSE.md",
+    "sha256": "300a31d86c7c5d809f0adc00ef7d35259226acc7e412b9767cd3029a3395c50e"
+  },
+  {
+    "file": "FluidAudio/ThirdPartyLicenses/fastcluster-LICENSE.md",
+    "package": "FluidAudio",
+    "version": "0.17.3",
+    "source": "https://raw.githubusercontent.com/FluidInference/FluidAudio/a6b826ce9a09028fc685a4b32a8927ec920c3188/ThirdPartyLicenses/fastcluster-LICENSE.md",
+    "sha256": "67594dbe4a7477719c8160373e7767c2c319ef966a6042f76846a18af02cde0a"
+  },
+  {
+    "file": "FluidAudio/ThirdPartyLicenses/vbx-LICENSE.md",
+    "package": "FluidAudio",
+    "version": "0.17.3",
+    "source": "https://raw.githubusercontent.com/FluidInference/FluidAudio/a6b826ce9a09028fc685a4b32a8927ec920c3188/ThirdPartyLicenses/vbx-LICENSE.md",
+    "sha256": "08e57fdb5187c816e937916f1e176aadb400ca76f4b3b493d69730ec8f10dd80"
   }
 ]
