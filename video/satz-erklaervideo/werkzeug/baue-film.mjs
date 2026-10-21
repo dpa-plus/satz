@@ -53,6 +53,28 @@ const fontCss = [
   `@font-face { font-family: 'IBM Plex Mono'; src: url('assets/fonts/plexmono-500.woff2') format('woff2'); font-weight: 500; font-style: normal; font-display: block; }`,
 ].join('\n');
 
+// Icons aus film/assets/icons/ (CDN, Herkunft in assets/quellen.json) als <symbol> einbetten:
+// so sind sie ab Bild 0 da, ohne Ladezeit. Markenzeichen behalten ihre Farben (fill steht in der Datei),
+// die neutralen Lucide-Symbole zeichnen mit currentColor und nehmen die Farbe des Textes daneben.
+const ICONS = ['mail', 'notizen', 'code-editor', 'ki-chat', 'lokal', 'slack', 'apple', 'windows', 'linux'];
+function symbol(name) {
+  const s = fs.readFileSync(path.join(F, 'assets', 'icons', name + '.svg'), 'utf8').replace(/<!--[\s\S]*?-->/g, '');
+  const m = s.match(/<svg([^>]*)>([\s\S]*)<\/svg>/);
+  if (!m) throw new Error('Icon ohne <svg>: ' + name);
+  const vb = m[1].match(/viewBox="([^"]+)"/);
+  if (!vb) throw new Error('Icon ohne viewBox: ' + name);
+  const attr = (a) => {
+    const r = m[1].match(new RegExp('\\s' + a + '="([^"]+)"'));
+    return r ? ` ${a}="${r[1]}"` : '';
+  };
+  const g = ['fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin'].map(attr).join('');
+  const inner = m[2].replace(/<title>[\s\S]*?<\/title>/g, '').replace(/\s+/g, ' ').trim();
+  return `<symbol id="ic-${name}" viewBox="${vb[1]}"><g${g}>${inner}</g></symbol>`;
+}
+const body = src('body.html');
+if (!body.includes('<!--ICONS-->')) throw new Error('body.html: Platzhalter <!--ICONS--> fehlt');
+const bodyMitIcons = body.replace('<!--ICONS-->', ICONS.map(symbol).join('\n    '));
+
 const html = `<!doctype html>
 <html lang="de">
   <head>
@@ -67,7 +89,7 @@ ${src('style.css')}
   </head>
   <body>
     <div id="root" data-composition-id="main" data-start="0" data-duration="${dauer}" data-width="1920" data-height="1080">
-${src('body.html')}
+${bodyMitIcons}
     </div>
     <script>
       const VO = ${JSON.stringify(VO)};

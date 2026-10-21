@@ -250,7 +250,7 @@ document.fonts.ready.then(function () {
   welleHook.innerHTML = '<i></i>'.repeat(24);
   const hookBars = $$('#hook-welle i');
 
-  const kIdee = karte({ host: '#s-mail', id: 'k-idee', u: 2.2, html: worte(MAIL), right: 340, bottom: 780 });
+  const kIdee = karte({ host: '#s-mail', id: 'k-idee', u: 2.5, html: worte(MAIL), right: 485, bottom: 780 });
 
   // ---- So geht's ----
   const NOTIZ = 'Kannst du mir die Folien noch heute schicken?';
@@ -267,7 +267,7 @@ document.fonts.ready.then(function () {
   const K_A = 'Kannst du mir die Folien';
   const K_B = 'bis Freitag schicken? Dann schaue ich sie mir am Wochenende an.';
   const kKarte = karte({
-    host: '#s-karte', id: 'k-karte', u: 2.8, right: 428, bottom: 340,
+    host: '#s-karte', id: 'k-karte', u: 3.2, right: 352, bottom: 340,
     html: worte(K_A) + '<span class="ins" id="k-ins">&nbsp;' + worte('und die Notizen', 'wi') + '</span><span class="ins ph" id="k-ph">&nbsp;<b>…</b></span> ' + worte(K_B),
   });
   const ins = $('#k-ins'), ph = $('#k-ph');
@@ -287,7 +287,7 @@ document.fonts.ready.then(function () {
 
   // ---- Aufräumen ----
   const kAuf = karte({
-    host: '#s-auf', id: 'k-auf', u: 3.0, right: 390, bottom: 280, voll: true,
+    host: '#s-auf', id: 'k-auf', u: 3.6, right: 276, bottom: 280, voll: true,
     html: '<span class="roh"><span class="mark" id="m-fw">ähm also<i class="durch"></i></span> <span class="mark" id="m-w">w<i class="hell"></i></span>ir treffen uns <span class="mark" id="m-vs">Montag nein<i class="durch"></i></span> Dienstag<span class="neu-punkt">.</span></span>' +
       '<span class="final" style="position:absolute; left: calc(17 * var(--u)); top: calc(9 * var(--u)); white-space: nowrap">Wir treffen uns Dienstag.</span>',
   });
@@ -316,7 +316,7 @@ document.fonts.ready.then(function () {
   const kiPos = kw.map((w) => ({ x: 26 + w.offsetLeft + w.offsetWidth + 2 - kiBase.x, y: 12 + w.offsetTop + w.offsetHeight / 2 - 23 - kiBase.y }));
 
   // ---- Messen: Einstellungen ----
-  const einst = $('#einst'), U = 2.3;
+  const einst = $('#einst'), U = 2.45;
   const vari = $('#varianten');
   const vH = Math.max($('#v1').offsetHeight, $('#v2').offsetHeight, $('#v3').offsetHeight);
   vari.style.height = vH + 'px';
@@ -669,7 +669,8 @@ document.fonts.ready.then(function () {
   const tRaeumt = A('a1:räumt') - 0.05;
   welle(kAuf.barsL, T.auf + 0.2, tRaeumt + 0.2, kAuf.hMin, kAuf.hMax);
   const tToggle = A('a1:willst') - 0.02;
-  go('#toggle .knauf', { x: 0 }, { x: 16 * 2, duration: 0.24, ease: 'power2.inOut' }, tToggle);
+  // Weg des Knaufs: Schalter 38 minus Knauf 18 minus 2 × 2 Rand = 16 Punkte (--u des Blocks: 2.8)
+  go('#toggle .knauf', { x: 0 }, { x: 16 * 2.8, duration: 0.24, ease: 'power2.inOut' }, tToggle);
   op('#toggle .an', 0, 1, tToggle, 0.2);
   const tFinal = A('a1:Versprecher') + 0.4;
   arbeitet(kAuf, tRaeumt, tFinal, kAuf.lRaeumt, kAuf.lang);

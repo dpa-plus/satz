@@ -30,6 +30,111 @@
    "beschreibung": "DPA+ Logo breit, weiß transparent (für dunklen Grund; der Abspann ist hell, daher nicht nötig)",
    "quelle": "cdn",
    "fundort": "https://cdn.prozesshub.eu/assets/brand/v1/logo/wide-white-transparent.png"
+  },
+  {
+   "status": "vorhanden",
+   "id": "icon-apple",
+   "beschreibung": "Apple-Logo (Simple Icons, CC0, Marke von Apple, nur nominativ: Chip \"Mac\", Abspann)",
+   "quelle": "cdn",
+   "fundort": "https://cdn.prozesshub.eu/assets/shared/icons/v1/os/apple.svg",
+   "datei": "film/assets/icons/apple.svg",
+   "geholt": "2026-10-16",
+   "lizenz": "https://cdn.prozesshub.eu/assets/shared/icons/v1/README.md"
+  },
+  {
+   "status": "vorhanden",
+   "id": "icon-windows",
+   "beschreibung": "Windows-Logo (Wikimedia Commons, gemeinfrei, Marke von Microsoft, nur nominativ: Chip \"Windows\", Abspann)",
+   "quelle": "cdn",
+   "fundort": "https://cdn.prozesshub.eu/assets/shared/icons/v1/os/windows.svg",
+   "datei": "film/assets/icons/windows.svg",
+   "geholt": "2026-10-16",
+   "lizenz": "https://cdn.prozesshub.eu/assets/shared/icons/v1/README.md"
+  },
+  {
+   "status": "vorhanden",
+   "id": "icon-linux",
+   "beschreibung": "Tux (Simple Icons, CC0, nur nominativ: Chip \"Linux\", Abspann)",
+   "quelle": "cdn",
+   "fundort": "https://cdn.prozesshub.eu/assets/shared/icons/v1/os/linux.svg",
+   "datei": "film/assets/icons/linux.svg",
+   "geholt": "2026-10-16",
+   "lizenz": "https://cdn.prozesshub.eu/assets/shared/icons/v1/README.md"
+  },
+  {
+   "status": "vorhanden",
+   "id": "icon-slack",
+   "beschreibung": "Slack-Logo (Marke von Slack, nur nominativ: Titelleiste \"Slack\")",
+   "quelle": "cdn",
+   "fundort": "https://cdn.prozesshub.eu/assets/shared/icons/v1/apps/slack.svg",
+   "datei": "film/assets/icons/slack.svg",
+   "geholt": "2026-10-16",
+   "lizenz": "https://cdn.prozesshub.eu/assets/shared/icons/v1/README.md"
+  },
+  {
+   "status": "vorhanden",
+   "id": "icon-mail",
+   "beschreibung": "Briefumschlag (Lucide \"mail\", ISC: Titelleisten \"Neue Nachricht\" und \"Mail\")",
+   "quelle": "cdn",
+   "fundort": "https://cdn.prozesshub.eu/assets/shared/icons/v1/apps/mail.svg",
+   "datei": "film/assets/icons/mail.svg",
+   "geholt": "2026-10-16",
+   "lizenz": "https://cdn.prozesshub.eu/assets/shared/icons/v1/README.md"
+  },
+  {
+   "status": "vorhanden",
+   "id": "icon-notizen",
+   "beschreibung": "Notizbuch (Lucide \"notebook-pen\", ISC: Titelleiste \"Notizen\")",
+   "quelle": "cdn",
+   "fundort": "https://cdn.prozesshub.eu/assets/shared/icons/v1/apps/notizen.svg",
+   "datei": "film/assets/icons/notizen.svg",
+   "geholt": "2026-10-16",
+   "lizenz": "https://cdn.prozesshub.eu/assets/shared/icons/v1/README.md"
+  },
+  {
+   "status": "vorhanden",
+   "id": "icon-code-editor",
+   "beschreibung": "Code-Klammern (Lucide \"code-xml\", ISC: Titelleiste \"Code-Editor\")",
+   "quelle": "cdn",
+   "fundort": "https://cdn.prozesshub.eu/assets/shared/icons/v1/apps/code-editor.svg",
+   "datei": "film/assets/icons/code-editor.svg",
+   "geholt": "2026-10-16",
+   "lizenz": "https://cdn.prozesshub.eu/assets/shared/icons/v1/README.md"
+  },
+  {
+   "status": "vorhanden",
+   "id": "icon-ki-chat",
+   "beschreibung": "Funkeln (Lucide \"sparkles\", ISC: Titelleiste \"KI-Chat\"; bewusst kein Anbieter-Logo)",
+   "quelle": "cdn",
+   "fundort": "https://cdn.prozesshub.eu/assets/shared/icons/v1/apps/ki-chat.svg",
+   "datei": "film/assets/icons/ki-chat.svg",
+   "geholt": "2026-10-16",
+   "lizenz": "https://cdn.prozesshub.eu/assets/shared/icons/v1/README.md"
+  },
+  {
+   "status": "vorhanden",
+   "id": "icon-lokal",
+   "beschreibung": "Laptop (Lucide \"laptop\", ISC: \"Lokal\" in den Einstellungen und auf der Kosten-Karte)",
+   "quelle": "cdn",
+   "fundort": "https://cdn.prozesshub.eu/assets/shared/icons/v1/apps/lokal.svg",
+   "datei": "film/assets/icons/lokal.svg",
+   "geholt": "2026-10-16",
+   "lizenz": "https://cdn.prozesshub.eu/assets/shared/icons/v1/README.md"
+  },
+  {
+   "status": "nicht verwendet",
+   "id": "icon-ubuntu",
+   "beschreibung": "Ubuntu-Logo (Simple Icons, CC0): im Bild wird nur \"Linux\" genannt, daher Tux statt Ubuntu",
+   "quelle": "cdn",
+   "fundort": "https://cdn.prozesshub.eu/assets/shared/icons/v1/os/ubuntu.svg"
+  },
+  {
+   "status": "nicht verwendet",
+   "id": "icon-debian",
+   "beschreibung": "Debian-Logo (Simple Icons, CC0): im Bild wird nur \"Linux\" genannt, daher Tux statt Debian",
+   "quelle": "cdn",
+   "fundort": "https://cdn.prozesshub.eu/assets/shared/icons/v1/os/debian.svg"
   }
- ]
+ ],
+ "hinweis_icons": "Icons werden von werkzeug/baue-film.mjs als <symbol> eingebettet. Markenzeichen (Apple, Windows, Linux, Slack) nur neben dem Namen, nie umgefärbt, verzerrt, beschnitten oder mit Effekten; Anbieter (OpenAI, Google, Claude …) bleiben reine Namen."
 }

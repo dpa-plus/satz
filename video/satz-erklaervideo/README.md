@@ -6,8 +6,8 @@ Das fertige Video liegt im CDN (siehe projekt.json -> ablage.cdn), hier liegen n
 - `skript.json`, `projekt.json`, `marke.json`, `ton_plan.json`: Inhalt und Einstellungen
 - `_build/vo/abschnitte/`: die gewählten Sprecheraufnahmen, `_build/musik/`: Musik (Rohdatei + Analyse)
 - `film/src/`: die Komposition: `body.html` (Szenen), `style.css` (Farben, Maße der satz-Oberfläche in App-Punkten), `szenen.js` (GSAP-Timeline)
-- `film/assets/`: Schriften aus `Resources/Fonts` (OFL), DPA+-Logo aus dem CDN (Herkunft in `assets/quellen.json`)
-- `werkzeug/baue-film.mjs`: setzt `film/index.html` aus `film/src/`, den Wortzeiten (`_build/timeline.json`) und dem Pegel der Stimme (`_build/mix/stems/stimme.wav`, treibt die Wellenform der Karte) zusammen
+- `film/assets/`: Schriften aus `Resources/Fonts` (OFL), DPA+-Logo und Icons (`icons/`: Mac, Windows, Linux, Slack, Mail, Notizen, Code-Editor, KI-Chat, Lokal) aus dem CDN (Herkunft und Lizenzen in `assets/quellen.json`). Markenzeichen nur neben ihrem Namen, unverändert; KI-Anbieter bleiben reine Namen.
+- `werkzeug/baue-film.mjs`: setzt `film/index.html` aus `film/src/`, den Wortzeiten (`_build/timeline.json`) und dem Pegel der Stimme (`_build/mix/stems/stimme.wav`, treibt die Wellenform der Karte) zusammen und bettet die Icons aus `film/assets/icons/` als `<symbol>` ein
 
 Die satz-Oberfläche (Karte, Menü, Einstellungen) ist in HTML nachgebaut, mit Farben, Radien, Größen und Beschriftungen aus `Sources/SatzMac`. Keine Screenshots im Video.
 Jede Einblendung hängt an einem Wort der Sprecherspur (`A('zeile:wort')` in `szenen.js`), eine neue Aufnahme zieht das Timing also mit.

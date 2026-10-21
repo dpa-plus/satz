@@ -25,6 +25,15 @@ html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--
 #root { position: relative; width: 100%; height: 100%; overflow: hidden; font-family: 'Source Sans 3', sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; background: var(--sand); }
 svg { display: block; }
 .ic { width: 1em; height: 1em; display: block; flex: none; }
+/* Icons neben Namen (assets/icons/, aus dem CDN): je Ort dieselbe Box (--b), mittig zur Schrift daneben.
+   Markenzeichen werden nur gleichmäßig verkleinert (--s), damit sie optisch so groß wirken wie die
+   Strich-Icons mit ihrem Innenrand; nie umgefärbt, verzerrt, beschnitten oder mit Effekten. */
+.ico { --b: 1em; --s: 1; --dy: 0px; position: relative; width: var(--b); height: var(--b); flex: none; display: flex; align-items: center; justify-content: center; transform: translateY(var(--dy)); }
+.ico svg { width: calc(var(--b) * var(--s)); height: calc(var(--b) * var(--s)); display: block; flex: none; }
+.ico.m-slack { --s: 0.9; }
+.ico.m-windows { --s: 0.74; }
+.ico.m-apple { --s: 0.94; }
+.ico.m-linux { --s: 0.96; }
 
 /* ============ Hintergrund ============ */
 #bg { position: absolute; inset: 0; z-index: 0; overflow: hidden; background: var(--sand); }
@@ -39,13 +48,14 @@ svg { display: block; }
 /* ============ Neutrale App-Fenster ============ */
 .win { position: absolute; background: var(--weiss); border-radius: 22px; overflow: hidden;
   box-shadow: 0 0 0 1.5px rgba(22, 48, 60, 0.16), 0 34px 70px -30px rgba(70, 34, 10, 0.38), 0 10px 22px -12px rgba(22, 48, 60, 0.22); }
-.win .bar { position: relative; height: 66px; display: flex; align-items: center; justify-content: center; background: #fff5ee; border-bottom: 1.5px solid rgba(22, 48, 60, 0.1); font-weight: 600; font-size: 28px; color: var(--ink2); letter-spacing: 0.01em; }
+.win .bar { position: relative; height: 66px; display: flex; align-items: center; justify-content: center; gap: 12px; background: #fff5ee; border-bottom: 1.5px solid rgba(22, 48, 60, 0.1); font-weight: 600; font-size: 28px; color: var(--ink2); letter-spacing: 0.01em; }
 .win .lichter { position: absolute; left: 26px; top: 25px; display: flex; gap: 10px; }
+.win .bar .ico { --b: 32px; }
 .win .lichter i { display: block; width: 16px; height: 16px; border-radius: 50%; background: rgba(22, 48, 60, 0.16); }
 .caret { position: absolute; left: 0; top: 0; width: 3px; border-radius: 2px; background: var(--ink); display: block; }
 
 /* Mail (Hook und Idee) */
-#mail { left: 300px; top: 336px; width: 1320px; height: 664px; }
+#mail { left: 110px; top: 336px; width: 1700px; height: 664px; }
 .mrow { height: 78px; display: flex; align-items: center; gap: 18px; padding: 0 44px; border-bottom: 1.5px solid rgba(22, 48, 60, 0.09); font-size: 32px; color: var(--ink); }
 .mrow b { font-weight: 400; color: var(--grau); width: 124px; }
 .mbody { position: absolute; left: 44px; right: 44px; top: 256px; bottom: 30px; font-size: 40px; line-height: 60px; color: var(--ink); }
@@ -62,7 +72,8 @@ svg { display: block; }
 
 /* Plattform-Chips */
 #chips { position: absolute; left: 0; right: 0; top: 136px; display: flex; justify-content: center; gap: 26px; }
-.chip { display: flex; align-items: center; height: 86px; padding: 0 38px; border-radius: 43px; background: var(--weiss); box-shadow: inset 0 0 0 3px var(--ink), 0 7px 0 rgba(22, 48, 60, 0.1); font-weight: 600; font-size: 38px; color: var(--ink); opacity: 0; }
+.chip { display: flex; align-items: center; gap: 14px; height: 86px; padding: 0 38px 0 32px; border-radius: 43px; background: var(--weiss); box-shadow: inset 0 0 0 3px var(--ink), 0 7px 0 rgba(22, 48, 60, 0.1); font-weight: 600; font-size: 38px; color: var(--ink); opacity: 0; }
+.chip .ico { --b: 38px; }
 
 /* ============ satz-Karte (dunkel) ============ */
 .karte { position: absolute; display: flex; flex-direction: column; overflow: hidden; background: var(--k-grund);
@@ -184,14 +195,14 @@ svg { display: block; }
 .pop .fuss .ib .ic { width: calc(15 * var(--u)); height: calc(15 * var(--u)); }
 
 /* ============ Karte (Nahaufnahme) ============ */
-#k-hinten { left: 230px; top: 150px; width: 1460px; height: 780px; opacity: 0.5; }
+#k-hinten { left: 110px; top: 150px; width: 1700px; height: 780px; opacity: 0.5; }
 #k-hinten .zeilen { position: absolute; left: 60px; top: 120px; right: 60px; }
 #k-hinten .zeilen i { display: block; height: 24px; border-radius: 12px; background: rgba(22, 48, 60, 0.09); margin-bottom: 30px; }
 
 /* ============ Einstellungen (hell) ============ */
 .fenster { position: absolute; background: var(--sand); border-radius: calc(12 * var(--u)); overflow: hidden;
   box-shadow: 0 0 0 1.5px rgba(22, 48, 60, 0.22), 0 40px 80px -30px rgba(70, 34, 10, 0.4), 0 12px 26px -14px rgba(22, 48, 60, 0.25); }
-#einst { --u: 2.3px; left: 316px; top: 96px; width: calc(560 * var(--u)); height: 860px; }
+#einst { --u: 2.45px; left: 127px; top: 96px; width: calc(680 * var(--u)); height: 860px; }
 .fenster .lichter { position: absolute; left: calc(14 * var(--u)); top: calc(14 * var(--u)); display: flex; gap: calc(6 * var(--u)); }
 .fenster .lichter i { display: block; width: calc(10 * var(--u)); height: calc(10 * var(--u)); border-radius: 50%; background: rgba(22, 48, 60, 0.16); }
 .fenster .tabs { display: flex; gap: calc(24 * var(--u)); padding: calc(36 * var(--u)) calc(32 * var(--u)) calc(12 * var(--u)); font-family: 'Bitter', serif; font-weight: 600; font-size: calc(26 * var(--u)); }
@@ -206,6 +217,7 @@ svg { display: block; }
 .erow.hoch { height: calc(52 * var(--u)); }
 .erow .sp { flex: 1; }
 .erow .anb { display: flex; align-items: center; gap: calc(8 * var(--u)); font-weight: 600; }
+.erow .anb .ico { --b: calc(17 * var(--u)); }
 .erow .punkt { width: calc(7 * var(--u)); height: calc(7 * var(--u)); border-radius: 50%; background: var(--orange); display: block; }
 .erow .ic { width: calc(12 * var(--u)); height: calc(12 * var(--u)); }
 .erow .grau { color: var(--ink2); font-size: calc(13 * var(--u)); }
@@ -227,7 +239,7 @@ svg { display: block; }
 #key-ring { position: absolute; left: calc(4 * var(--u)); right: calc(4 * var(--u)); border-radius: calc(10 * var(--u)); box-shadow: inset 0 0 0 calc(2 * var(--u)) var(--orange); opacity: 0; }
 
 /* Aufklappmenü der Anbieter */
-#anb-menu { --u: 2.3px; position: absolute; z-index: 20; width: calc(250 * var(--u)); padding: calc(6 * var(--u)); border-radius: calc(10 * var(--u)); background: var(--weiss); opacity: 0; transform-origin: 0 0;
+#anb-menu { --u: 2.45px; position: absolute; z-index: 20; width: calc(250 * var(--u)); padding: calc(6 * var(--u)); border-radius: calc(10 * var(--u)); background: var(--weiss); opacity: 0; transform-origin: 0 0;
   box-shadow: 0 0 0 1.5px rgba(22, 48, 60, 0.16), 0 24px 50px -16px rgba(22, 48, 60, 0.4); }
 #anb-menu .item { position: relative; height: calc(30 * var(--u)); display: flex; align-items: center; gap: calc(6 * var(--u)); padding: 0 calc(10 * var(--u)) 0 calc(28 * var(--u)); font-size: calc(15 * var(--u)); color: var(--ink); z-index: 1; }
 #anb-menu .item .tick { position: absolute; left: calc(9 * var(--u)); width: calc(12 * var(--u)); height: calc(12 * var(--u)); }
@@ -247,7 +259,7 @@ svg { display: block; }
 .satz-zeile .sym .schraeg { position: absolute; left: 14px; top: 14px; width: 92px; height: 92px; }
 #saetze { transform-origin: 50% 0; }
 #kosten { position: absolute; left: 0; right: 0; top: 560px; display: flex; justify-content: center; gap: 48px; }
-.ko-karte { width: 680px; padding: 38px 46px 44px; border-radius: 30px; background: var(--weiss); box-shadow: inset 0 0 0 3px var(--ink), 0 8px 0 rgba(22, 48, 60, 0.1); display: flex; flex-direction: column; gap: 16px; opacity: 0; }
+.ko-karte { width: 800px; padding: 38px 46px 44px; border-radius: 30px; background: var(--weiss); box-shadow: inset 0 0 0 3px var(--ink), 0 8px 0 rgba(22, 48, 60, 0.1); display: flex; flex-direction: column; gap: 16px; opacity: 0; }
 .ko-kopf { display: flex; align-items: center; gap: 14px; font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-size: 32px; color: var(--ink2); }
 .ko-kopf svg { width: 44px; height: 44px; color: var(--orange); }
 .ko-text { font-family: 'Bitter', serif; font-weight: 600; font-size: 52px; line-height: 1.2; letter-spacing: -0.01em; color: var(--ink); }
@@ -256,7 +268,7 @@ svg { display: block; }
 .satz-zeile h2 { font-family: 'Bitter', serif; font-weight: 600; font-size: 104px; line-height: 1; letter-spacing: -0.02em; color: var(--ink); white-space: nowrap; }
 
 /* ============ Aufräumen ============ */
-#auf-block { --u: 2.4px; position: absolute; left: 530px; top: 140px; width: 860px; }
+#auf-block { --u: 2.8px; position: absolute; left: 276px; top: 140px; width: 1368px; }
 .toggle { position: relative; width: calc(38 * var(--u)); height: calc(22 * var(--u)); border-radius: calc(11 * var(--u)); background: rgba(22, 48, 60, 0.28); flex: none; }
 .toggle .an { position: absolute; inset: 0; border-radius: calc(11 * var(--u)); background: var(--orange); opacity: 0; }
 .toggle .knauf { position: absolute; left: calc(2 * var(--u)); top: calc(2 * var(--u)); width: calc(18 * var(--u)); height: calc(18 * var(--u)); border-radius: 50%; background: var(--weiss); box-shadow: 0 calc(1 * var(--u)) calc(1 * var(--u)) rgba(0, 0, 0, 0.2); }
@@ -283,6 +295,8 @@ svg { display: block; }
 #url { position: absolute; left: 0; right: 0; top: 560px; display: flex; justify-content: center; opacity: 0; }
 #url div { position: relative; font-weight: 700; font-size: 132px; line-height: 1; letter-spacing: -0.02em; color: var(--ink); }
 #url i { position: absolute; left: 0; right: 0; bottom: -18px; height: 10px; border-radius: 5px; background: var(--orange); transform-origin: 0 50%; display: block; }
-#plattformen { position: absolute; left: 0; right: 0; top: 752px; text-align: center; font-size: 46px; color: var(--ink2); opacity: 0; }
+#plattformen { position: absolute; left: 0; right: 0; top: 752px; display: flex; justify-content: center; align-items: center; gap: 0.26em; font-size: 46px; color: var(--ink2); opacity: 0; }
+#plattformen .os { display: flex; align-items: center; gap: 0.22em; }
+#plattformen .ico { --b: 44px; }
 #dpa-logo { position: absolute; left: 66px; top: 900px; width: 300px; height: 75px; opacity: 0; }
 #ki-hinweis { position: absolute; right: 80px; top: 918px; font-size: 30px; line-height: 38px; color: var(--ink); opacity: 0; }

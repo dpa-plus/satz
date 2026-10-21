@@ -18,7 +18,7 @@
     <symbol id="i-person" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="8" r="4.2"/><path d="M4 21c0-4.6 3.6-7.4 8-7.4s8 2.8 8 7.4"/></g></symbol>
     <symbol id="i-server" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="7" rx="2"/><rect x="3.5" y="13.5" width="17" height="7" rx="2"/></g><circle cx="7.6" cy="7" r="1.3" fill="currentColor"/><circle cx="7.6" cy="17" r="1.3" fill="currentColor"/></symbol>
     <symbol id="i-wolke" viewBox="0 0 24 24"><path d="M7.2 18.5h10.3a4.2 4.2 0 0 0 .5-8.37A6 6 0 0 0 6.4 9.1a4.7 4.7 0 0 0 .8 9.4z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/></symbol>
-    <symbol id="i-rechner" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"><rect x="4" y="4.5" width="16" height="11" rx="2"/><path d="M2 19.5h20"/></g></symbol>
+    <!--ICONS-->
     <symbol id="i-zeiger" viewBox="0 0 28 40"><path d="M3 2.5v27.2l7-6.6 4.6 10.6 4.6-2-4.5-10.4h9.6z" fill="#16303c" stroke="#ffffff" stroke-width="2.4" stroke-linejoin="round"/></symbol>
   </defs>
 </svg>
@@ -29,7 +29,7 @@
 <!-- ================= Hook + Idee: die Mail ================= -->
 <div class="scene" id="s-mail">
   <div class="win" id="mail">
-    <div class="bar"><div class="lichter"><i></i><i></i><i></i></div>Neue Nachricht</div>
+    <div class="bar"><div class="lichter"><i></i><i></i><i></i></div><span class="ico"><svg><use href="#ic-mail"/></svg></span>Neue Nachricht</div>
     <div class="mrow"><b>An:</b>Projektteam</div>
     <div class="mrow"><b>Betreff:</b>Treffen nächste Woche</div>
     <div class="mbody" id="mbody">
@@ -42,9 +42,9 @@
   </div>
   <div id="hook-welle" data-layout-allow-overlap></div>
   <div id="chips">
-    <div class="chip" id="chip-mac">Mac</div>
-    <div class="chip" id="chip-win">Windows</div>
-    <div class="chip" id="chip-lin">Linux</div>
+    <div class="chip" id="chip-mac"><span class="ico m-apple"><svg><use href="#ic-apple"/></svg></span>Mac</div>
+    <div class="chip" id="chip-win"><span class="ico m-windows"><svg><use href="#ic-windows"/></svg></span>Windows</div>
+    <div class="chip" id="chip-lin"><span class="ico m-linux"><svg><use href="#ic-linux"/></svg></span>Linux</div>
   </div>
 </div>
 
@@ -59,7 +59,7 @@
   </div>
   <div id="tasten-text" data-layout-allow-overlap><b>rechts</b>, zweimal tippen</div>
   <div class="win" id="notizen">
-    <div class="bar"><div class="lichter"><i></i><i></i><i></i></div>Notizen</div>
+    <div class="bar"><div class="lichter"><i></i><i></i><i></i></div><span class="ico"><svg><use href="#ic-notizen"/></svg></span>Notizen</div>
     <div class="nbody" id="nbody"><span id="ntext"></span><i class="caret" id="ncaret"></i></div>
   </div>
 </div>
@@ -70,7 +70,7 @@
     <div id="menu-satz"><div class="hl"></div><div class="marke"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
   </div>
   <div class="win app" id="app-mail" data-layout-allow-overlap data-layout-allow-occlusion>
-    <div class="bar"><div class="lichter"><i></i><i></i><i></i></div>Mail</div>
+    <div class="bar"><div class="lichter"><i></i><i></i><i></i></div><span class="ico"><svg><use href="#ic-mail"/></svg></span>Mail</div>
     <div class="inhalt" data-layout-allow-occlusion>
       <div class="zeile"><b>An:</b>Lea</div>
       <div class="zeile"><b>Betreff:</b>Die Folien</div>
@@ -78,14 +78,14 @@
     </div>
   </div>
   <div class="win app" id="app-slack" data-layout-allow-overlap data-layout-allow-occlusion>
-    <div class="bar"><div class="lichter"><i></i><i></i><i></i></div>Slack</div>
+    <div class="bar"><div class="lichter"><i></i><i></i><i></i></div><span class="ico m-slack"><svg><use href="#ic-slack"/></svg></span>Slack</div>
     <div class="inhalt" data-layout-allow-occlusion>
       <div class="msg"><div class="ava"></div><div><b>Mia</b><span>Wer bringt die Folien mit?</span></div></div>
       <div class="feld"><i class="caret"></i></div>
     </div>
   </div>
   <div class="win app" id="app-code" data-layout-allow-overlap data-layout-allow-occlusion>
-    <div class="bar"><div class="lichter"><i></i><i></i><i></i></div>Code-Editor</div>
+    <div class="bar"><div class="lichter"><i></i><i></i><i></i></div><span class="ico"><svg><use href="#ic-code-editor"/></svg></span>Code-Editor</div>
     <div class="inhalt" data-layout-allow-occlusion>
       <div class="code"><span> </span>
 <span class="kw">function</span> <span class="fn">istLeer</span>(liste) {
@@ -95,7 +95,7 @@
     </div>
   </div>
   <div class="win app" id="app-ki" data-layout-allow-overlap data-layout-allow-occlusion>
-    <div class="bar"><div class="lichter"><i></i><i></i><i></i></div>KI-Chat</div>
+    <div class="bar"><div class="lichter"><i></i><i></i><i></i></div><span class="ico"><svg><use href="#ic-ki-chat"/></svg></span>KI-Chat</div>
     <div class="inhalt" data-layout-allow-occlusion>
       <div class="blasen"><div class="blase" style="width:78%"></div><div class="blase" style="width:92%"></div><div class="blase" style="width:64%"></div></div>
       <div class="feld"><div id="ki-text"></div><i class="caret" id="ki-caret"></i></div>
@@ -148,7 +148,7 @@
         </div>
         <!-- V2: Lokal angesehen, noch nicht benutzt -->
         <div class="variante flaeche" id="v2" data-layout-allow-overlap>
-          <div class="erow hoch"><div class="anb">Lokal<svg class="ic"><use href="#i-hochrunter"/></svg></div></div>
+          <div class="erow hoch"><div class="anb"><span class="ico"><svg><use href="#ic-lokal"/></svg></span>Lokal<svg class="ic"><use href="#i-hochrunter"/></svg></div></div>
           <div class="switchrow"><span>Diktate gehen an OpenRouter.</span><span class="sp"></span><div class="btn-acc-k" id="benutzen">Lokal benutzen</div></div>
           <div class="erule"></div>
           <div class="lokal">
@@ -159,7 +159,7 @@
         </div>
         <!-- V3: Lokal in Benutzung -->
         <div class="variante flaeche" id="v3" data-layout-allow-overlap>
-          <div class="erow hoch"><div class="anb"><span class="punkt"></span>Lokal<svg class="ic"><use href="#i-hochrunter"/></svg></div><span class="sp"></span><span class="grau">In Benutzung</span></div>
+          <div class="erow hoch"><div class="anb"><span class="punkt"></span><span class="ico"><svg><use href="#ic-lokal"/></svg></span>Lokal<svg class="ic"><use href="#i-hochrunter"/></svg></div><span class="sp"></span><span class="grau">In Benutzung</span></div>
           <div class="erule"></div>
           <div class="lokal">
             <div class="cap">Deine Modelle</div>
@@ -192,7 +192,7 @@
   </div>
   <div id="kosten">
     <div class="ko-karte" id="ko-dienst"><div class="ko-kopf"><svg><use href="#i-wolke"/></svg>Dienst</div><div class="ko-text">Du zahlst nur, was du verbrauchst.</div></div>
-    <div class="ko-karte" id="ko-lokal"><div class="ko-kopf"><svg><use href="#i-rechner"/></svg>Lokal</div><div class="ko-text">Du zahlst <span class="nichts">gar nichts.<i id="nichts-strich"></i></span></div></div>
+    <div class="ko-karte" id="ko-lokal"><div class="ko-kopf"><svg><use href="#ic-lokal"/></svg>Lokal</div><div class="ko-text">Du zahlst <span class="nichts">gar nichts.<i id="nichts-strich"></i></span></div></div>
   </div>
 </div>
 
@@ -214,7 +214,7 @@
     <div id="claim"><span id="claim-a">Kostenlos</span> <span id="claim-b">· Open Source</span></div>
   </div>
   <div id="url"><div>dpa.plus/satz<i id="url-strich"></i></div></div>
-  <div id="plattformen">Für Mac, Windows und Linux</div>
+  <div id="plattformen"><span>Für</span><span class="os"><span class="ico m-apple"><svg><use href="#ic-apple"/></svg></span>Mac,</span><span class="os"><span class="ico m-windows"><svg><use href="#ic-windows"/></svg></span>Windows</span><span>und</span><span class="os"><span class="ico m-linux"><svg><use href="#ic-linux"/></svg></span>Linux</span></div>
   <img id="dpa-logo" src="assets/logo/dpa-wide-orange.svg" alt="DPA+" />
   <div id="ki-hinweis">Stimme und Musik KI-generiert</div>
 </div>

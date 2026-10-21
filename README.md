@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  <a href="https://cdn.prozesshub.eu/assets/clients/dpa/videos/marketing/satz-erklaervideo/satz-erklaervideo-de-v1.mp4"><b>▶ Erklärvideo ansehen</b></a> (55 Sekunden, Stimme und Musik KI-generiert)
+  <a href="https://cdn.prozesshub.eu/assets/clients/dpa/videos/marketing/satz-erklaervideo/satz-erklaervideo-de-v2.mp4"><b>▶ Erklärvideo ansehen</b></a> (55 Sekunden, Stimme und Musik KI-generiert)
 </p>
 
 ## Warum satz

@@ -29,7 +29,7 @@
   "keine Zahlen zu Tempo, Genauigkeit oder Preisen",
   "nicht behaupten, dass satz von Haus aus offline läuft (lokal ist eine Option)",
   "nicht behaupten, dass die Cloud-Dienste nichts kosten",
-  "keine fremden Logos nachzeichnen, Apps nur als Namen",
+  "fremde Markenzeichen nur aus dem CDN (assets/shared/icons/v1), unverändert und nur neben ihrem Namen; keine Logos von KI-Anbietern, Anbieter bleiben Namen",
   "nichts über Datenschutz versprechen, was über 'kein satz-Server, kein satz-Konto' hinausgeht"
  ],
  "pflichtwoerter": [
@@ -108,15 +108,15 @@
    "slug": "satz-erklaervideo",
    "title": "satz: Sprechen statt tippen",
    "language": "de",
-   "version": 1,
+   "version": 2,
    "durationSeconds": 55,
-   "created": "2026-10-16",
-   "video": "https://cdn.prozesshub.eu/assets/clients/dpa/videos/marketing/satz-erklaervideo/satz-erklaervideo-de-v1.mp4",
+   "created": "2026-10-21",
+   "video": "https://cdn.prozesshub.eu/assets/clients/dpa/videos/marketing/satz-erklaervideo/satz-erklaervideo-de-v2.mp4",
    "formats": {
-    "16x9": "https://cdn.prozesshub.eu/assets/clients/dpa/videos/marketing/satz-erklaervideo/satz-erklaervideo-de-v1.mp4"
+    "16x9": "https://cdn.prozesshub.eu/assets/clients/dpa/videos/marketing/satz-erklaervideo/satz-erklaervideo-de-v2.mp4"
    },
-   "poster": "https://cdn.prozesshub.eu/assets/clients/dpa/videos/marketing/satz-erklaervideo/satz-erklaervideo-de-v1-poster.jpg",
-   "captions": "https://cdn.prozesshub.eu/assets/clients/dpa/videos/marketing/satz-erklaervideo/satz-erklaervideo-de-v1.vtt",
+   "poster": "https://cdn.prozesshub.eu/assets/clients/dpa/videos/marketing/satz-erklaervideo/satz-erklaervideo-de-v2-poster.jpg",
+   "captions": "https://cdn.prozesshub.eu/assets/clients/dpa/videos/marketing/satz-erklaervideo/satz-erklaervideo-de-v2.vtt",
    "note": "Stimme und Musik KI-generiert. Quelle: dpa-plus/satz, video/satz-erklaervideo/",
    "usedIn": [
     "dpa.plus/satz, satz-README"
