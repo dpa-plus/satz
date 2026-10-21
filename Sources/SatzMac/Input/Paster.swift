@@ -320,16 +320,118 @@ enum Paster {
         }
         // The right window says nothing about the field in it: the user may
         // have clicked into another one while the text was on its way.
-        guard let field, !(keyboard.focusedField.map { CFEqual($0, field) } ?? false) else { return .restored }
+        guard let field, !(keyboard.focusedField.map { isIn($0, field, keyboard) } ?? false) else { return .restored }
         // A page that redrew its form has no such field any more, and the
         // request fails while another field has the keyboard. Asking is not
         // enough: ⌘V followed into the wrong field.
         let accepted = keyboard.requestFocus(field)
-        waitUntil(timeout: 0.2) { keyboard.focusedField.map { CFEqual($0, field) } ?? false }
-        if let focused = keyboard.focusedField { return CFEqual(focused, field) ? .restored : .fieldRefused }
-        // The app names no focused field to check against: its answer is all
-        // there is.
-        return accepted ? .restored : .fieldRefused
+        waitUntil(timeout: 0.2) { keyboard.focusedField.map { isIn($0, field, keyboard) } ?? false }
+        guard let focused = keyboard.focusedField else {
+            // The app names no focused field to check against: its answer is
+            // all there is.
+            if !accepted { Log.note("paste: field refused, the app names no focused field and refused the request") }
+            return accepted ? .restored : .fieldRefused
+        }
+        if isIn(focused, field, keyboard) { return .restored }
+        // Electron apps rebuild their accessibility objects while the user
+        // talks (Chromium switches the tree off when nobody asks and builds
+        // it again): the captured field is gone, and one in the same place
+        // has the keyboard. 20.10.: three dictations into Claude ended on the
+        // clipboard so, the keyboard still in the composer.
+        let then = rememberedPrint(of: field)
+        let there = keyboard.fingerprint(of: focused)
+        let gone = !keyboard.exists(field)
+        if gone, let then, let there, then.matches(there) {
+            Log.note("paste: the text field was rebuilt, the one in its place has the keyboard")
+            return .restored
+        }
+        // Why, without any text: the next report says which case it was.
+        Log.note("paste: field refused, captured \(gone ? "gone" : "still there") \(then?.summary ?? "unknown"), keyboard in \(there?.summary ?? "unknown"), request \(accepted ? "accepted" : "refused")")
+        return .fieldRefused
+    }
+
+    /// Whether the keyboard is in `field` or in a part of it: some web views
+    /// name the paragraph inside an editor as focused, not the editor.
+    private static func isIn(_ focused: AXUIElement, _ field: AXUIElement, _ keyboard: some KeyboardPlace) -> Bool {
+        var element: AXUIElement? = focused
+        for _ in 0 ..< 8 {
+            guard let current = element else { return false }
+            if CFEqual(current, field) { return true }
+            element = keyboard.parent(of: current)
+        }
+        return false
+    }
+
+    // MARK: - What a field looked like
+
+    /// Where a text field was and what kind it was, read when the dictation
+    /// started. Accessibility objects can be rebuilt meanwhile; the place
+    /// and kind of a field cannot change without it being another one.
+    struct FieldPrint: Equatable {
+        var role: String?
+        var subrole: String?
+        /// The page's id for the element (AXDOMIdentifier) where it has one.
+        var identifier: String?
+        /// In screen points, top-left origin, as Accessibility reports it.
+        var frame: CGRect?
+
+        /// Same kind, and the same id, or with no id the same place. A
+        /// composer grows from its bottom edge while it holds text, so either
+        /// edge may stay put.
+        func matches(_ other: FieldPrint) -> Bool {
+            guard let role, role == other.role, subrole == other.subrole else { return false }
+            if identifier?.isEmpty == false || other.identifier?.isEmpty == false { return identifier == other.identifier }
+            guard let a = frame, let b = other.frame else { return false }
+            let near = { (x: CGFloat, y: CGFloat) in abs(x - y) <= 4 }
+            return near(a.minX, b.minX) && near(a.width, b.width) && (near(a.minY, b.minY) || near(a.maxY, b.maxY))
+        }
+
+        /// For the log: kind, id and place, never any text.
+        var summary: String {
+            let place = frame.map { String(format: "%.0f,%.0f %.0fx%.0f", $0.minX, $0.minY, $0.width, $0.height) } ?? "no frame"
+            return "\(role ?? "?")\(subrole.map { "/" + $0 } ?? "")\(identifier.map { " #" + $0 } ?? "") \(place)"
+        }
+    }
+
+    /// The prints of the last few captured fields, by element.
+    private static var prints: [(element: AXUIElement, print: FieldPrint)] = []
+
+    static func remember(_ print: FieldPrint, of element: AXUIElement) {
+        forget(element)
+        prints.append((element, print))
+        if prints.count > 8 { prints.removeFirst(prints.count - 8) }
+    }
+
+    static func forget(_ element: AXUIElement) {
+        prints.removeAll { CFEqual($0.element, element) }
+    }
+
+    static func rememberedPrint(of element: AXUIElement) -> FieldPrint? {
+        prints.last { CFEqual($0.element, element) }?.print
+    }
+
+    /// Reads an element's print through Accessibility; nil where it says nothing.
+    nonisolated static func print(of element: AXUIElement) -> FieldPrint? {
+        AXUIElementSetMessagingTimeout(element, 0.25)
+        func value(_ attribute: String) -> CFTypeRef? {
+            var value: CFTypeRef?
+            return AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success ? value : nil
+        }
+        func point(_ attribute: String) -> CGPoint? {
+            guard let raw = value(attribute), CFGetTypeID(raw) == AXValueGetTypeID() else { return nil }
+            var point = CGPoint.zero
+            return AXValueGetValue(raw as! AXValue, .cgPoint, &point) ? point : nil
+        }
+        func size(_ attribute: String) -> CGSize? {
+            guard let raw = value(attribute), CFGetTypeID(raw) == AXValueGetTypeID() else { return nil }
+            var size = CGSize.zero
+            return AXValueGetValue(raw as! AXValue, .cgSize, &size) ? size : nil
+        }
+        let role = value(kAXRoleAttribute) as? String
+        guard role != nil else { return nil }
+        let frame = point(kAXPositionAttribute).flatMap { origin in size(kAXSizeAttribute).map { CGRect(origin: origin, size: $0) } }
+        return FieldPrint(role: role, subrole: value(kAXSubroleAttribute) as? String,
+                          identifier: value("AXDOMIdentifier") as? String, frame: frame)
     }
 
     /// Lets the main run loop go on (activation and window changes arrive on
@@ -419,6 +521,10 @@ protocol KeyboardPlace {
     func editability(of field: AXUIElement) -> Paster.Editability
     /// What the field shows now; nil where the app does not say.
     func text(of field: AXUIElement) -> Paster.FieldText?
+    /// The element's kind and place, to recognise it after a rebuild.
+    func fingerprint(of element: AXUIElement) -> Paster.FieldPrint?
+    /// The element around it; nil at the top or where the app does not say.
+    func parent(of element: AXUIElement) -> AXUIElement?
 }
 
 extension KeyboardPlace {
@@ -432,6 +538,8 @@ extension KeyboardPlace {
     /// A place that says nothing is pasted into as before these checks.
     func editability(of field: AXUIElement) -> Paster.Editability { .unknown }
     func text(of field: AXUIElement) -> Paster.FieldText? { nil }
+    func fingerprint(of element: AXUIElement) -> Paster.FieldPrint? { nil }
+    func parent(of element: AXUIElement) -> AXUIElement? { nil }
 }
 
 /// The keyboard of a running app, through Accessibility.
@@ -494,6 +602,16 @@ struct AppKeyboard: KeyboardPlace {
         let text = (characters ?? 0) <= 20_000 ? value(of: kAXValueAttribute, in: field) as? String : nil
         guard characters != nil || selection != nil || text != nil else { return nil }
         return Paster.FieldText(characters: characters, selection: selection, value: text)
+    }
+
+    func fingerprint(of element: AXUIElement) -> Paster.FieldPrint? {
+        Paster.print(of: element)
+    }
+
+    func parent(of element: AXUIElement) -> AXUIElement? {
+        AXUIElementSetMessagingTimeout(element, 0.25)
+        guard let parent = value(of: kAXParentAttribute, in: element), CFGetTypeID(parent) == AXUIElementGetTypeID() else { return nil }
+        return (parent as! AXUIElement)
     }
 
     private func value(of attribute: String, in field: AXUIElement) -> CFTypeRef? {

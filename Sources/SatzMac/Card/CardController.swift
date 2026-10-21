@@ -275,6 +275,7 @@ enum FocusedField {
     /// The window and the element that have the keyboard in `app` now, so a
     /// paste can go back to them: switched to another window of the same app
     /// meanwhile, the text landed there. nil where the app does not say.
+    @MainActor
     static func capture(in app: NSRunningApplication?) -> (window: AXUIElement?, field: AXUIElement?) {
         guard let app else { return (nil, nil) }
         let target = AXUIElementCreateApplication(app.processIdentifier)
@@ -287,7 +288,11 @@ enum FocusedField {
             guard let value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
             return (value as! AXUIElement)
         }
-        return (element(window), element(field))
+        let captured = element(field)
+        // Read now: by the time the text arrives the app may have rebuilt the
+        // element, and only where it was is left to recognise it by.
+        if let captured, let print = Paster.print(of: captured) { Paster.remember(print, of: captured) }
+        return (element(window), captured)
     }
 
     /// In AppKit screen coordinates. nil when it cannot be known, or when
