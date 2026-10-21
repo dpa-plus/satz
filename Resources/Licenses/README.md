@@ -71,9 +71,9 @@ aller Komponenten von Dritten bleiben hier erhalten.
 Der zugehörige Quellcode und die Bauanleitung für die nativen
 Desktop-Bibliotheken, einschließlich des Node-Addons und der gelinkten
 Abhängigkeiten, werden kostenlos bereitgestellt in
-[`satz-0.4.3-source.tar.gz`](https://github.com/dpa-plus/satz/releases/download/v0.4.3/satz-0.4.3-source.tar.gz),
+[`satz-0.4.4-source.tar.gz`](https://github.com/dpa-plus/satz/releases/download/v0.4.4/satz-0.4.4-source.tar.gz),
 zusammen mit den Downloads der Anwendung. Dieses Archiv enthält die
-Quellcode-Stände für satz 0.4.3 und 0.4.2, die dieselben Versionen der nativen
+Quellcode-Stände für satz 0.4.4, 0.4.3 und 0.4.2, die dieselben Versionen der nativen
 Pakete nutzen, dazu Upstream-Quellarchive und Build-Skripte. Seine
 `BUILDING.md` erklärt den Aufbau des Quellcodes und wie sich die Komponenten
 neu bauen oder ändern lassen. Dieser Quellcode-Download muss zusammen mit den
@@ -95,6 +95,6 @@ Weitere Hinweise reisen schon mit ihren Komponenten:
 Wenn du Abhängigkeits-Pins oder den Download der Microsoft-Runtime änderst,
 aktualisiere die betroffenen Hinweise und `SOURCES.json` und prüfe dann jedes
 entstandene App-Paket. Besonders kann sich der Inhalt des Microsoft-Downloads
-ändern, obwohl die URL gleich bleibt. Dieses Verzeichnis hält die für 0.4.3
+ändern, obwohl die URL gleich bleibt. Dieses Verzeichnis hält die für 0.4.4
 geprüften Versionen fest; es begründet weder eine rechtliche Zertifizierung
 noch die Reproduzierbarkeit der Binärdateien.
