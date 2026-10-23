@@ -71,9 +71,9 @@ aller Komponenten von Dritten bleiben hier erhalten.
 Der zugehörige Quellcode und die Bauanleitung für die nativen
 Desktop-Bibliotheken, einschließlich des Node-Addons und der gelinkten
 Abhängigkeiten, werden kostenlos bereitgestellt in
-[`satz-0.4.4-source.tar.gz`](https://github.com/dpa-plus/satz/releases/download/v0.4.4/satz-0.4.4-source.tar.gz),
+[`satz-0.4.5-source.tar.gz`](https://github.com/dpa-plus/satz/releases/download/v0.4.5/satz-0.4.5-source.tar.gz),
 zusammen mit den Downloads der Anwendung. Dieses Archiv enthält die
-Quellcode-Stände für satz 0.4.4, 0.4.3 und 0.4.2, die dieselben Versionen der nativen
+Quellcode-Stände für satz 0.4.5, 0.4.4, 0.4.3 und 0.4.2, die dieselben Versionen der nativen
 Pakete nutzen, dazu Upstream-Quellarchive und Build-Skripte. Seine
 `BUILDING.md` erklärt den Aufbau des Quellcodes und wie sich die Komponenten
 neu bauen oder ändern lassen. Dieser Quellcode-Download muss zusammen mit den
