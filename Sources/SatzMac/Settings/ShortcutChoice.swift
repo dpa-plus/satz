@@ -75,7 +75,10 @@ struct ShortcutChoice: View {
     }
 
     private var isKeys: Bool {
-        if case .keys = preferences.trigger { true } else { false }
+        switch preferences.trigger {
+        case .keys, .modifiers: true
+        default: false
+        }
     }
 
     private var isMouse: Bool {

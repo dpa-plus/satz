@@ -13,6 +13,7 @@ final class TriggerRecorder {
 
     private var monitors: [Any] = []
     private var completion: ((Trigger?) -> Void)?
+    private var pendingModifiers: UInt32 = 0
 
     /// Calls `completion` once with the captured trigger, or nil if the user
     /// pressed Escape.
@@ -20,15 +21,10 @@ final class TriggerRecorder {
         stop()
         self.completion = completion
 
-        monitors.append(NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+        let events: NSEvent.EventTypeMask = kind == .keys ? [.keyDown, .flagsChanged] : .keyDown
+        monitors.append(NSEvent.addLocalMonitorForEvents(matching: events) { [weak self] event in
             guard let self else { return event }
-            if event.keyCode == UInt16(kVK_Escape) {
-                self.finish(nil)
-                return nil
-            }
-            guard kind == .keys, let trigger = Self.keys(from: event) else { return nil }
-            self.finish(trigger)
-            return nil
+            return self.handle(event, kind: kind)
         } as Any)
 
         if kind == .mouse {
@@ -47,10 +43,34 @@ final class TriggerRecorder {
         }
     }
 
+    func handle(_ event: NSEvent, kind: Kind) -> NSEvent? {
+        if kind == .keys, event.type == .flagsChanged {
+            let mask = event.modifierFlags.carbonModifiers
+            // Wait for a release: Option+Command may still become
+            // Option+Command+K, and must then keep its regular key.
+            if pendingModifiers != 0, mask & pendingModifiers != pendingModifiers {
+                finish(.modifiers(pendingModifiers))
+            } else if mask.nonzeroBitCount >= 2 {
+                pendingModifiers = mask
+            }
+            return event
+        }
+        guard event.type == .keyDown else { return event }
+        pendingModifiers = 0
+        if event.keyCode == UInt16(kVK_Escape) {
+            finish(nil)
+            return nil
+        }
+        guard kind == .keys, let trigger = Self.keys(from: event) else { return nil }
+        finish(trigger)
+        return nil
+    }
+
     func stop() {
         monitors.forEach(NSEvent.removeMonitor)
         monitors.removeAll()
         completion = nil
+        pendingModifiers = 0
     }
 
     private func finish(_ trigger: Trigger?) {
@@ -62,12 +82,7 @@ final class TriggerRecorder {
     /// A key needs at least one modifier, or has to be a function key: a bare
     /// letter as a global trigger would make that letter untypable.
     private static func keys(from event: NSEvent) -> Trigger? {
-        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        var mask: UInt32 = 0
-        if flags.contains(.command) { mask |= UInt32(cmdKey) }
-        if flags.contains(.option) { mask |= UInt32(optionKey) }
-        if flags.contains(.control) { mask |= UInt32(controlKey) }
-        if flags.contains(.shift) { mask |= UInt32(shiftKey) }
+        let mask = event.modifierFlags.carbonModifiers
 
         let functionKeys = Trigger.functionKeys.contains(Int(event.keyCode))
         let onlyShift = mask == UInt32(shiftKey)

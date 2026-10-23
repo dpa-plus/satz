@@ -1,3 +1,4 @@
+import AppKit
 import Carbon.HIToolbox
 import Foundation
 import SatzKit
@@ -12,6 +13,8 @@ enum Trigger: Codable, Equatable, Sendable {
     case doubleRightCommand
     /// A key with modifiers. Carbon key code and Carbon modifier mask.
     case keys(keyCode: UInt32, modifiers: UInt32)
+    /// Two or more modifiers together, without a regular key.
+    case modifiers(UInt32)
     /// A mouse button other than the left and right ones, by CGEvent number:
     /// 2 is the wheel, 3 and 4 are the usual side buttons.
     case mouseButton(Int)
@@ -19,7 +22,7 @@ enum Trigger: Codable, Equatable, Sendable {
     static let standard: Trigger = .doubleRightCommand
 
     /// Key combinations go through Carbon, which needs no permission. The other
-    /// two watch raw keyboard and mouse events, which needs Accessibility.
+    /// triggers watch raw keyboard and mouse events, which needs Accessibility.
     var needsEventTap: Bool {
         if case .keys = self { false } else { true }
     }
@@ -31,6 +34,8 @@ enum Trigger: Codable, Equatable, Sendable {
             ([("⌘", "cmd")], de("rechts, zweimal", en: "right, twice"))
         case .keys(let keyCode, let modifiers):
             (Self.modifierKeys(modifiers) + [(Self.keyName(keyCode), nil)], nil)
+        case .modifiers(let mask):
+            (Self.modifierKeys(mask), nil)
         case .mouseButton(let number):
             ([], Self.mouseButtonName(number))
         }
@@ -101,6 +106,17 @@ enum Trigger: Codable, Equatable, Sendable {
         case 4: de("Maustaste vor", en: "Mouse forward button")
         default: de("Maustaste \(number + 1)", en: "Mouse button \(number + 1)")
         }
+    }
+}
+
+extension NSEvent.ModifierFlags {
+    var carbonModifiers: UInt32 {
+        var mask: UInt32 = 0
+        if contains(.command) { mask |= UInt32(cmdKey) }
+        if contains(.option) { mask |= UInt32(optionKey) }
+        if contains(.control) { mask |= UInt32(controlKey) }
+        if contains(.shift) { mask |= UInt32(shiftKey) }
+        return mask
     }
 }
 

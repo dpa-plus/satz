@@ -36,8 +36,8 @@ final class Shortcut {
     /// What the checks need from the system. Tests replace them: the real ones
     /// want the permission and an event tap.
     @ObservationIgnored var isTrusted: () -> Bool = { AXIsProcessTrusted() }
-    @ObservationIgnored var makeMonitor: (Trigger, @escaping @MainActor () -> Void, @escaping @MainActor () -> Void) -> TriggerMonitor? = {
-        TriggerMonitor(trigger: $0, onPress: $1, onRelease: $2)
+    @ObservationIgnored var makeMonitor: (Trigger, TriggerMode, @escaping @MainActor () -> Void, @escaping @MainActor () -> Void) -> TriggerMonitor? = {
+        TriggerMonitor(trigger: $0, mode: $1, onPress: $2, onRelease: $3)
     }
     @ObservationIgnored var recheckInterval: Duration = .seconds(2)
     /// The test copy never starts it; recording a trigger in its settings
@@ -97,9 +97,10 @@ final class Shortcut {
             } catch {
                 status = .taken
             }
-        case .doubleRightCommand, .mouseButton:
+        case .doubleRightCommand, .modifiers, .mouseButton:
             monitor = makeMonitor(
                 trigger,
+                preferences.triggerMode,
                 { [weak self] in self?.onPress() },
                 { [weak self] in self?.onRelease() }
             )
@@ -132,6 +133,7 @@ final class Shortcut {
     private func watchForChanges() {
         withObservationTracking {
             _ = preferences.trigger
+            _ = preferences.triggerMode
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.arm()

@@ -2,7 +2,7 @@ import AppKit
 import Carbon.HIToolbox
 
 /// Watches raw keyboard and mouse events for the triggers Carbon cannot see:
-/// the right ⌘ key tapped twice, and a mouse button.
+/// modifier keys alone, the right ⌘ key tapped twice, and a mouse button.
 ///
 /// Built on a CGEventTap, which needs the Accessibility permission. The same
 /// permission satz already asks for to paste, so no second prompt. Without it
@@ -10,6 +10,7 @@ import Carbon.HIToolbox
 final class TriggerMonitor {
 
     private let trigger: Trigger
+    private let mode: TriggerMode
     private let onPress: @MainActor () -> Void
     private let onRelease: @MainActor () -> Void
 
@@ -28,6 +29,9 @@ final class TriggerMonitor {
             guard let button = CGMouseButton(rawValue: UInt32(number)) else { return false }
             return CGEventSource.buttonState(.combinedSessionState, button: button)
         }
+        var modifiers: () -> UInt32 = {
+            NSEvent.ModifierFlags(rawValue: UInt(CGEventSource.flagsState(.combinedSessionState).rawValue)).carbonModifiers
+        }
     }
     private let held: Held
 
@@ -38,6 +42,9 @@ final class TriggerMonitor {
     private var holding = false
     /// The trigger's mouse button went down and its release was not seen yet.
     private var mouseHolding = false
+    private var chordDown = false
+    private var chordInterrupted = false
+    private var chordHolding = false
 
     /// A tap is quick. A second tap has to follow the first within this.
     private static let tapLength: TimeInterval = 0.35
@@ -46,11 +53,13 @@ final class TriggerMonitor {
     /// Without a tap: events reach `handle` only when the caller passes them.
     init(
         trigger: Trigger,
+        mode: TriggerMode = .tap,
         held: Held,
         onPress: @escaping @MainActor () -> Void,
         onRelease: @escaping @MainActor () -> Void
     ) {
         self.trigger = trigger
+        self.mode = mode
         self.held = held
         self.onPress = onPress
         self.onRelease = onRelease
@@ -58,11 +67,12 @@ final class TriggerMonitor {
 
     convenience init?(
         trigger: Trigger,
+        mode: TriggerMode = .tap,
         onPress: @escaping @MainActor () -> Void,
         onRelease: @escaping @MainActor () -> Void
     ) {
         guard trigger.needsEventTap else { return nil }
-        self.init(trigger: trigger, held: Held(), onPress: onPress, onRelease: onRelease)
+        self.init(trigger: trigger, mode: mode, held: Held(), onPress: onPress, onRelease: onRelease)
 
         // Clicks too: two quick ⌘-clicks with the right command key read as two taps.
         let types: [CGEventType] = [.flagsChanged, .keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown, .otherMouseUp]
@@ -114,14 +124,31 @@ final class TriggerMonitor {
                 mouseHolding = false
                 fire(onRelease)
             }
+            if case .modifiers(let mask) = trigger {
+                chordInterrupted = true
+                if chordHolding, held.modifiers() != mask {
+                    chordHolding = false
+                    fire(onRelease)
+                }
+                chordDown = chordHolding
+            }
         case .flagsChanged:
-            modifierChanged(event)
+            if case .modifiers(let mask) = trigger {
+                modifierChordChanged(event, mask: mask)
+            } else {
+                modifierChanged(event)
+            }
         case .keyDown, .leftMouseDown, .rightMouseDown:
             // ⌘C or a ⌘-click with the right command key is not a tap.
             interrupted = true
             lastTapUpAt = nil
+            interruptModifierChord(event)
         case .otherMouseDown, .otherMouseUp:
-            if type == .otherMouseDown { interrupted = true; lastTapUpAt = nil }
+            if type == .otherMouseDown {
+                interrupted = true
+                lastTapUpAt = nil
+                interruptModifierChord(event)
+            }
             if case .mouseButton(let number) = trigger,
                event.getIntegerValueField(.mouseEventButtonNumber) == Int64(number) {
                 mouseHolding = type == .otherMouseDown
@@ -132,6 +159,47 @@ final class TriggerMonitor {
             break
         }
         return Unmanaged.passUnretained(event)
+    }
+
+    private func modifierChordChanged(_ event: CGEvent, mask: UInt32) {
+        let flags = NSEvent.ModifierFlags(rawValue: UInt(event.flags.rawValue)).carbonModifiers
+        if chordHolding, flags != mask {
+            chordHolding = false
+            fire(onRelease)
+        }
+        if chordDown, flags != mask {
+            chordDown = false
+            // A tap fires on release so Option+Command+letter stays an
+            // ordinary shortcut. All keys must come up before the next tap.
+            let tapped = mode == .tap && !chordInterrupted && flags & ~mask == 0
+            chordInterrupted = flags != 0
+            if tapped {
+                fire(onPress)
+                fire(onRelease)
+            }
+        }
+        if flags == 0 {
+            chordInterrupted = false
+        } else if flags & ~mask != 0 {
+            chordInterrupted = true
+        } else if flags == mask, !chordInterrupted, !chordDown {
+            chordDown = true
+            if mode == .hold {
+                chordHolding = true
+                fire(onPress)
+            }
+        }
+    }
+
+    private func interruptModifierChord(_ event: CGEvent) {
+        guard case .modifiers = trigger else { return }
+        let flags = NSEvent.ModifierFlags(rawValue: UInt(event.flags.rawValue)).carbonModifiers
+        guard chordDown || flags != 0 else { return }
+        chordInterrupted = true
+        if chordHolding {
+            chordHolding = false
+            fire(onRelease)
+        }
     }
 
     private func modifierChanged(_ event: CGEvent) {

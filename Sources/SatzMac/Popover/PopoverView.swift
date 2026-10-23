@@ -349,7 +349,7 @@ struct EmptyHint: View {
         switch trigger {
         case .doubleRightCommand:
             return mode == .hold ? de("Rechts zweimal tippen, beim zweiten Mal halten und sprechen", en: "Tap right twice, hold the second time and talk") : de("Rechts zweimal tippen und sprechen", en: "Tap right twice and talk")
-        case .keys:
+        case .keys, .modifiers:
             return mode == .hold ? de("Halten und sprechen", en: "Hold and talk") : de("Drücken und sprechen", en: "Press and talk")
         case .mouseButton:
             let button = trigger.display.words ?? de("Maustaste", en: "Mouse button")

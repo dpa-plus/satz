@@ -155,10 +155,10 @@ private func shortcut(trigger: Trigger, permission: Permission) -> Shortcut {
     let shortcut = Shortcut(preferences: preferences, onPress: {}, onRelease: {})
     shortcut.isTrusted = { permission.granted }
     shortcut.recheckInterval = .milliseconds(50)
-    shortcut.makeMonitor = { trigger, press, release in
+    shortcut.makeMonitor = { trigger, mode, press, release in
         guard permission.granted else { return nil }
         permission.monitorsMade += 1
-        return TriggerMonitor(trigger: trigger, onPress: press, onRelease: release)
+        return TriggerMonitor(trigger: trigger, mode: mode, held: .init(), onPress: press, onRelease: release)
     }
     return shortcut
 }
@@ -192,9 +192,9 @@ struct ShortcutRecordingTests {
         preferences.trigger = .doubleRightCommand
         let shortcut = Shortcut(preferences: preferences, onPress: {}, onRelease: {})
         shortcut.isTrusted = { permission.granted }
-        shortcut.makeMonitor = { trigger, press, release in
+        shortcut.makeMonitor = { trigger, mode, press, release in
             permission.monitorsMade += 1
-            return TriggerMonitor(trigger: trigger, onPress: press, onRelease: release)
+            return TriggerMonitor(trigger: trigger, mode: mode, held: .init(), onPress: press, onRelease: release)
         }
         shortcut.start()
         #expect(permission.monitorsMade == 1)
