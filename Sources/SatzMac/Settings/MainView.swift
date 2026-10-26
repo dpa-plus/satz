@@ -12,6 +12,7 @@ struct MainView: View {
     let launchAtLogin: LaunchAtLogin
     let models: ModelStore
     let cleanups: CleanupStore
+    var updates: UpdateState? = nil
 
     @Environment(\.theme) private var theme
 
@@ -29,6 +30,13 @@ struct MainView: View {
             // do it inside their scroll view, which stays, and so keeps its
             // place: the language and colour pickers sit at the bottom.
             .id(preferences.lookKey)
+
+            if let updates, updates.visible {
+                UpdateNotice(updates: updates)
+                    .padding(.horizontal, 32)
+                    .padding(.bottom, 16)
+                    .id(preferences.lookKey)
+            }
 
             switch navigation.page {
             case .history:

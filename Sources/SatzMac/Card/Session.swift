@@ -118,6 +118,8 @@ final class Session {
         let seconds: Double?
     }
     @ObservationIgnored var onClose: () -> Void = {}
+    /// The updater closes the small gap before termination is delivered.
+    @ObservationIgnored var canBegin: () -> Bool = { true }
     /// Opens the microphone, or test mode's clip; tests put in one they can unplug.
     @ObservationIgnored var makeSource: @MainActor (String?) -> AudioSource = { AudioSources.make(inputDeviceUID: $0) }
     /// Escape discards while recording; off for a test copy.
@@ -309,7 +311,7 @@ final class Session {
     /// Whether a discarded dictation can come back now: not over one that is
     /// still going.
     var canRestore: Bool {
-        phase == .idle || phase == .discarded || phase == .clipboard || phase == .notCleaned
+        canBegin() && (phase == .idle || phase == .discarded || phase == .clipboard || phase == .notCleaned)
     }
 
     /// Brings a discarded dictation back, paused, from the card or the menu.
@@ -394,6 +396,7 @@ final class Session {
     // MARK: - Steps
 
     private func begin() {
+        guard canBegin() else { return }
         closingLater?.cancel()
         stopEverything()
         reset()
@@ -535,7 +538,7 @@ final class Session {
     }
 
     private func resume() {
-        guard phase == .paused else { return }
+        guard canBegin(), phase == .paused else { return }
         if let caret, let id = activeID, !isAtMarker(caret, of: id) {
             activeID = newSegment(at: caret)
             // The old spot gets nothing more; its placeholder can go.

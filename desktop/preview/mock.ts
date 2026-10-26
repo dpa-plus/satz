@@ -21,6 +21,8 @@
 // opens another cleanup provider, `&ollama=down` has Ollama not running,
 // `&cleanupKey=0` takes OpenRouter's key away (the line under the switch).
 // "Ausprobieren" answers after a second, Custom's tries are thrown out by the guard.
+// Updates: `&update=newer`, `&update=current`, or `&update=offline` is deterministic
+// and never requests the live CDN. `&update=checking` holds a manual check open.
 import { germanErrors, localModelIds, type Speed } from '../src/core/localModels'
 import { models as shipped } from '../src/core/models'
 import { standardReplacements } from '../src/core/replacements'
@@ -30,6 +32,9 @@ import { cleanupProviders, defaultCleanupProvider, isCleanupProvider, type Clean
 
 const hour = 3600_000
 const query = new URLSearchParams(location.search)
+const updateFixture = query.get('update')
+let updateState = { kind: updateFixture === 'newer' ? 'available' : updateFixture === 'offline' ? 'unavailable' : 'current',
+  currentVersion: '0.4.5', version: updateFixture === 'newer' ? '0.4.6' : undefined, checking: updateFixture === 'checking', manual: ['current', 'offline', 'checking'].includes(updateFixture ?? '') }
 const asked = query.get('provider') as Provider | null
 const language: 'de' | 'en' = query.get('language') === 'de' ? 'de' : 'en'
 const prefs = {
@@ -134,6 +139,13 @@ window.confirm = (message?: string) => { calls.push(['confirm', message]); retur
   async invoke(channel: string, ...args: unknown[]) {
     calls.push([channel, ...args])
     switch (channel) {
+      case 'updates:get': return updateState
+      case 'updates:download': return updateState.kind === 'available'
+      case 'updates:check': {
+        updateState = { ...updateState, manual: true, checking: false }
+        emit('updates:changed')
+        return updateState
+      }
       case 'settings:get': {
         // The provider the page shows; dictations go to prefs.provider.
         const opened = query.get('show')

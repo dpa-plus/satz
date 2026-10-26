@@ -502,5 +502,12 @@
     "version": "0.17.3",
     "source": "https://raw.githubusercontent.com/FluidInference/FluidAudio/a6b826ce9a09028fc685a4b32a8927ec920c3188/ThirdPartyLicenses/vbx-LICENSE.md",
     "sha256": "08e57fdb5187c816e937916f1e176aadb400ca76f4b3b493d69730ec8f10dd80"
+  },
+  {
+    "file": "Sparkle.txt",
+    "package": "Sparkle",
+    "version": "2.10.1",
+    "source": "https://raw.githubusercontent.com/sparkle-project/Sparkle/ab7d71291238df6e0492143b120c9b696a35f603/LICENSE",
+    "sha256": "389a4e4e9a32f059775b13a06e25a591445ba229d2838d26dd3e7c0c45127cfe"
   }
 ]

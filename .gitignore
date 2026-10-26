@@ -6,6 +6,8 @@ dist/
 *.xcuserdatastate
 xcuserdata/
 .DS_Store
+.fe-verify/
+__pycache__/
 
 # The Linux packaging hook lives in desktop/build (electron-builder's folder).
 !desktop/build/

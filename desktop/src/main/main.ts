@@ -29,6 +29,8 @@ import { SpeedTests } from './speedTests'
 import { foreground } from './foreground'
 import { Cleaner, cleanupState, cleanupTryState, cleanupView, type CleanupRun, type CleanupSettings } from './cleanup'
 import { flushHandback } from './clipboardHandback'
+import { releaseAsset, type UpdateFetch } from '../core/updates'
+import { Updates } from './updates'
 
 /**
  * satz for Windows and Linux. Double-tap right Ctrl, talk, double-tap again:
@@ -330,6 +332,7 @@ async function start() {
       { type: 'separator' as const },
       ...(session.discarded && session.canRestore ? [{ label: de('Verworfenes zurückholen', 'Restore discarded'), click: () => session.restoreLast() }, { type: 'separator' as const }] : []),
       { label: de('Einstellungen…', 'Settings…'), click: openSettings },
+      { label: de('Nach Updates suchen…', 'Check for updates…'), click: () => openWindow('history', true) },
       { label: de('Beenden', 'Quit'), click: () => app.quit() },
     ])
     tray.setContextMenu(menu)
@@ -340,7 +343,15 @@ async function start() {
   // One window, two pages: History (what opening satz again shows) and
   // Settings. Two windows for them meant a second one beside the first.
   let mainWindow: BrowserWindow | null = null
-  function openWindow(page: 'history' | 'settings') {
+  const updateAsset = releaseAsset(process.platform, process.arch, fs.existsSync('/etc/debian_version') ? 'deb' : 'tar.gz')
+  // Test copies use a sealed fixture, never the live CDN or the user's browser.
+  const updateFetch: UpdateFetch = testMode ? async () => {
+    if (flag('--test-update') === 'offline') throw new Error('offline fixture')
+    return new Response(JSON.stringify({ version: flag('--test-update') === 'newer' ? 'v99.0.0' : app.getVersion(), files: { [updateAsset ?? '']: 1 } }))
+  } : (url, init) => net.fetch(url, init)
+  const updates = new Updates(app.getVersion(), updateAsset, updateFetch, () => tellWindow('updates:changed'))
+  function openWindow(page: 'history' | 'settings', checkForUpdates = false) {
+    void updates.open(checkForUpdates)
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('window:page', page)
       mainWindow.show(); mainWindow.focus()
@@ -377,6 +388,14 @@ async function start() {
   ipcMain.handle('history:set-limit', (_e, limit: number) => { const result = store.setHistoryLimit(limit); historyChanged(result); return result })
   ipcMain.handle('history:open-settings', () => openSettings())
   ipcMain.handle('history:open', () => openHistory())
+  ipcMain.handle('updates:get', () => updates.state)
+  ipcMain.handle('updates:check', async () => { await updates.check(true); return updates.state })
+  ipcMain.handle('updates:download', async () => {
+    const url = updates.downloadURL
+    if (!url) return false
+    if (testMode) { log(`dev: would open ${url}`); return true }
+    try { await shell.openExternal(url); return true } catch { return false }
+  })
 
   // The model menu: the provider's live list, the shipped one until it arrives.
   const modelLists = new ModelLists(app.getPath('userData'), provider => store.readKey(provider), log, () => tellWindow('models:changed'), manualFetch)
@@ -533,6 +552,7 @@ async function start() {
     startAtLogin.set(true)
   }
 
+  void updates.check()
   if (store.prefs.provider === 'local') local.warmUp(localModel())
   if (missing() && !testMode) {
     openSettings()

@@ -16,6 +16,7 @@ let package = Package(
         .package(url: "https://github.com/argmaxinc/WhisperKit.git", exact: "1.1.0"),
         // Ultra uses CoreML. The optional speech-synthesis normalizer is unused.
         .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.17.3", traits: []),
+        .package(url: "https://github.com/sparkle-project/Sparkle.git", exact: "2.10.1"),
     ],
     targets: [
         .target(name: "SatzKit"),
@@ -29,6 +30,7 @@ let package = Package(
                 "CSherpaOnnx",
                 .product(name: "WhisperKit", package: "WhisperKit"),
                 .product(name: "FluidAudio", package: "FluidAudio"),
+                .product(name: "Sparkle", package: "Sparkle"),
             ],
             // The libraries sit in satz.app/Contents/Frameworks (make bundle).
             linkerSettings: [.unsafeFlags(["-L", sherpaLibraries, "-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]

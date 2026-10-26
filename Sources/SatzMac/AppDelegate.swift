@@ -29,6 +29,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// History and settings, one window.
     private var mainWindow: AppWindow!
     private let navigation = MainNavigation()
+    private let updateState = UpdateState()
+    private var updates: MacUpdates?
     private lazy var models = ModelStore()
     /// In test mode its measurements live next to the state file, like the history.
     /// A test copy shares the key files with the real satz, so its cleanup goes
@@ -117,6 +119,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         session = Session(preferences: preferences, history: history, discarded: discarded)
+        session.canBegin = { [weak self] in self?.updateState.canBeginDictation ?? true }
+        updateState.canProceed = { [weak self] in self?.session.phase == .idle }
+        watchUpdateSafety()
         card = CardController(session: session, preferences: preferences)
         session.onOpen = { [weak self] in self?.card.show() }
         session.onRecord = { [weak self] in self?.mediaPause.dictationStarted() }
@@ -162,7 +167,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             startsWithoutFocus: true
         ) { [unowned self] in
             AnyView(MainView(navigation: navigation, history: history, preferences: preferences, setup: setup,
-                             shortcut: shortcut, launchAtLogin: launchAtLogin, models: models, cleanups: cleanups))
+                             shortcut: shortcut, launchAtLogin: launchAtLogin, models: models, cleanups: cleanups,
+                             updates: updateState))
         }
         navigation.onChange = { [weak self] in self?.mainWindow.retitle() }
         setupWindow = AppWindow(title: de("satz einrichten", en: "Set up satz"), freshEachTime: true) { [unowned self] in
@@ -256,6 +262,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         followProvider()
 
+        updates = MacUpdates(state: updateState, testFeed: MacUpdates.loopbackTestFeed)
+        updates?.openWindow = { [weak self] in self?.show(.history) }
+        updates?.start()
+
         // A deliberate first open should be as visible as opening a running
         // copy. Login and test starts stay in the menu bar.
         switch LaunchPresentation.destination(mode: LaunchMode.current, event: launchEvent,
@@ -273,6 +283,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the setup while it is unfinished. A menu bar app otherwise appears to
     /// do nothing when relaunched.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        updates?.opened()
         if !setup.isComplete {
             setupWindow.show()
         } else if mainWindow.isVisible {
@@ -286,8 +297,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func show(_ page: MainNavigation.Page) {
         navigation.page = page
+        updates?.opened()
         mainWindow.show()
     }
+
+    private func watchUpdateSafety() {
+        withObservationTracking {
+            updateState.busy = session.phase != .idle
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.watchUpdateSafety() }
+        }
+    }
+
+    @objc private func checkForUpdates(_ sender: Any?) { updates?.checkNow() }
 
     /// Quitting with a window open: the app the user came from gets the focus
     /// back, not whichever app macOS picks.
@@ -418,6 +440,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static func mainMenu() -> NSMenu {
         let main = NSMenu()
         let appMenu = NSMenu()
+        appMenu.addItem(withTitle: de("Nach Updates suchen…", en: "Check for updates…"), action: #selector(checkForUpdates(_:)), keyEquivalent: "")
+        appMenu.addItem(.separator())
         appMenu.addItem(withTitle: de("satz beenden", en: "Quit satz"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         let appItem = NSMenuItem()
         appItem.submenu = appMenu

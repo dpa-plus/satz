@@ -239,8 +239,18 @@ Die Zeiten wurden im Oktober 2026 von Deutschland aus über OpenRouter gemessen;
 
     make app                     baut dist/satz.app
     make run                     baut und startet
-    make share                   Universal-Build als dist/satz.zip gepackt
+    make share                   Universal-Build als dist/satz.zip und dist/satz-mac.dmg
     make test                    holt native Abhängigkeiten, falls nötig, und führt dann die Offline-Tests aus
+
+Die Mac-Pakete bleiben bei `make share` lokal signiert. Für Developer ID und
+Notarisierung gibt es den getrennten [Release-Ablauf](scripts/macos/README.md).
+Der neue Updater nutzt Sparkle: ein Hinweis im geöffneten Fenster, dann auf
+Wunsch installieren und neu starten. Ein laufendes oder fehlgeschlagenes Diktat
+wartet, bis es beendet oder verworfen wurde. Bestehende Versionen bis 0.4.5
+brauchen einmal einen manuellen Download, um den Updater zu bekommen.
+Der [signierte Update-Feed](scripts/updates/README.md) gehört zu jedem künftigen
+Release. Windows und Linux zeigen ebenfalls einen Hinweis und öffnen den
+passenden Download; die Installation erfolgt dort weiterhin von Hand.
 
 **Windows und Linux** (Electron, baut auch auf einem Mac): siehe [desktop/README.md](desktop/README.md).
 

@@ -33,6 +33,17 @@ Die Einstellungen haben dafür ein Menü. Einen Anbieter darin zu wählen, zeigt
 
 Beide Anfragen, ihre Antworten und ihre Fehler wurden nach der Dokumentation geschrieben und gegen einen Ersatz-Server auf diesem Computer getestet (`test/providers.test.ts`: genaue Adresse, Header und Body; die dokumentierten Antworten; 401, 429, 413 und die übrigen). **Die echten Dienste wurden nicht aufgerufen: Es gab keinen Schlüssel.** Der Parser für Googles Antwort nimmt jede Form, die die Dokumentation zeigt (`steps[].content[]`-Text, `output_text`, `candidates[].content.parts[]`), weil sich die Dokumentation selbst darüber widerspricht, welche der Endpunkt liefert.
 
+## Updates
+
+Der neue Update-Hinweis erscheint unter den Tabs, wenn ein neueres Release
+verfügbar ist. Geprüft wird beim Start und beim Öffnen des Fensters, mit
+30 Minuten Cache und einem Zeitlimit von 5 Sekunden. „Später“ blendet ihn
+für dieses Öffnen aus. Im Tray gibt es „Nach Updates suchen…“.
+„Herunterladen“ öffnet das Paket für die eigene Plattform und Architektur.
+Die ZIP-, DEB- und tar.gz-Pakete werden weiterhin von Hand installiert.
+Bestehende Downloads bis 0.4.5 erhalten diesen Hinweis erst nach einem
+manuellen Update auf die nächste veröffentlichte Version.
+
 ## Ohne Internet
 
 Der Anbieter **Lokal** macht die Spracherkennung auf dem Computer selbst, auf dem Prozessor, mit zwei Engines: Whisper auf transformers.js und ONNX Runtime, und [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (Apache-2.0) für die Modelle, die [Handy](https://github.com/cjpais/Handy) anbietet, und vier neuere. Die Einstellungen zeigen sie so wie Handy: **Deine Modelle** (auf diesem Computer, das benutzte zuerst) und **Verfügbare Modelle**, je eine Karte mit einem Satz dazu, wofür das Modell gut ist, einem Genauigkeits-Balken und einem Tempo-Balken, seinen Sprachen und seiner Größe. Klick auf eine verfügbare Karte, um sie zu laden (eine nach der anderen, mit Fortschritt und Abbrechen); klick auf eine von deinen, um sie zu benutzen; *Löschen* legt sie in den Papierkorb. Der Katalog ist `src/core/localModels.ts`:

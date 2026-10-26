@@ -1,4 +1,5 @@
 import { satz } from './bridge'
+import { UpdateNotice } from './updates'
 
 /**
  * satz's one window: History and Settings as two pages. Two windows for them
@@ -9,6 +10,7 @@ let language: 'de' | 'en' = 'en'
 let page: Page = new URLSearchParams(location.search).get('page') === 'settings' ? 'settings' : 'history'
 
 const t = (de: string, en: string) => (language === 'de' ? de : en)
+const updates = new UpdateNotice(satz, document.getElementById('tabs')!, () => language)
 
 function show(next: Page) {
   page = next
@@ -38,9 +40,9 @@ document.addEventListener('keydown', event => {
   if (event.key === '1') openPage('history')
   if (event.key === '2') openPage('settings')
 })
-satz.on('window:page', (next: Page) => openPage(next, true))
+satz.on('window:page', (next: Page) => { openPage(next, true); updates.opened() })
 // The settings page says when the language changed.
 // The document's language too, for screen readers.
-document.addEventListener('satz-language', event => { language = (event as CustomEvent).detail; document.documentElement.lang = language; show(page) })
-satz.invoke('settings:get').then(info => { language = info.prefs.language; document.documentElement.lang = language; show(page) })
+document.addEventListener('satz-language', event => { language = (event as CustomEvent).detail; document.documentElement.lang = language; show(page); updates.languageChanged() })
+satz.invoke('settings:get').then(info => { language = info.prefs.language; document.documentElement.lang = language; show(page); updates.languageChanged() })
 show(page)

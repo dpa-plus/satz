@@ -25,6 +25,8 @@ jobs:
       - name: Test
         # make fetches the pinned native header and libraries on a fresh checkout.
         run: make test
+      - name: Test update feed generation
+        run: python3 -m unittest discover -s scripts/updates -p 'test_*.py'
       - name: Build the app bundle
         run: make app
       - name: Interface still renders

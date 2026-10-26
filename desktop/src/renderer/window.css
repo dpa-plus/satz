@@ -6,3 +6,13 @@ body { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 #tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
 main { flex: 1; min-height: 0; overflow-y: auto; width: 100%; }
 main[hidden] { display: none; }
+
+/* The same width and edges as both pages, without a modal or a second window. */
+:root { --update-space: 12px; --update-inline: 20px; --update-width: 520px; --update-small: 12.5px; }
+#update-notice { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; gap: var(--update-space); width: 100%; max-width: var(--update-width); margin: 0 auto; padding: var(--update-space) var(--update-inline); border-bottom: 1px solid var(--line); }
+#update-notice[hidden] { display: none; }
+.update-status { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.update-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--update-space); }
+.update-actions button.quiet { font-size: var(--update-small); }
+.update-actions button:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.update-actions button.compact:hover:not(:disabled) { border-color: var(--ink); }

@@ -40,7 +40,7 @@ jobs:
       - name: Download the release
         run: >
           gh release download "$TAG" -R "$GITHUB_REPOSITORY" --dir release
-          --pattern 'satz-mac.zip' --pattern 'satz-windows-*.zip' --pattern 'satz-linux-*' --pattern 'SHA256SUMS.txt'
+          --pattern 'satz-mac*' --pattern 'satz-windows-*.zip' --pattern 'satz-linux-*' --pattern 'appcast.xml' --pattern 'SHA256SUMS.txt'
       - name: Check the files
         # The source archive stays on GitHub only, so its line is left out.
         working-directory: release
@@ -53,7 +53,7 @@ jobs:
           mkdir -p meta
           python3 - <<'PY'
           import json, os
-          files = {f: os.path.getsize(os.path.join('release', f)) for f in sorted(os.listdir('release')) if f != 'SHA256SUMS.txt'}
+          files = {f: os.path.getsize(os.path.join('release', f)) for f in sorted(os.listdir('release')) if f.startswith('satz-') and '-source.' not in f}
           data = {'version': os.environ['TAG'], 'files': files}
           compact = json.dumps(data, separators=(',', ':'))
           with open('meta/release.json', 'w') as out:

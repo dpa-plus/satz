@@ -1,0 +1,67 @@
+{
+  "baseUrl": "http://127.0.0.1:48761",
+  "routes": [
+    "/preview/?language=de&update=newer",
+    "/preview/?language=en&update=newer",
+    "/preview/?language=en&update=current",
+    "/preview/?language=de&update=offline"
+  ],
+  "widths": [
+    560,
+    1280,
+    1440
+  ],
+  "schemes": [
+    "light"
+  ],
+  "phone": "responsive-enough",
+  "surface": "desktop dictation settings and history",
+  "uiLanguage": "de/en",
+  "address": "none",
+  "spacingScale": [
+    0,
+    2,
+    4,
+    8,
+    12,
+    16,
+    24,
+    32,
+    48,
+    64
+  ],
+  "typeScale": null,
+  "heightScale": null,
+  "radiusScale": null,
+  "srcDirs": [
+    "desktop/src/renderer"
+  ],
+  "tokenFiles": [
+    "desktop/src/renderer/window.css"
+  ],
+  "storageState": null,
+  "setup": null,
+  "readySelector": null,
+  "allowRedirects": false,
+  "darkClass": null,
+  "versionUrl": null,
+  "dismiss": [],
+  "ignoreSelectors": [],
+  "timeoutMinutes": 15,
+  "deadControls": {
+    "maxPerRoute": 30,
+    "settleMs": 400
+  },
+  "thresholds": {
+    "blankBandPx": 200,
+    "panelVoidPx": 64,
+    "columnVoidPx": 120,
+    "minContentShare": 0.6,
+    "maxButtonHeights": 3,
+    "maxInputHeights": 2,
+    "maxRadii": 4,
+    "maxFontSizes": 8,
+    "layoutShift": 0.1
+  },
+  "allow": []
+}
