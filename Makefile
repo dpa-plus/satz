@@ -1,10 +1,16 @@
 # Build artefacts live outside the repo: this folder is cloud-synced and a
 # Swift build directory is large and churns constantly.
 SCRATCH ?= $(HOME)/Library/Caches/satz-build
-APP     := dist/satz.app
+APP     ?= dist/satz.app
 # Where the bundle is put together and signed, outside the synced folder.
-STAGE   := $(SCRATCH)/bundle/satz.app
-BIN     := $(SCRATCH)/release/SatzMac
+STAGE   ?= $(SCRATCH)/bundle/satz.app
+BIN     ?= $(SCRATCH)/release/SatzMac
+MAC_ZIP ?= dist/satz.zip
+MAC_DMG ?= dist/satz-mac.dmg
+# Local builds retain the stable ad-hoc requirement. Public releases opt in
+# to an existing Developer ID Application identity and notarytool profile.
+SIGN_IDENTITY ?= -
+NOTARY_PROFILE ?=
 
 UNIVERSAL ?= $(HOME)/Library/Caches/satz-universal
 
@@ -21,25 +27,48 @@ SHERPA_READY := $(SHERPA)/ready-$(SHERPA_VERSION)
 # Only these two: the C API and the ONNX Runtime it runs on.
 SHERPA_DYLIBS := $(SHERPA)/lib/libsherpa-onnx-c-api.dylib $(SHERPA)/lib/libonnxruntime.dylib
 
-.PHONY: app bundle share run test hero showcase icon clean sherpa
+.PHONY: app bundle share zip dmg release release-check run test hero showcase icon clean sherpa
 
 app: $(SHERPA_READY)
 	swift build -c release --scratch-path "$(SCRATCH)"
 	$(MAKE) bundle
 
-# For another Mac: Apple chip and Intel in one app, zipped for AirDrop.
+# Apple chip and Intel in one app; the ZIP remains available for old links.
 share: $(SHERPA_READY)
 	swift build -c release --arch arm64 --arch x86_64 --scratch-path "$(UNIVERSAL)"
 	$(MAKE) bundle BIN="$(UNIVERSAL)/out/Products/Release/SatzMac"
-	rm -f dist/satz.zip
+	$(MAKE) zip dmg
+
+zip:
 	# Checked and zipped from the staging copy: Finder never shows it (an
 	# "Icon\r" it leaves in an app breaks the seal, the download would count
 	# as damaged), and the sync never stamps it.
 	codesign --verify --deep --strict "$(STAGE)"
 	# Without the files' extended attributes: as ._ files they land inside the
 	# bundle with any unzip but Finder's.
-	ditto -c -k --norsrc --noextattr --keepParent "$(STAGE)" dist/satz.zip
-	@echo "built dist/satz.zip"
+	mkdir -p "$(dir $(MAC_ZIP))"
+	rm -f "$(MAC_ZIP)"
+	ditto -c -k --norsrc --noextattr --keepParent "$(STAGE)" "$(MAC_ZIP)"
+	@echo "built $(MAC_ZIP)"
+
+# Packages an already staged app without rebuilding or touching the running app.
+dmg:
+	scripts/macos/create-dmg.sh "$(STAGE)" "$(MAC_DMG)"
+
+# Opt-in public distribution. Credentials stay in the user's Keychain.
+# The app is notarized/stapled before the compatibility ZIP is made, then the
+# final DMG is signed, notarized and stapled as well. No release is published.
+release: release-check
+	$(MAKE) sherpa
+	swift build -c release --arch arm64 --arch x86_64 --scratch-path "$(UNIVERSAL)"
+	$(MAKE) bundle BIN="$(UNIVERSAL)/out/Products/Release/SatzMac" \
+		APP="$(SCRATCH)/distribution/satz.app" STAGE="$(SCRATCH)/distribution/stage/satz.app"
+	SIGN_IDENTITY="$(SIGN_IDENTITY)" NOTARY_PROFILE="$(NOTARY_PROFILE)" NOTARY_LOG_DIR="$(SCRATCH)/notary-logs" \
+		scripts/macos/notarize.sh "$(SCRATCH)/distribution/stage/satz.app" "$(MAC_DMG)" "$(MAC_ZIP)"
+
+release-check:
+	@test -n "$(NOTARY_PROFILE)" || (echo "Set NOTARY_PROFILE to an existing notarytool Keychain profile." >&2; exit 1)
+	scripts/macos/sign-app.py --check-identity --identity "$(SIGN_IDENTITY)"
 
 bundle:
 	rm -rf "$(STAGE)"
@@ -64,22 +93,19 @@ bundle:
 	mkdir -p "$(STAGE)/Contents/Frameworks"
 	cp $(SHERPA_DYLIBS) "$(STAGE)/Contents/Frameworks/"
 	xattr -cr "$(STAGE)/Contents/Frameworks"
-	codesign --force --sign - "$(STAGE)"/Contents/Frameworks/*.dylib
+	# The updater's nested helpers must be embedded before any code is signed.
+	@if test -x scripts/macos/embed-updater.sh; then \
+		scripts/macos/embed-updater.sh "$(STAGE)" "$(dir $(BIN))"; \
+	fi
 	# The repo is cloud-synced, which stamps extended attributes onto every
 	# file. codesign refuses to sign a bundle carrying them.
 	xattr -cr "$(STAGE)"
-	# An ad-hoc signature's designated requirement is normally its cdhash, which
-	# changes on every build. macOS keys the Accessibility and Microphone grants
-	# and the Keychain item's access list on that requirement, so every rebuild
-	# silently revoked them. Pinning it to the bundle identifier keeps the grants.
-	# Fine for building on your own Mac; a release needs a real Developer ID.
-	codesign --force --sign - --identifier plus.dpa.satz \
-		--requirements '=designated => identifier "plus.dpa.satz"' "$(STAGE)"
+	scripts/macos/sign-app.py --identity "$(SIGN_IDENTITY)" "$(STAGE)"
 	# Built and signed outside the synced folder, then copied over whole: the
 	# sync stamps a new bundle folder a moment after it appears, and with
 	# sherpa-onnx's libraries the signing took long enough to be hit by it.
 	rm -rf "$(APP)"
-	mkdir -p dist
+	mkdir -p "$(dir $(APP))"
 	ditto "$(STAGE)" "$(APP)"
 	@echo "built $(APP)"
 
