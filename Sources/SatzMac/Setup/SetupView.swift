@@ -19,6 +19,7 @@ struct SetupView: View {
     @Environment(\.isSnapshot) private var isSnapshot
     @State private var step: Step
     @State private var furthest: Step
+    @State private var looking: Provider?
 
     init(preferences: Preferences, setup: Setup, shortcut: Shortcut, history: History, models: ModelStore,
          start: Step? = nil, onDone: @escaping () -> Void) {
@@ -52,7 +53,7 @@ struct SetupView: View {
         .padding(.horizontal, 32)
         .padding(.top, 46)
         .padding(.bottom, 32)
-        .frame(width: 460)
+        .frame(width: step == .key && (looking ?? preferences.provider) == .local ? 560 : 460)
         .background(theme.ground)
         // No blue keyboard-focus ring on the first button when the window opens.
         .focusEffectDisabled()
@@ -73,9 +74,10 @@ struct SetupView: View {
     private var card: some View {
         VStack(alignment: .leading, spacing: 16) {
             switch step {
-            case .key: KeyStep(preferences: preferences, setup: setup, models: models, onNext: advance)
+            case .key: KeyStep(preferences: preferences, setup: setup, models: models, looking: $looking, onNext: advance)
             case .microphone: MicrophoneStep(setup: setup)
-            case .trigger: TriggerStep(preferences: preferences, setup: setup, shortcut: shortcut, onNext: advance)
+            case .trigger: TriggerStep(preferences: preferences, setup: setup, shortcut: shortcut,
+                                       onRequestAccessibility: advance, onNext: advance)
             case .paste: PasteStep(preferences: preferences, setup: setup, onLater: advance)
             case .probe: ProbeStep(trigger: preferences.trigger, history: history, onDone: onDone)
             }
@@ -185,10 +187,12 @@ private struct KeyStep: View {
     @Bindable var preferences: Preferences
     let setup: Setup
     let models: ModelStore
+    @Binding var looking: Provider?
     let onNext: () -> Void
 
     @Environment(\.theme) private var theme
     @Environment(\.isSnapshot) private var isSnapshot
+    @Environment(\.setupSnapshotScreenHeight) private var snapshotScreenHeight
     @State private var input = ""
     @State private var problem: String?
     /// Weiter was pressed and the provider was still not ready: what is
@@ -196,8 +200,6 @@ private struct KeyStep: View {
     @State private var refused = false
     /// The provider shown when it is not the one in use: clicking one only
     /// shows it, Weiter makes it the one (as in Settings).
-    @State private var looking: Provider?
-
     private var shown: Provider { looking ?? preferences.provider }
 
     var body: some View {
@@ -218,18 +220,25 @@ private struct KeyStep: View {
                 MicrosoftRegionChoice(preferences: preferences, boxed: true)
             }
         } else {
-            // Nothing to paste here: a model is downloaded instead, the
-            // same cards as in Settings, scrolled so the step fits a screen
-            // (ImageRenderer draws a ScrollView as nothing, so not there).
+            // The footer stays outside the list. ImageRenderer cannot draw
+            // a ScrollView, so its catalog sheet shows the cards themselves.
             if isSnapshot {
-                LocalModelCards(preferences: preferences, store: models, narrow: true)
+                if snapshotScreenHeight != nil {
+                    // Native layout evidence for wrapping and footer fit;
+                    // the real ScrollView and scroller need a window check.
+                    modelCards
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(height: modelViewportHeight, alignment: .top)
+                        .clipped()
+                } else {
+                    LocalModelCards(preferences: preferences, store: models, narrow: true)
+                }
             } else {
                 ScrollView {
-                    LocalModelCards(preferences: preferences, store: models, narrow: true)
-                        .padding(.trailing, 2)
+                    modelCards
                 }
-                .scrollIndicators(.automatic)
-                .frame(height: 380)
+                .scrollIndicators(.never)
+                .frame(height: modelViewportHeight)
             }
         }
 
@@ -334,6 +343,18 @@ private struct KeyStep: View {
 
     private var hasKey: Bool { setup.hasKey(for: shown) }
 
+    private var modelCards: some View {
+        LocalModelCards(preferences: preferences, store: models, narrow: true)
+            .padding(.vertical, 2)
+    }
+
+    private var modelViewportHeight: CGFloat {
+        // Leave space for the rail, provider, footer and a readiness message
+        // even on a smaller MacBook screen. Scrollers follow macOS preferences.
+        let available = (isSnapshot ? snapshotScreenHeight : nil) ?? NSScreen.main?.visibleFrame.height ?? 900
+        return min(480, max(200, available - 384))
+    }
+
     private func next() {
         let key = input.trimmingCharacters(in: .whitespacesAndNewlines)
         if !key.isEmpty {
@@ -359,10 +380,15 @@ private struct KeyStep: View {
 
 private struct MicrophoneStep: View {
     let setup: Setup
+    @Environment(\.theme) private var theme
 
     var body: some View {
         StepTitle(text: de("Mikrofon", en: "Microphone"))
-        Button(de("Erlauben", en: "Allow")) { Task { await setup.requestMicrophone() } }
+        Text(de("satz nimmt deine Stimme auf, solange du diktierst.", en: "satz records your voice while you dictate."))
+            .font(Typography.text(14))
+            .foregroundStyle(theme.inkSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+        Button(de("Mikrofon erlauben", en: "Allow microphone")) { Task { await setup.requestMicrophone() } }
             .buttonStyle(AccentButtonStyle(height: 42))
     }
 }
@@ -371,11 +397,13 @@ private struct TriggerStep: View {
     let preferences: Preferences
     let setup: Setup
     let shortcut: Shortcut
+    let onRequestAccessibility: () -> Void
     let onNext: () -> Void
 
     var body: some View {
         StepTitle(text: de("Kurzbefehl", en: "Shortcut"))
-        ShortcutChoice(preferences: preferences, setup: setup, shortcut: shortcut)
+        ShortcutChoice(preferences: preferences, setup: setup, shortcut: shortcut,
+                       onRequestAccessibility: onRequestAccessibility)
         Button(de("Weiter", en: "Continue"), action: onNext)
             .buttonStyle(AccentButtonStyle(height: 42))
     }
@@ -385,11 +413,25 @@ private struct PasteStep: View {
     let preferences: Preferences
     let setup: Setup
     let onLater: () -> Void
+    @Environment(\.theme) private var theme
 
     var body: some View {
         StepTitle(text: de("In andere Apps einfügen", en: "Paste into other apps"))
+        VStack(alignment: .leading, spacing: 8) {
+            Text(de("satz braucht die macOS-Bedienungshilfen, um Diktate automatisch einzufügen.",
+                    en: "satz needs macOS Accessibility to paste dictation automatically."))
+            if preferences.trigger.needsEventTap {
+                Text(de("Auch der gewählte Kurzbefehl braucht diesen Zugriff.",
+                        en: "The selected shortcut also needs this access."))
+            }
+            Text(de("macOS nennt das „Computer steuern“. Die Freigabe gilt für den ganzen Mac.",
+                    en: "macOS calls this “control this computer”. The permission applies across the Mac."))
+        }
+        .font(Typography.text(14))
+        .foregroundStyle(theme.inkSecondary)
+        .fixedSize(horizontal: false, vertical: true)
         HStack(spacing: 8) {
-            Button(de("Erlauben", en: "Allow"), action: setup.requestPaste)
+            Button(de("Bedienungshilfen öffnen", en: "Open Accessibility"), action: setup.requestPaste)
                 .buttonStyle(AccentButtonStyle(height: 42))
             // Right ⌘ twice and the mouse button need the same permission to
             // work at all, so only a key combination can skip it. The text then

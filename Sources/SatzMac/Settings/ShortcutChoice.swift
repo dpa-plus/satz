@@ -7,6 +7,8 @@ struct ShortcutChoice: View {
     @Bindable var preferences: Preferences
     let setup: Setup
     let shortcut: Shortcut
+    /// Setup first explains the broad macOS permission on its own step.
+    var onRequestAccessibility: (() -> Void)? = nil
 
     @Environment(\.theme) private var theme
     @State private var recording: TriggerRecorder.Kind?
@@ -55,7 +57,9 @@ struct ShortcutChoice: View {
             )
 
             if shortcut.status == .needsAccessibility {
-                Notice(text: de("Braucht Bedienungshilfen", en: "Needs Accessibility"), action: (de("Erlauben", en: "Allow"), setup.requestPaste))
+                Notice(text: de("Bedienungshilfen für diesen Kurzbefehl und automatisches Einfügen nötig",
+                                en: "Accessibility is needed for this shortcut and automatic pasting"),
+                       action: (de("Einrichten", en: "Set up"), onRequestAccessibility ?? setup.requestPaste))
             } else if shortcut.status == .taken {
                 Notice(text: de("Von einem anderen Programm belegt", en: "Taken by another app"))
             } else if shortcut.status == .takenByMacOS {

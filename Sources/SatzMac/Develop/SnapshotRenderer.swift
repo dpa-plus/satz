@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import SatzKit
 import SwiftUI
 
@@ -43,11 +44,24 @@ enum SnapshotRenderer {
             ("settings-local-cohere-en", .english, { AnyView(localCohereSheet.environment(\.theme, .dark)) }),
             ("setup-local", .german, { AnyView(localSetupSheet.environment(\.theme, .light)) }),
             ("setup-local-en", .english, { AnyView(localSetupSheet.environment(\.theme, .dark)) }),
+            // Bounded native content: footer fit and wrapping, not scrollbar behavior.
+            ("setup-local-short", .german, { AnyView(localSetupSheet.environment(\.setupSnapshotScreenHeight, 640).environment(\.theme, .light)) }),
+            ("setup-local-short-en", .english, { AnyView(localSetupSheet.environment(\.setupSnapshotScreenHeight, 640).environment(\.theme, .dark)) }),
+            ("setup-local-tall", .german, { AnyView(localSetupSheet.environment(\.setupSnapshotScreenHeight, 960).environment(\.theme, .light)) }),
+            ("setup-local-tall-en", .english, { AnyView(localSetupSheet.environment(\.setupSnapshotScreenHeight, 960).environment(\.theme, .dark)) }),
             ("setup-custom", .german, { AnyView(setupSheet(.key, provider: .custom).environment(\.theme, .light)) }),
             ("setup-microsoft", .german, { AnyView(setupSheet(.key, provider: .microsoft).environment(\.theme, .light)) }),
             ("setup-microsoft-en", .english, { AnyView(setupSheet(.key, provider: .microsoft).environment(\.theme, .dark)) }),
             ("setup-microsoft-address", .english, { AnyView(setupSheet(.key, provider: .microsoft, endpoint: "https://satz-speech.cognitiveservices.azure.com").environment(\.theme, .light)) }),
             ("setup-google", .german, { AnyView(setupSheet(.key, provider: .google).environment(\.theme, .light)) }),
+            ("setup-microphone", .german, { AnyView(setupSheet(.microphone).environment(\.theme, .light)) }),
+            ("setup-microphone-en", .english, { AnyView(setupSheet(.microphone).environment(\.theme, .dark)) }),
+            ("setup-paste", .german, { AnyView(setupSheet(.paste).environment(\.theme, .light)) }),
+            ("setup-paste-en", .english, { AnyView(setupSheet(.paste).environment(\.theme, .dark)) }),
+            ("setup-paste-modifiers", .german, { AnyView(setupSheet(.paste, trigger: modifierTrigger).environment(\.theme, .light)) }),
+            ("setup-paste-modifiers-en", .english, { AnyView(setupSheet(.paste, trigger: modifierTrigger).environment(\.theme, .dark)) }),
+            ("setup-paste-keys", .german, { AnyView(setupSheet(.paste, trigger: keyTrigger).environment(\.theme, .light)) }),
+            ("setup-paste-keys-en", .english, { AnyView(setupSheet(.paste, trigger: keyTrigger).environment(\.theme, .dark)) }),
             ("history", .german, { AnyView(historySheet.environment(\.theme, .light)) }),
             ("history-en", .english, { AnyView(historySheet.environment(\.theme, .dark)) }),
             ("setup-probe", .german, { AnyView(setupSheet(.probe).environment(\.theme, .light)) }),
@@ -327,15 +341,20 @@ enum SnapshotRenderer {
             .modifier(GroundBackground())
     }
 
+    private static let modifierTrigger = Trigger.modifiers(NSEvent.ModifierFlags.command.union(.option).carbonModifiers)
+    private static let keyTrigger = Trigger.keys(keyCode: UInt32(kVK_ANSI_D), modifiers: NSEvent.ModifierFlags.command.union(.option).carbonModifiers)
+
     private static func setupSheet(_ step: SetupView.Step, provider: Provider = .openRouter, localModel: String? = nil,
-                                   endpoint: String = "") -> some View {
+                                   endpoint: String = "", trigger: Trigger = .standard) -> some View {
         let preferences = preferences
         preferences.provider = provider
         preferences.microsoftEndpoint = endpoint
+        preferences.trigger = trigger
         if let localModel { preferences.localModel = localModel }
         return SetupView(
             preferences: preferences,
-            setup: Setup(hasKey: step != .key || localModel != nil, microphone: .allowed, canPaste: true),
+            setup: Setup(hasKey: step != .key || localModel != nil,
+                         microphone: step == .microphone ? .notAsked : .allowed, canPaste: step != .paste),
             shortcut: shortcut,
             history: History(),
             models: ModelStore(folder: nil),
@@ -422,6 +441,9 @@ enum SnapshotRenderer {
 /// for a static stand-in.
 extension EnvironmentValues {
     @Entry var isSnapshot = false
+    /// A bounded setup fixture uses the production viewport sizing without
+    /// asking ImageRenderer to draw an AppKit-backed ScrollView.
+    @Entry var setupSnapshotScreenHeight: CGFloat? = nil
     /// The provider Settings shows at first, for a picture of one looked at
     /// but not in use.
     @Entry var showsProvider: Provider? = nil
