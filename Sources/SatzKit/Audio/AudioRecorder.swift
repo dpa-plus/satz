@@ -17,6 +17,13 @@ import Foundation
 ///   it was lost.
 public final class AudioRecorder: @unchecked Sendable {
 
+    public struct StartupTiming: Sendable {
+        public enum Stage: String, Sendable { case engineStarted, firstBuffer }
+        public let stage: Stage
+        /// Since opening the engine began, excluding permission and device lookup.
+        public let elapsed: Duration
+    }
+
     public enum Failure: Error, LocalizedError, Equatable {
         case microphoneDenied
         case couldNotConvertAudio
@@ -54,6 +61,9 @@ public final class AudioRecorder: @unchecked Sendable {
     /// neither it nor the system's input would start again. What it heard
     /// until then stays: `finishSamples()` hands it over without a tail.
     public var onInputLost: (@Sendable @MainActor () -> Void)?
+    /// Two monotonic timings per recording, delivered away from the audio
+    /// thread. An engine that started may still be waiting for its first audio.
+    public var onStartup: (@Sendable @MainActor (StartupTiming) -> Void)?
 
     /// Where a recording stands. Changed only on `lifecycle`.
     private enum State {
@@ -63,6 +73,7 @@ public final class AudioRecorder: @unchecked Sendable {
     private let settings: Settings
     private let engine: any CaptureEngine
     private let askPermission: @Sendable () async -> Bool
+    private let now: @Sendable () -> ContinuousClock.Instant
     /// The samples, the converter and `lost`: the audio thread takes it too,
     /// so nothing that waits on the engine ever holds it.
     private let lock = NSLock()
@@ -75,6 +86,9 @@ public final class AudioRecorder: @unchecked Sendable {
     private var samples: [Float] = []
     private var converter: AVAudioConverter?
     private var lost = false
+    /// Cleared by the first converted buffer; route changes stay part of the
+    /// same recording, so they cannot pretend to be its initial startup.
+    private var awaitingFirstBufferSince: ContinuousClock.Instant?
     // Only touched on `lifecycle`.
     private var state = State.idle
     /// Counts starts, so a route change belongs to the start that heard it.
@@ -87,10 +101,12 @@ public final class AudioRecorder: @unchecked Sendable {
 
     /// Tests put in an engine whose starts fail or wait on cue: a route change
     /// cannot be made to happen on demand, and a test never asks for the microphone.
-    init(settings: Settings, engine: any CaptureEngine, permission: @escaping @Sendable () async -> Bool) {
+    init(settings: Settings, engine: any CaptureEngine, permission: @escaping @Sendable () async -> Bool,
+         now: @escaping @Sendable () -> ContinuousClock.Instant = { ContinuousClock.now }) {
         self.settings = settings
         self.engine = engine
         askPermission = permission
+        self.now = now
     }
 
     deinit {
@@ -160,11 +176,19 @@ public final class AudioRecorder: @unchecked Sendable {
 
     private func begin() throws {
         guard state != .running, state != .lost else { return }
+        let opening = now()
         lock.withLock {
             samples.removeAll(keepingCapacity: true)
             lost = false
+            awaitingFirstBufferSince = opening
         }
-        try open(device: settings.inputDeviceID)
+        do {
+            try open(device: settings.inputDeviceID)
+        } catch {
+            lock.withLock { awaitingFirstBufferSince = nil }
+            throw error
+        }
+        report(startup: StartupTiming(stage: .engineStarted, elapsed: now() - opening))
         state = .running
         generation += 1
         let generation = generation, lifecycle = lifecycle, owner = Owner(self)
@@ -238,6 +262,7 @@ public final class AudioRecorder: @unchecked Sendable {
             // Under the lock: the audio thread reads it under the same lock and
             // keeps its own strong reference for the buffer it is converting.
             converter = nil
+            awaitingFirstBufferSince = nil
             defer { samples.removeAll(keepingCapacity: false) }
             return keeping ? samples : nil
         }
@@ -305,8 +330,19 @@ public final class AudioRecorder: @unchecked Sendable {
         let frames = Int(converted.frameLength)
         let slice = UnsafeBufferPointer(start: channel, count: frames)
 
-        lock.withLock { samples.append(contentsOf: slice) }
+        let firstBuffer: StartupTiming? = lock.withLock {
+            samples.append(contentsOf: slice)
+            guard let opening = awaitingFirstBufferSince else { return nil }
+            awaitingFirstBufferSince = nil
+            return StartupTiming(stage: .firstBuffer, elapsed: now() - opening)
+        }
+        if let firstBuffer { report(startup: firstBuffer) }
         report(level: Self.level(of: slice, noiseFloor: settings.noiseFloorDecibels))
+    }
+
+    private func report(startup timing: StartupTiming) {
+        guard let onStartup else { return }
+        Task { @MainActor in onStartup(timing) }
     }
 
     private func report(level: Float) {

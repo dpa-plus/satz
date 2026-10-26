@@ -34,9 +34,29 @@ enum AudioSources {
             testFiles = files
             return FileSource(url: next)
         }
+        let trace = String(UUID().uuidString.prefix(8))
+        let lookupStarted = ContinuousClock.now
         var settings = AudioRecorder.Settings()
         settings.inputDeviceID = InputDevices.id(forUID: inputDeviceUID)
-        return AudioRecorder(settings: settings)
+        let lookup = ContinuousClock.now - lookupStarted
+        let route = inputDeviceUID == nil ? "system" : settings.inputDeviceID == nil ? "system fallback" : "chosen"
+        let recorder = AudioRecorder(settings: settings)
+        let created = ContinuousClock.now - lookupStarted
+        recorder.onStartup = { timing in
+            // The log also writes stderr: keep that I/O out of the path that
+            // opens the microphone, and out of the audio callback itself.
+            if timing.stage == .engineStarted {
+                Log.note("microphone startup \(trace): device lookup \(milliseconds(lookup)) ms, source created \(milliseconds(created)) ms, route \(route)")
+            }
+            Log.note("microphone startup \(trace): \(timing.stage.rawValue) \(milliseconds(timing.elapsed)) ms from engine opening")
+        }
+        return recorder
+    }
+
+    private static func milliseconds(_ duration: Duration) -> String {
+        let parts = duration.components
+        let value = Double(parts.seconds) * 1_000 + Double(parts.attoseconds) / 1_000_000_000_000_000
+        return String(format: "%.1f", value)
     }
 }
 
