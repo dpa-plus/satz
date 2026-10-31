@@ -285,4 +285,4 @@ Live-Tests sprechen mit einem echten Endpunkt und werden ohne Schlüssel übersp
 
 Der Quellcode von satz selbst steht unter MIT. Siehe [LICENSE](LICENSE). Gemacht von [DPA Plus](https://dpa.plus).
 
-Mitgelieferte Abhängigkeiten behalten ihre eigenen Lizenzen. Die Pakete für Windows x64 und Linux enthalten eine native Bibliothek unter GPL-3.0-or-later. Die Lizenzen, den Quellcode und die Bauanleitung findest du in den [Hinweisen zur mitgelieferten Software](Resources/Licenses/README.md) und im [zugehörigen Quellcode-Download](https://github.com/dpa-plus/satz/releases/download/v0.4.5/satz-0.4.5-source.tar.gz).
+Mitgelieferte Abhängigkeiten behalten ihre eigenen Lizenzen. Die Pakete für Windows x64 und Linux enthalten eine native Bibliothek unter GPL-3.0-or-later. Die Lizenzen, den Quellcode und die Bauanleitung findest du in den [Hinweisen zur mitgelieferten Software](Resources/Licenses/README.md) und im [zugehörigen Quellcode-Download](https://github.com/dpa-plus/satz/releases/download/v0.4.6/satz-0.4.6-source.tar.gz).
