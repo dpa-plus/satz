@@ -110,3 +110,5 @@ button.trying { display: inline-flex; align-items: center; gap: 8px; }
 .hint-line { color: var(--secondary); font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .try-by { overflow-wrap: anywhere; }
 .error-line { color: var(--accent); font-size: 12.5px; }
+/* satz's folder in Status: a long Windows path breaks rather than pushing the buttons out. */
+.status-path { overflow-wrap: anywhere; min-width: 0; }

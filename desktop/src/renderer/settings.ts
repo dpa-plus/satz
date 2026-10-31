@@ -10,6 +10,7 @@ import {
 } from '../core/cleanupProviders'
 import { averageChars, estimate, factsLine, menuTitle, tryLine, type Price, type Sample } from '../core/cleanupEstimate'
 import { LoadAfterBlur } from './deferredLoad'
+import { keySentence, type KeyState } from '../core/status'
 
 /**
  * Settings: the provider and its key, the vocabulary, the Ersetzungen with
@@ -41,6 +42,10 @@ interface Info {
   /** The provider the page shows, which `hasKey` and `models` are about; dictations go to `prefs.provider`. */
   shown: Provider
   hasKey: boolean; wayland: boolean; platform: string; startAtLogin: boolean; spokenLanguage: 'de' | 'en'
+  /** Why the shown provider has no key: none saved, an empty file, or one that could not be read. Missing counts as saved. */
+  keyState?: KeyState
+  /** Settings' "Status": satz's folder, and lines that say what is wrong (core/status.ts). */
+  diagnostics?: { folder: string; lines: { text: string; problem: boolean }[] }
   /** False where right Ctrl cannot start a dictation, so only "satz --toggle" does; missing counts as working. */
   shortcutWorks?: boolean
   /** The shown provider's live list, or the shipped one until it arrives. */
@@ -380,6 +385,19 @@ function render() {
     el('div', { className: 'row' }, el('label', { className: 'switch' }, t('Text in der Zwischenablage behalten', 'Keep text on the clipboard'), keepBox)),
     el('div', { className: 'row' }, el('span', { className: 'grow', textContent: t('Verlauf behalten', 'Keep history') }), keep, show, clear))
 
+  // The key file, when it is there but empty or could not be read: typing the key again is not always the fix.
+  const keyNote = info.keyState ? keySentence(info.keyState, p.language) : null
+
+  // Status: the version and how satz was started, what is wrong only when
+  // something is, and the log and the folder, to send along with a report.
+  const statusBox = el('div', { className: 'box', id: 'status' }, ...(info.diagnostics?.lines ?? []).map(line =>
+    el('div', { className: 'row' }, el('span', { className: line.problem ? 'grow error-line' : 'grow', textContent: line.text }))))
+  const openLog = el('button', { textContent: t('Protokoll öffnen', 'Open log') })
+  openLog.onclick = () => satz.invoke('settings:open-log')
+  const openFolder = el('button', { textContent: t('Ordner öffnen', 'Open folder') })
+  openFolder.onclick = () => satz.invoke('settings:open-folder')
+  statusBox.append(el('div', { className: 'row' }, el('span', { className: 'grow hint-line status-path', textContent: info.diagnostics?.folder ?? '' }), openLog, openFolder))
+
   // The page is drawn anew after every change; the cursor stays in the field
   // it was in, so several words can be typed one after the other.
   const focused = (document.activeElement as HTMLElement | null)?.id || null
@@ -388,11 +406,13 @@ function render() {
   try { if (active && typeof active.selectionStart === 'number') caret = [active.selectionStart, active.selectionEnd ?? active.selectionStart] } catch { /* no selection here */ }
   app.replaceChildren(
     section(t('Kurzbefehl', 'Shortcut'), shortcut, shortcutNote),
-    section(t('Anbieter', 'Provider'), providerBox, ...localCaption, ...(isLocal ? localCards() : []), ...(keyProblem ? [el('div', { className: 'error', textContent: keyProblem })] : [])),
+    section(t('Anbieter', 'Provider'), providerBox, ...localCaption, ...(isLocal ? localCards() : []), ...(keyProblem ? [el('div', { className: 'error', textContent: keyProblem })] : []),
+      ...(keyNote ? [el('div', { className: 'error', id: 'key-state', textContent: keyNote })] : [])),
     section(t('Wortschatz', 'Vocabulary'), el('div', { className: 'box' }, words)),
     section(t('Ersetzungen', 'Replacements'), replacementBox),
     cleanupSection(),
     section(t('Allgemein', 'General'), general),
+    section(t('Status', 'Status'), statusBox),
   )
   const target = focusNext ?? focused
   focusNext = null

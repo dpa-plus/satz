@@ -8,7 +8,7 @@ import { historyIssueText, type HistoryPersistenceResult } from '../core/history
 import { isCleanupLevel, levelChange, trySample } from '../core/cleanup'
 import { chosenModel, cleanupBase, cleanupProviders, defaultCleanupProvider, isCleanupProvider, type CleanupProviderId } from '../core/cleanupProviders'
 import { Session, type AudioSource } from '../core/session'
-import { keyPages, needsKey, providers, transcribe, TranscriptionFailure, type Provider } from '../core/transcriber'
+import { keyPages, needsKey, providers, transcribe, type Provider } from '../core/transcriber'
 import { localModelIds, offeredModels, toldLanguage } from '../core/localModels'
 import { DoubleTap } from '../core/trigger'
 import { decodeWAV, encodeWAV, resample } from '../core/wav'
@@ -31,6 +31,8 @@ import { Cleaner, cleanupState, cleanupTryState, cleanupView, type CleanupRun, t
 import { flushHandback } from './clipboardHandback'
 import { releaseAsset, type UpdateFetch } from '../core/updates'
 import { Updates } from './updates'
+import { LogFile } from './logFile'
+import { diagnosticsLines, keyShort, shortcutWords, startedBy, trayTooltip, type Diagnostics, type KeyState } from '../core/status'
 
 /**
  * satz for Windows and Linux. Double-tap right Ctrl, talk, double-tap again:
@@ -55,6 +57,15 @@ if (process.platform === 'linux' && !process.env.SATZ_NATIVE_WAYLAND) {
   app.commandLine.appendSwitch('ozone-platform', 'x11')
 }
 
+/**
+ * Second starts that came before satz was ready for them ("satz --toggle"
+ * from a mouse button while satz was still starting at login): handled once
+ * it is. Listened for from the first moment: an event without a listener is
+ * dropped, and the toggle with it.
+ */
+const earlyStarts: string[][] = []
+let secondStart = (argv: string[]) => { earlyStarts.push(argv) }
+
 // One satz at a time; a second start passes its command to the first.
 if (testModelsDir !== undefined && !testMode) {
   // Half a test setup: it would run as the user's own satz on a folder of its own. The Mac refuses it too.
@@ -63,22 +74,33 @@ if (testModelsDir !== undefined && !testMode) {
 } else if (!app.requestSingleInstanceLock({ argv: args })) {
   app.quit()
 } else {
+  app.on('second-instance', (_e, argv) => secondStart(argv))
   app.whenReady().then(start)
 }
 
+// Made on the first line: satz's folder is known only once the app's name is.
+let logFile: LogFile | null = null
 function log(message: string) {
   const line = `${new Date().toISOString()} ${message}`
   console.log(line)
-  try { fs.appendFileSync(path.join(app.getPath('userData'), 'satz.log'), line + '\n') } catch { /* no log then */ }
+  logFile ??= new LogFile(path.join(app.getPath('userData'), 'satz.log'), path.join(os.tmpdir(), 'satz.log'))
+  logFile.write(line)
 }
 
 async function start() {
   app.setAppUserModelId('plus.dpa.satz')
   const store = new Store(log)
+  // Before anything that may ask for the tray to be drawn (refreshTray): read before its line, it stopped the start.
+  let trayMade = false
   setLanguage(store.prefs.language)
   // Requests that carry a key: Electron's network stack, but a redirect is handed back to be judged, not followed (manualFetch.ts).
   const manualFetch = makeManualFetch(options => net.request(options))
   log(`satz ${app.getVersion()} on ${process.platform} ${process.arch}, ${isWayland() ? 'Wayland' : 'X11/Windows'}${testMode ? ', test mode' : ''}`)
+  // Which account and folder this satz runs with, and how it was started: a
+  // satz that found no key at login and one started by hand that did can be
+  // told apart in the log. A name and a folder, never a key.
+  const started = startedBy(args)
+  log(`started ${started === 'hand' ? 'by hand' : started === 'login' ? 'at login' : `by --${started}`} as ${safeUser()}, data in ${store.folder}`)
 
   electronSession.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => callback(permission === 'media'))
   electronSession.defaultSession.setPermissionCheckHandler((_wc, permission) => permission === 'media')
@@ -134,15 +156,20 @@ async function start() {
   const modelsDir = testModelsDir || (process.platform === 'win32' && process.env.LOCALAPPDATA && !fs.existsSync(roaming)
     ? path.join(process.env.LOCALAPPDATA, 'satz', 'models', 'local') : roaming)
   const canChangeModels = !testMode || !!testModelsDir
-  const local = new LocalModels(modelsDir, log, () => tellWindow('local:changed'), app.getVersion(), { canChangeFiles: canChangeModels })
+  // The tray says whether the model in use is ready, so it follows the downloads too.
+  const local = new LocalModels(modelsDir, log, () => { tellWindow('local:changed'); refreshTray() }, app.getVersion(), { canChangeFiles: canChangeModels })
   const localModel = () => store.prefs.models.local || providers.local.defaultModel
   /** What this system can run: no sherpa-onnx models on Windows on ARM. */
   const offered = offeredModels(process.platform, process.arch)
   /** The ids Settings may download, measure or remove: the list's, and the one in use. */
   const isListed = (id: unknown): id is string => typeof id === 'string' && localModelIds(localModel(), offered).includes(id)
+  /** A provider's key file as the card, the tray and Settings say it. */
+  function keyState(provider: Provider = store.prefs.provider): KeyState {
+    return store.keyRead(provider).problem ?? { kind: 'saved' }
+  }
   /** What keeps the provider from working, in two or three words; null when it is ready. */
   function missing(): string | null {
-    if (needsKey(store.prefs.provider)) return store.hasKey() ? null : new TranscriptionFailure('noKey').short
+    if (needsKey(store.prefs.provider)) return keyShort(keyState(), store.prefs.language)
     const state = local.state(localModel()).kind
     if (state === 'ready') return null
     return state === 'downloading' || state === 'preparing' ? de('Modell lädt noch', 'Model still loading') : de('Modell fehlt', 'Model missing')
@@ -200,7 +227,8 @@ async function start() {
       // Electron's network stack: the system proxy and certificate store, which Node's ignores.
       : transcribe(store.transcriberSettings(), encodeWAV(samples), store.readKey() ?? '', manualFetch, signal),
     replacements: () => store.activeReplacements,
-    missing,
+    // Said in the log too: a dictation refused for a missing key left no line there.
+    missing: () => { const why = missing(); if (why) log(`dictation not started: ${why}`); return why },
     endpointMissing: () => store.endpointMissing,
     triggerMode: () => store.prefs.triggerMode,
     log,
@@ -307,25 +335,22 @@ async function start() {
   })
   log(`shortcut: ${keyboard.description}`)
 
-  // A second start ("satz --toggle", e.g. from a desktop shortcut) acts like
-  // the shortcut. Opened from the app menu again, satz shows the history:
-  // without it, starting a running tray app looked like nothing happened.
-  app.on('second-instance', (_e, argv) => {
-    if (argv.includes('--toggle')) session.toggle()
-    else if (argv.includes('--settings')) openSettings()
-    else openHistory()
-  })
-
-  // Tray.
+  // Tray. Its tooltip and first line say whether satz is ready: before, a
+  // missing key showed only after the shortcut, on the card.
   const iconPath = path.join(__dirname, '..', 'assets', process.platform === 'win32' ? 'tray.png' : 'tray.png')
   const tray = new Tray(nativeImage.createFromPath(iconPath))
-  tray.setToolTip('satz')
+  trayMade = true
   function refreshTray() {
+    // Asked before the tray exists (a model's state at the start): it is drawn once it does.
+    if (!trayMade) return
+    const problem = missing() ?? (store.endpointMissing ? de('Adresse fehlt', 'Address missing') : null)
+    tray.setToolTip(trayTooltip(app.getVersion(), problem, shortcutWords(keyboard?.shortcutWorks ?? false, store.prefs.language), store.prefs.language))
     const recent: Electron.MenuItemConstructorOptions[] = store.history.slice(0, 4).map(entry => ({
       label: entry.text.length > 60 ? entry.text.slice(0, 57) + '…' : entry.text,
       click: () => { clipboard.writeText(entry.text) },
     }))
     const menu = Menu.buildFromTemplate([
+      ...(problem ? [{ label: de(`Nicht bereit: ${problem}`, `Not ready: ${problem}`), click: openSettings }, { type: 'separator' as const }] : []),
       ...(store.persistenceIssue ? [{ label: historyIssueText(store.persistenceIssue, store.prefs.language).title, enabled: false }, { type: 'separator' as const }] : []),
       ...(recent.length ? [{ label: de('Zuletzt (klicken zum Kopieren)', 'Recent (click to copy)'), enabled: false }, ...recent] : []),
       { label: de(`Ganzer Verlauf (${store.history.length})…`, `All history (${store.history.length})…`), click: openHistory },
@@ -373,6 +398,16 @@ async function start() {
   // line runs; as constants they stopped satz's start halfway.
   function openHistory() { openWindow('history') }
   function openSettings() { openWindow('settings') }
+  /** Settings' "Status": the version and how satz was started, and only where something is wrong, what. */
+  function diagnostics(): { folder: string; lines: { text: string; problem: boolean }[] } {
+    const facts: Diagnostics = {
+      version: app.getVersion(), platform: process.platform, folder: store.folder, startedBy: startedBy(args),
+      log: { file: logFile?.primary ?? '', problem: logFile?.problem ?? null, fallback: logFile?.fallback ?? '' },
+      preferencesProblem: store.preferencesProblem,
+      startBlocked: !testMode && startAtLogin.blocked(),
+    }
+    return { folder: store.folder, lines: diagnosticsLines(facts, store.prefs.language) }
+  }
   function tellWindow(channel: string) {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel)
   }
@@ -430,6 +465,9 @@ async function start() {
       prefs: store.prefs,
       shown,
       hasKey: store.hasKey(shown),
+      // Why there is none, for the line under the key field: a file that could not be read is not fixed by typing the key.
+      keyState: needsKey(shown) ? keyState(shown) : { kind: 'saved' },
+      diagnostics: diagnostics(),
       keyboard: keyboard?.description,
       shortcutWorks: keyboard?.shortcutWorks ?? true,
       wayland: isWayland(),
@@ -491,6 +529,7 @@ async function start() {
       log(`key for ${provider} not saved: ${(error as Error).message}`)
       return false
     }
+    refreshTray()
     return store.hasKey(provider)
   })
   // Only the addresses in keyPages, never one the page names: the page asks for a provider.
@@ -538,26 +577,42 @@ async function start() {
   ipcMain.handle('cleanup:cancel-try', () => { tryRun?.abort(); tryRun = null })
   ipcMain.handle('settings:clear-history', () => { const result = store.clearHistory(); historyChanged(result); return result })
   ipcMain.handle('settings:start-at-login', (_e, on: boolean) => { startAtLogin.set(on); store.update({ startsAtLogin: on }); return startAtLogin.get() })
-  ipcMain.handle('settings:open-log', () => shell.openPath(path.join(app.getPath('userData'), 'satz.log')))
+  // The file that has the lines: satz's own, or the second one when only that one was written.
+  ipcMain.handle('settings:open-log', () => shell.openPath(logFile?.shown ?? path.join(app.getPath('userData'), 'satz.log')))
+  ipcMain.handle('settings:open-folder', () => shell.openPath(store.folder))
 
   // Start at login, on from the first launch; switched off, it stays off.
-  if (!testMode && !store.prefs.startAtLoginDefaulted) {
+  // Not while the settings could not be read: the user may have switched it off there.
+  if (testMode || store.preferencesProblem) { /* left as it is */ } else if (!store.prefs.startAtLoginDefaulted) {
     startAtLogin.set(true)
     store.update({ startAtLoginDefaulted: true, startsAtLogin: true })
     log(`start at login: ${startAtLogin.get() ? 'on' : 'could not be switched on'}`)
-  } else if (!testMode && (store.prefs.startsAtLogin ?? startAtLogin.get())) {
+  } else if (store.prefs.startsAtLogin ?? startAtLogin.get()) {
     // Written again on every start, so it follows satz when it moves (an
     // unzipped update in a new folder). Asked of the system, a moved satz on
     // Windows looked switched off, and the old copy kept starting.
-    startAtLogin.set(true)
+    startAtLogin.set(true, true)
   }
 
   void updates.check()
+  if (store.preferencesProblem) {
+    // Read again every few seconds for five minutes: the user's settings, not
+    // the standard ones, for the rest of the day. Here, after the tray exists.
+    let tries = 0
+    const retry = setInterval(() => {
+      if (!store.retryPreferences() && ++tries < 60) return
+      clearInterval(retry)
+      refreshTray()
+      tellWindow('models:changed')
+    }, 5000)
+  }
   if (store.prefs.provider === 'local') local.warmUp(localModel())
   if (missing() && !testMode) {
     openSettings()
     new Notification({ title: 'satz', body: needsKey(store.prefs.provider)
-      ? de('Bitte einen API-Schlüssel hinterlegen.', 'Please add an API key.')
+      ? keyState().kind === 'unreadable'
+        ? de('Der API-Schlüssel ist gespeichert, ließ sich aber nicht lesen. satz versucht es bei jedem Diktat neu.', 'The API key is saved but could not be read. satz tries again with every dictation.')
+        : de('Bitte einen API-Schlüssel hinterlegen.', 'Please add an API key.')
       : de('Bitte das Modell in den Einstellungen laden.', 'Please download the model in Settings.') }).show()
   }
 
@@ -565,6 +620,20 @@ async function start() {
   // ("satz --settings"): the same as when satz was already running.
   if (args.includes('--toggle')) void cardIsReady.then(() => session.toggle())
   if (args.includes('--settings')) openSettings()
+
+  // A second start ("satz --toggle", e.g. from a desktop shortcut or a mouse
+  // button) acts like the shortcut. Opened from the app menu again, satz shows
+  // the history: without it, starting a running tray app looked like nothing
+  // happened. Set last, once everything it opens exists; the starts that
+  // came while satz was starting are handled now, in order.
+  secondStart = argv => {
+    if (argv.includes('--toggle')) void cardIsReady.then(() => session.toggle())
+    else if (argv.includes('--settings')) openSettings()
+    // satz's own entry at login beside one the user made: nothing was asked for.
+    else if (argv.includes('--login')) log('started at login a second time; this satz goes on')
+    else openHistory()
+  }
+  for (const argv of earlyStarts.splice(0)) secondStart(argv)
 
   if (devPort) startDevControl(Number(devPort), session, card, delivered, store, {
     download: id => local.download(id ?? localModel()),
@@ -596,15 +665,41 @@ async function start() {
   })
 }
 
-/** Windows: the registry's Run key through Electron. Linux: an autostart entry. */
+/** The account satz runs as, for the log; a profile Windows could not load has none. */
+function safeUser(): string {
+  try { return os.userInfo().username } catch { return 'an account without a name' }
+}
+
+/**
+ * Windows: the registry's Run key through Electron. Linux: an autostart entry.
+ * Both start satz with --login, so the log can tell a start at login from
+ * one by hand, and a second start at login opens nothing.
+ */
+const loginArgs = ['--login']
 const startAtLogin = {
   // Where the desktop session looks: XDG_CONFIG_HOME, else ~/.config.
   desktopFile: () => path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'autostart', 'satz.desktop'),
   get(): boolean {
     if (process.platform === 'linux') return fs.existsSync(this.desktopFile())
-    return app.getLoginItemSettings().openAtLogin
+    // The entry a satz before 0.4.6 wrote has no --login: it counts too.
+    return app.getLoginItemSettings({ args: loginArgs }).openAtLogin || app.getLoginItemSettings().openAtLogin
   },
-  set(on: boolean) {
+  /**
+   * Windows: satz's entry is there, but switched off in Windows' own list
+   * (Settings › Apps › Startup, or Task Manager). The checkbox said "on"
+   * while Windows did not start satz.
+   */
+  blocked(): boolean {
+    if (process.platform !== 'win32') return false
+    const settings = app.getLoginItemSettings({ args: loginArgs })
+    return this.get() && !settings.executableWillLaunchAtLogin
+  },
+  /**
+   * @param keepWindowsChoice the rewrite at every start: Electron switched the
+   * entry back on in Windows' own list each time, over the user's choice there.
+   * Only the checkbox in Settings switches it on again.
+   */
+  set(on: boolean, keepWindowsChoice = false) {
     if (process.platform === 'linux') {
       const file = this.desktopFile()
       if (!on) { try { fs.rmSync(file) } catch { /* gone */ } return }
@@ -612,10 +707,10 @@ const startAtLogin = {
       // the way Linux needs (see build/after-pack.cjs).
       const exec = process.env.APPIMAGE ?? process.execPath.replace(/-bin$/, '')
       fs.mkdirSync(path.dirname(file), { recursive: true })
-      fs.writeFileSync(file, `[Desktop Entry]\nType=Application\nName=satz\nExec="${exec}"\nX-GNOME-Autostart-enabled=true\n`)
+      fs.writeFileSync(file, `[Desktop Entry]\nType=Application\nName=satz\nExec="${exec}" ${loginArgs.join(' ')}\nX-GNOME-Autostart-enabled=true\n`)
       return
     }
-    app.setLoginItemSettings({ openAtLogin: on })
+    app.setLoginItemSettings({ openAtLogin: on, args: loginArgs, enabled: !(keepWindowsChoice && this.blocked()) })
   },
 }
 

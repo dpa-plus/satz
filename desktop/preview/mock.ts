@@ -15,6 +15,8 @@
 // `&key=microsoft` gives one provider a key already,
 // `&fresh=1` nothing downloaded yet, `&slow=1` holds every state still for a picture,
 // `&noshortcut=1` right Ctrl cannot start a dictation (the hint under "Shortcut").
+// `&keyread=EPERM` the key of the provider in use is there but could not be read; `&broken=1` Status lists
+// a refused log, unreadable settings and start at login switched off in Windows.
 // Cleanup ("Aufräumen"): off, OpenRouter in use for it (with a key, Gemini 3.5
 // Flash-Lite measured twice), Ollama answering with two models. `&cleanup=1`
 // turns it on, `&level=custom` starts on the own prompt, `&cleanupShow=ollama`
@@ -29,6 +31,7 @@ import { standardReplacements } from '../src/core/replacements'
 import type { Provider } from '../src/core/transcriber'
 import { isCleanupLevel } from '../src/core/cleanup'
 import { cleanupProviders, defaultCleanupProvider, isCleanupProvider, type CleanupProviderId } from '../src/core/cleanupProviders'
+import { diagnosticsLines } from '../src/core/status'
 
 const hour = 3600_000
 const query = new URLSearchParams(location.search)
@@ -56,6 +59,7 @@ let history = [
 const keys: Record<Provider, boolean> = { openrouter: true, openai: false, groq: false, microsoft: false, google: false, custom: false, local: false }
 for (const name of (query.get('key') ?? '').split(',')) if (name in keys) keys[name as Provider] = true
 const isProvider = (value: unknown): value is Provider => typeof value === 'string' && value in shipped
+const keyRead = query.get('keyread')
 
 // Cleanup's keys by account, measured runs, and what Ollama and LM Studio have.
 const cleanupKeys: Record<string, boolean> = { openrouter: query.get('cleanupKey') !== '0' }
@@ -154,7 +158,12 @@ window.confirm = (message?: string) => { calls.push(['confirm', message]); retur
         const cleanupShown = isCleanupProvider(args[1]) ? args[1] : isCleanupProvider(query.get('cleanupShow')) ? query.get('cleanupShow') as CleanupProviderId : inUse
         const cleanup = { inUse, shown: cleanupShown, hasKey: cleanupHasKey(cleanupShown), inUseHasKey: cleanupHasKey(inUse),
           prices: {}, samples: cleanupSamples[cleanupShown] ?? {}, installed: installed(cleanupShown), inUseInstalled: installed(inUse) }
-        return { cleanup, prefs, shown, hasKey: keys[shown], keyboard: 'right Ctrl twice', shortcutWorks: !query.has('noshortcut'), wayland: false, platform: 'win32', history, startAtLogin: true,
+        // `&keyread=EPERM`: the key file is there and could not be read; `&broken=1`: the log and the settings file are refused too.
+        const keyState = keyRead && shown === prefs.provider ? { kind: 'unreadable', code: keyRead } : { kind: keys[shown] || shown === 'local' ? 'saved' : 'missing' }
+        const diagnostics = { folder: 'C:\\Users\\Lena\\AppData\\Roaming\\satz', lines: diagnosticsLines({ version, platform: 'win32', folder: '', startedBy: 'login',
+          log: { file: '', problem: query.has('broken') ? 'EPERM' : null, fallback: 'C:\\Users\\Lena\\AppData\\Local\\Temp\\satz.log' },
+          preferencesProblem: query.has('broken') ? 'EBUSY' : null, startBlocked: query.has('broken') }, prefs.language) }
+        return { cleanup, prefs, shown, hasKey: keys[shown] && !(keyRead && shown === prefs.provider), keyState, diagnostics, keyboard: 'right Ctrl twice', shortcutWorks: !query.has('noshortcut'), wayland: false, platform: 'win32', history, startAtLogin: true,
           spokenLanguage: prefs.spokenLanguage ?? prefs.language, models: shipped[shown],
           local: { inUse: localModel(), models: localModelIds(localModel()).map(id => ({ id, ...entry(id) })), germanErrors: germanErrors(), machine, version } }
       }
