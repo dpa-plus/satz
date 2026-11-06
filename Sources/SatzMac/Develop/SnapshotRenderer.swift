@@ -37,6 +37,8 @@ enum SnapshotRenderer {
             ("setup-key", .german, { AnyView(setupSheet(.key).environment(\.theme, .light)) }),
             ("settings-local", .german, { AnyView(localSettingsSheet.environment(\.theme, .dark)) }),
             ("settings-local-en", .english, { AnyView(localSettingsSheet.environment(\.theme, .light)) }),
+            ("settings-local-bark", .german, { AnyView(localBarkSheet.environment(\.theme, .dark)) }),
+            ("settings-local-bark-en", .english, { AnyView(localBarkSheet.environment(\.theme, .light)) }),
             ("settings-local-browse", .german, { AnyView(localBrowseSheet.environment(\.theme, .dark)) }),
             ("settings-local-canary", .german, { AnyView(localCanarySheet.environment(\.theme, .light)) }),
             ("settings-local-canary-en", .english, { AnyView(localCanarySheet.environment(\.theme, .dark)) }),
@@ -392,6 +394,13 @@ enum SnapshotRenderer {
         )
         LocalModels.shared = local
         return settingsSheet(.local)
+    }
+
+    private static var localBarkSheet: some View {
+        let local = LocalModels(defaults: nil)
+        local.stage(states: [:], speeds: [:], supported: supported, onMac: [LocalCatalog.barkPro, LocalCatalog.parakeetUltra])
+        LocalModels.shared = local
+        return settingsSheet(.local, localModel: LocalCatalog.barkPro)
     }
 
     /// Canary in use, told Spanish: its four languages under the cards.

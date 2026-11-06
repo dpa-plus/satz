@@ -34,6 +34,7 @@ public enum LocalCatalog {
     // Through sherpa-onnx.
     public static let parakeetV3 = "parakeet-v3"
     public static let parakeetUltra = "parakeet-ultra"
+    public static let barkPro = "bark-3.0-pro"
     public static let parakeetV2 = "parakeet-v2"
     public static let canary = "canary-180m"
     public static let cohere = "cohere-transcribe"
@@ -97,6 +98,7 @@ public enum LocalCatalog {
             case LocalCatalog.apple: de("Apple Spracherkennung", en: "Apple speech recognition")
             case LocalCatalog.parakeetV3: "Parakeet V3"
             case LocalCatalog.parakeetUltra: "Parakeet Ultra"
+            case LocalCatalog.barkPro: "Bark 3.0 Pro"
             case LocalCatalog.parakeetV2: "Parakeet V2"
             case LocalCatalog.canary: "Canary 180M Flash"
             case LocalCatalog.cohere: "Cohere Transcribe"
@@ -124,6 +126,7 @@ public enum LocalCatalog {
             case LocalCatalog.parakeetV3: de("Schnell und genau. 25 europäische Sprachen.", en: "Fast and accurate. 25 European languages.")
             case LocalCatalog.parakeetUltra: de("Schnell auf Apples Neural Engine. Erkennt 25 Sprachen automatisch, auch Deutsch und Englisch.",
                                                 en: "Fast on Apple's Neural Engine. Detects 25 languages automatically, including German and English.")
+            case LocalCatalog.barkPro: de("Nur Englisch. Nur für nichtkommerzielle Nutzung (CC BY-NC 4.0).", en: "English only. Noncommercial use only (CC BY-NC 4.0).")
             case LocalCatalog.parakeetV2: de("Nur Englisch, das beste für Englisch.", en: "English only. The best for English.")
             case LocalCatalog.canary: de("Sehr schnell. Englisch, Deutsch, Spanisch, Französisch.", en: "Very fast. English, German, Spanish, French.")
             case LocalCatalog.cohere: de("Am genauesten auf Deutsch, aber groß. Hört die Sprache, die du einstellst.",
@@ -147,6 +150,7 @@ public enum LocalCatalog {
             switch id {
             case LocalCatalog.apple: "Apple"
             case LocalCatalog.parakeetUltra: "Moondream"
+            case LocalCatalog.barkPro: "Conway Research"
             case LocalCatalog.parakeetV3, LocalCatalog.parakeetV2, LocalCatalog.canary, LocalCatalog.canary1B: "NVIDIA"
             case LocalCatalog.cohere: "Cohere"
             case LocalCatalog.qwen3: "Qwen"
@@ -276,6 +280,9 @@ public enum LocalCatalog {
             .init("joiner.int8.onnx", 1_739_080, sha256: "7946164367946e7f9f29a122407c3252b680dbae9a51343eb2488d057c3c43d2"),
             .init("tokens.txt", 9_384, sha256: "ec182b70dd42113aff6c5372c75cac58c952443eb22322f57bbd7f53977d497d"),
         ]), bytes: 661_190_513, languages: .english, accuracy: 0.85, speed: 0.85),
+        // Publisher's English-only CoreML export. The bars remain rough
+        // estimates until Satz measures speed here, not benchmark claims.
+        Model(barkPro, engine: .fluidAudio, bytes: BarkAssets.bytes, languages: .english, accuracy: 0.83, speed: 0.90),
         Model(moonshineBase, engine: sherpa(.moonshine, "sherpa-onnx-moonshine-base-en-int8", revision: "052b0798ad1bf046a140fdd4efcd9426530fa3f5", [
             .init("preprocess.onnx", 14_077_290, sha256: "ffa630d395c5ccf76f5d4954be5b882df76aaf6491519ec01fd82ea7a3819fb2"),
             .init("encode.int8.onnx", 50_311_494, sha256: "7e38770f776f2e5583a53b052936005df2ba5c833d7e09c2a5fd796b94bf73e2"),

@@ -135,24 +135,34 @@ final class LocalModels {
             case whisper(WhisperKit)
             case sherpa(SherpaRecognizer)
             case ultra(UltraRecognizer)
+            case bark(BarkRecognizer)
         }
 
         let engine: Engine
         init(_ whisper: WhisperKit) { engine = .whisper(whisper) }
         init(_ sherpa: SherpaRecognizer) { engine = .sherpa(sherpa) }
         init(_ ultra: UltraRecognizer) { engine = .ultra(ultra) }
+        init(_ bark: BarkRecognizer) { engine = .bark(bark) }
 
         /// WhisperKit's memory is given back by hand; sherpa-onnx's when the
         /// last reference to its recognizer goes.
         func unload() async {
             if case .whisper(let whisper) = engine { await whisper.unloadModels() }
             if case .ultra(let ultra) = engine { await ultra.unload() }
+            if case .bark(let bark) = engine { await bark.unload() }
         }
     }
 
     // MARK: - State
 
     func state(of model: String, language: Language) -> State {
+        if model == LocalCatalog.barkPro {
+            #if !arch(arm64)
+            return .unavailable(de("Braucht einen Mac mit Apple-Chip.", en: "Needs a Mac with Apple silicon."))
+            #else
+            guard #available(macOS 15, *) else { return .unavailable(de("Braucht macOS 15.", en: "Needs macOS 15.")) }
+            #endif
+        }
         if model == ModelCatalog.apple {
             guard #available(macOS 26, *) else { return .unavailable(de("Braucht macOS 26.", en: "Needs macOS 26.")) }
             // Taken as there until `check` has asked macOS.
@@ -223,6 +233,7 @@ final class LocalModels {
     // MARK: - Download
 
     func download(_ model: String, language: Language) {
+        if case .unavailable = state(of: model, language: language), model == LocalCatalog.barkPro { return }
         // Before the engine is chosen: a test copy once installed Apple's
         // language pack past this check. That goes into macOS's own store,
         // which a test copy's `--models-dir` does not reach.
@@ -257,7 +268,7 @@ final class LocalModels {
                 // pieces are not kept.
                 if Task.isCancelled || error is CancellationError {
                     if LocalCatalog.model(model)?.sherpa != nil { try? FileManager.default.removeItem(at: Self.sherpaFolder(model)) }
-                    if model == LocalCatalog.parakeetUltra { try? FileManager.default.removeItem(at: Self.ultraFolder) }
+                    if LocalCatalog.model(model)?.engine == .fluidAudio { try? FileManager.default.removeItem(at: Self.coreMLFolder(model)) }
                     return Log.note("local: download of \(model) cancelled")
                 }
                 failed(model, error)
@@ -301,15 +312,17 @@ final class LocalModels {
     /// Hugging Face one by one for sherpa-onnx.
     private func fetch(_ model: String) async throws -> URL {
         let report = { @Sendable (fraction: Double) in _ = Task { @MainActor in self.progress(model, fraction) } }
-        if model == LocalCatalog.parakeetUltra {
+        if LocalCatalog.model(model)?.engine == .fluidAudio {
+            let folder = Self.coreMLFolder(model)
+            let files = model == LocalCatalog.barkPro ? BarkAssets.files : UltraAssets.files
+            let baseURL = model == LocalCatalog.barkPro ? BarkAssets.baseURL : UltraAssets.baseURL
             let download = FileDownload(progress: report)
             try await withTaskCancellationHandler {
-                try await download.run(files: UltraAssets.files,
-                                       from: { UltraAssets.baseURL.appendingPathComponent($0.name) }, into: Self.ultraFolder)
+                try await download.run(files: files, from: { baseURL.appendingPathComponent($0.name) }, into: folder)
             } onCancel: {
                 download.cancel()
             }
-            return Self.ultraFolder
+            return folder
         }
         guard let sherpa = LocalCatalog.model(model)?.sherpa else {
             return try await WhisperKit.download(variant: model, downloadBase: Self.base) { report($0.fractionCompleted) }
@@ -648,8 +661,9 @@ final class LocalModels {
 
     /// The folder a finished download landed in; nil if there is none.
     nonisolated static func folder(of variant: String) -> URL? {
-        if variant == LocalCatalog.parakeetUltra {
-            return FileManager.default.fileExists(atPath: ultraFolder.appendingPathComponent(completeMark).path) ? ultraFolder : nil
+        if LocalCatalog.model(variant)?.engine == .fluidAudio {
+            let folder = coreMLFolder(variant)
+            return FileManager.default.fileExists(atPath: folder.appendingPathComponent(completeMark).path) ? folder : nil
         }
         if LocalCatalog.model(variant)?.sherpa != nil {
             let folder = sherpaFolder(variant)
@@ -673,10 +687,12 @@ final class LocalModels {
     }
 
     nonisolated private static let completeMark = ".complete"
-    nonisolated static let ultraFolder = root.appendingPathComponent("coreml/parakeet-ultra", isDirectory: true)
+    nonisolated static func coreMLFolder(_ model: String) -> URL {
+        root.appendingPathComponent("coreml/\(model)", isDirectory: true)
+    }
 
     nonisolated private static func markComplete(_ model: String, folder: URL) throws {
-        if LocalCatalog.model(model)?.sherpa != nil || model == LocalCatalog.parakeetUltra {
+        if LocalCatalog.model(model)?.sherpa != nil || LocalCatalog.model(model)?.engine == .fluidAudio {
             try Data().write(to: folder.appendingPathComponent(completeMark))
         } else {
             try folder.path.write(to: marker(model), atomically: true, encoding: .utf8)
@@ -688,6 +704,11 @@ final class LocalModels {
         if variant == LocalCatalog.parakeetUltra {
             let kit = Kit(try await UltraRecognizer(folder: folder))
             Log.note("local: parakeet-ultra loaded through FluidAudio CoreML")
+            return kit
+        }
+        if variant == LocalCatalog.barkPro {
+            let kit = Kit(try await BarkRecognizer(folder: folder, canCompile: canChangeFiles))
+            Log.note("local: bark-3.0-pro loaded through FluidAudio CoreML")
             return kit
         }
         if let sherpa = LocalCatalog.model(variant)?.sherpa {
@@ -709,6 +730,8 @@ final class LocalModels {
                                         told: String?) async throws -> String {
         switch kit.engine {
         case .ultra(let recognizer):
+            return try await recognizer.transcribe(samples)
+        case .bark(let recognizer):
             return try await recognizer.transcribe(samples)
         case .whisper(let whisper):
             return try await whisperTranscribe(samples, whisper: whisper, vocabulary: vocabulary, spoken: spoken,

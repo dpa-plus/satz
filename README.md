@@ -155,6 +155,7 @@ Ein paar Modelle, die OpenRouter listet, fehlen, weil sie beim Diktieren versage
 | Qwen3-ASR 0.6B | 987 MB, klein, 30 Sprachen, findet die Sprache selbst, auf Deutsch etwas hinter Parakeet V3. | 987 MB, dasselbe. |
 | Canary 180M Flash | 207 MB, sehr schnell. Englisch, Deutsch, Spanisch, Französisch: versteht die bei *Gesprochen auf* eingestellte Sprache. | 207 MB, dasselbe. |
 | Parakeet V2 | 661 MB, nur Englisch, das beste für Englisch. | 661 MB |
+| Bark 3.0 Pro | 1,23 GB, nur Englisch, über FluidAudio/CoreML auf Apples Neural Engine. Apple-Chip und macOS 15 erforderlich. Nur nichtkommerzielle Nutzung (CC BY-NC 4.0). | Nicht verfügbar: dieser CoreML-Build benötigt macOS. |
 | Moonshine Base | 287 MB, nur Englisch, sehr schnell. | 287 MB |
 | Moonshine Tiny | 124 MB, nur Englisch, extrem schnell. | 124 MB |
 | SenseVoice | 240 MB, sehr schnell. Chinesisch, Englisch, Japanisch, Koreanisch, Kantonesisch. | 240 MB |
@@ -162,6 +163,8 @@ Ein paar Modelle, die OpenRouter listet, fehlen, weil sie beim Diktieren versage
 | Apples Spracherkennung | Eingebaut in macOS 26; macOS holt sich eventuell einmal sein Sprachpaket. Sofort da, versteht aber nur die bei *Gesprochen auf* eingestellte Sprache und nutzt deinen Wortschatz kaum. | |
 
 Parakeet Ultra nutzt auf dem Mac [FluidAudio](https://github.com/FluidInference/FluidAudio) 0.17.3. Die 632 MB werden von einem festen Commit geladen und per SHA-256 geprüft. Nach dem Download läuft die Erkennung offline; die Sprache wird nicht erzwungen. Der CoreML-Build ist nur auf dem Mac verfügbar. Ultra stammt von [Moondream](https://huggingface.co/moondream/parakeet-ultra), basiert auf NVIDIA Parakeet V3 und steht unter CC-BY-4.0; den CoreML-Export erstellt FluidInference.
+
+[Bark 3.0 Pro](https://huggingface.co/ConwayResearch/Underdog-Bark-3.0-Pro) von Conway Research ist eine weitere, nur englische Option auf dem Mac. Die CoreML-Dateien (1.234.604.822 Bytes einschließlich Lizenzen und Namensnennungen) kommen vom festgelegten Commit `d87f288a9a0b0cdb92228057e168ce575b300a6b`; jede Datei wird per SHA-256 geprüft. macOS kompiliert die Modelle einmal, die fertigen Modelle bleiben bei den heruntergeladenen Dateien. Das beansprucht zusätzlich Platz. Die Erkennung bleibt offline und nutzt FluidAudio 0.17.3, mit dem 15-Sekunden-Encoder auf der Neural Engine und Vorverarbeitung und Decoder auf der CPU. Längere Aufnahmen verarbeitet FluidAudio als eine Aufnahme. Die Gewichte stehen unter CC BY-NC 4.0, nicht unter der MIT-Lizenz von Satz; kommerzielle Nutzung braucht eine gesonderte Lizenz von Conway Research. Satz lädt sie erst nach Auswahl und bewahrt die Lizenzen im Modellordner auf. Die veröffentlichten Fehlerraten beweisen keine Verbesserung gegenüber Ultra in diesem Mac-Build, deshalb wird Ultra weder ersetzt noch automatisch abgewählt. Auf Windows und Linux fehlt dieser Eintrag, weil der integrierte Build CoreML benötigt; ein neuer Python/CUDA-Runtime wird dafür nicht mitgeliefert.
 
 Die anderen Parakeet-Modelle, Canary, Moonshine, SenseVoice, Cohere Transcribe und Qwen3-ASR laufen über [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx); Windows auf ARM hat nur die Whisper-Modelle, weil sherpa-onnx dafür keinen Build hat. Die vier neuesten werden wie die anderen angeboten und laden nichts, bis du sie anklickst.
 

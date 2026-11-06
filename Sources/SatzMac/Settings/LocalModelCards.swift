@@ -437,9 +437,9 @@ private struct ModelCard: View {
                 }
             })
         case .preparing:
-            let whisper = model?.engine == .whisperKit
-            return AnyView(busy(whisper ? de("Wird vorbereitet", en: "Getting ready") : de("Wird geladen", en: "Loading"))
-                .help(whisper ? de("macOS richtet das Modell einmal für diesen Mac ein, ein bis zwei Minuten.",
+            let prepares = model?.engine == .whisperKit || id == LocalCatalog.barkPro
+            return AnyView(busy(prepares ? de("Wird vorbereitet", en: "Getting ready") : de("Wird geladen", en: "Loading"))
+                .help(prepares ? de("macOS richtet das Modell einmal für diesen Mac ein, ein bis zwei Minuten.",
                                    en: "macOS sets the model up for this Mac once, a minute or two.") : ""))
         case .failed(let why):
             return AnyView(Text(de("Laden fehlgeschlagen. Klicken versucht es nochmal.", en: "Download failed. Click to try again."))
