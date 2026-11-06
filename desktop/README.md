@@ -2,6 +2,8 @@
 
 Das Diktieren der Mac-App, für Windows und Linux, auf Electron: Tippe **zweimal die rechte Strg-Taste**, sprich, tippe sie wieder zweimal, und der Text landet dort, wo du gerade geschrieben hast. Dieselbe Karte (Pause, Auge, Verwerfen mit Rückgängig, Klick in den Text, um zu verschieben, wohin die Sprache geht), dieselbe Transkription (MAI-Transcribe 2 über OpenRouter oder direkt von Microsoft, Clean-Modus, Wortschatz, Ersetzungen).
 
+In einer Pause lässt sich der fertige Text direkt in der Karte bearbeiten, sobald die Aufnahme vollständig transkribiert ist. Klicken, auswählen, tippen oder einfügen funktioniert wie in einem normalen Textfeld, auch mit Zeilenumbrüchen. *Weitersprechen* behält die Korrekturen und setzt am Textcursor fort. Während der Aufnahme nimmt die Karte der Ziel-App die Tastatur nicht weg.
+
 ## Installation
 
 | System | Datei | So geht's |

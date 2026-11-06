@@ -2,6 +2,7 @@
 :root {
   --ground: #16303c; --ink: #eef4f6; --secondary: #a9c0c8; --accent: #ffb27a; --signal: #ff6100;
   --hairline: rgba(238, 244, 246, .12); --button: rgba(255, 255, 255, .12);
+  --text-max-height: 118px;
 }
 html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; user-select: none; -webkit-user-select: none;
   font: 14px/1.45 "Source Sans 3", "Segoe UI", "Noto Sans", Ubuntu, sans-serif; }
@@ -12,9 +13,11 @@ html, body { margin: 0; height: 100%; background: transparent; overflow: hidden;
 #card.pill { width: 200px; }
 #card.status { width: auto; }
 #card.hidden { opacity: 0; }
-#text { color: var(--ink); padding: 9px 17px; white-space: pre-wrap; word-wrap: break-word; max-height: 118px; overflow-y: auto;
+#text { color: var(--ink); padding: 9px 17px; white-space: pre-wrap; word-wrap: break-word; max-height: var(--text-max-height); overflow-y: auto;
   transition: max-height .32s cubic-bezier(.3,.7,.2,1), opacity .25s, padding .32s; cursor: text; user-select: text; -webkit-user-select: text; }
 #text.folded { max-height: 0; padding-top: 0; padding-bottom: 0; opacity: 0; }
+#text .editor { display: block; width: 100%; max-height: var(--text-max-height); margin: 0; padding: 0; border: 0; resize: none; background: transparent;
+  color: inherit; font: inherit; white-space: pre-wrap; outline-color: var(--accent); }
 #text .marker { color: var(--accent); transition: opacity .5s; }
 #text .marker.dim { opacity: .35; }
 #text .fresh { animation: settle .35s ease-out; }

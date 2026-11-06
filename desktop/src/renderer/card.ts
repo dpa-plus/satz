@@ -1,5 +1,6 @@
 import { satz } from './bridge'
 import { lostError, recordFor } from './microphone'
+import { PausedEditor } from './pausedEditor'
 
 /**
  * The card: text on top, under it one row with the waveform up to the
@@ -15,6 +16,9 @@ interface State {
   hasRealText: boolean
   bright: boolean
   language: 'de' | 'en'
+  canEdit: boolean
+  editingSession: number
+  editAcknowledged: number
 }
 
 const $ = (id: string) => document.getElementById(id)!
@@ -22,6 +26,8 @@ const card = $('card'), text = $('text'), rule = $('rule'), middle = $('middle')
 const mic = $('mic') as HTMLButtonElement, eye = $('eye') as HTMLButtonElement, close = $('close') as HTMLButtonElement
 let state: State | null = null
 let lastText = ''
+let showingEditor = false
+const editor = new PausedEditor(text, edit => satz.send('card:edit', edit))
 
 const icons = {
   mic: '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M8 1a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0v-4A2.5 2.5 0 0 0 8 1Zm-4.5 6.5a.75.75 0 0 1 1.5 0 3 3 0 0 0 6 0 .75.75 0 0 1 1.5 0 4.5 4.5 0 0 1-3.75 4.44V14h1.75a.75.75 0 0 1 0 1.5h-5a.75.75 0 0 1 0-1.5h1.75v-2.06A4.5 4.5 0 0 1 3.5 7.5Z"/></svg>',
@@ -39,7 +45,7 @@ function render() {
   const { phase } = state
   const k = phase.kind
   const canHoldText = !['idle', 'discarded', 'clipboard', 'notCleaned'].includes(k)
-  const showsText = state.showsText && state.hasRealText && canHoldText
+  const showsText = state.showsText && (state.hasRealText || state.canEdit) && canHoldText
   // Paused because the microphone went away: a status to read, not a wave.
   const lost = k === 'paused' && phase.lost === true
   const statusOnly = !showsText && (lost || !['idle', 'starting', 'listening', 'paused'].includes(k))
@@ -54,24 +60,32 @@ function render() {
 
   // The text, with the placeholders in the accent colour, breathing.
   const joined = state.runs.map(r => r.text).join('')
-  // Drawn anew only when the text changed: every pulse of the placeholder
-  // also wiped a selection in the text.
-  if (joined === lastText) {
-    text.querySelectorAll('.marker').forEach(marker => marker.classList.toggle('dim', !state!.bright))
+  if (showsText && state.canEdit) {
+    editor.show(state.runs.filter(r => !r.mark).map(r => r.text).join(''), state.editingSession, state.editAcknowledged,
+      words('Diktat bearbeiten', 'Edit dictation'))
+    showingEditor = true
   } else {
-    const fresh = joined.length > lastText.length
-    text.replaceChildren(...state.runs.map(run => {
-      const span = document.createElement('span')
-      span.textContent = run.text
-      if (run.mark) span.className = 'marker' + (state!.bright ? '' : ' dim')
-      else if (fresh && run.seg && !lastText.includes(run.text)) span.className = 'fresh'
-      return span
-    }))
-    if (joined !== lastText && (k === 'listening' || k === 'paused')) {
-      const marker = text.querySelector('.marker') as HTMLElement | null
-      ;(marker ?? text.lastElementChild as HTMLElement | null)?.scrollIntoView({ block: 'nearest' })
+    editor.hide()
+    if (showingEditor) { lastText = '\0'; showingEditor = false }
+    // Drawn anew only when the text changed: every pulse of the placeholder
+    // also wiped a selection in the text.
+    if (joined === lastText) {
+      text.querySelectorAll('.marker').forEach(marker => marker.classList.toggle('dim', !state!.bright))
+    } else {
+      const fresh = joined.length > lastText.length
+      text.replaceChildren(...state.runs.map(run => {
+        const span = document.createElement('span')
+        span.textContent = run.text
+        if (run.mark) span.className = 'marker' + (state!.bright ? '' : ' dim')
+        else if (fresh && run.seg && !lastText.includes(run.text)) span.className = 'fresh'
+        return span
+      }))
+      if (joined !== lastText && (k === 'listening' || k === 'paused')) {
+        const marker = text.querySelector('.marker') as HTMLElement | null
+        ;(marker ?? text.lastElementChild as HTMLElement | null)?.scrollIntoView({ block: 'nearest' })
+      }
+      lastText = joined
     }
-    lastText = joined
   }
 
   // Left of the buttons: the wave, or what is going on.
@@ -133,9 +147,9 @@ satz.on('card:state', (value: State) => { state = value; render() })
 
 /*
  * Buttons act when the mouse button comes up, and dragging starts when the
- * mouse moves with the button held. The card's window never takes the
- * keyboard from the app the user is typing in, and on Windows such a window
- * never receives the press itself, only the release.
+ * mouse moves with the button held. While recording, the window leaves the
+ * keyboard with the destination app. On Windows that nonactivating window
+ * receives the release, but not the press.
  */
 let dragging = false
 const actions: [HTMLElement, string][] = [[mic, 'mic'], [eye, 'eye'], [close, 'close']]
@@ -171,6 +185,7 @@ setInterval(reportRect, 250)
 
 // A click in the text moves where the next words go.
 text.addEventListener('mouseup', event => {
+  if (showingEditor) return
   const position = (document as any).caretPositionFromPoint?.(event.clientX, event.clientY)
   const range = position ? null : document.caretRangeFromPoint?.(event.clientX, event.clientY)
   const node: Node | null = position?.offsetNode ?? range?.startContainer ?? null

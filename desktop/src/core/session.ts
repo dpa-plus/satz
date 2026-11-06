@@ -175,6 +175,12 @@ export class Session {
     return this.hasRealText || [...this.segments.values()].some(s => s.audio.length > 0) || this.stopping.length > 0 || this.sends.size > 0
   }
   get inFlight() { return this.sends.size }
+  get editingSession() { return this.generation }
+  /** A paused transcript is final only after its microphone tail and requests finish. */
+  get canEdit() {
+    return this.phase.kind === 'paused' && this.tailing.size === 0 && this.sends.size === 0 &&
+      [...this.segments.values()].every(s => s.audio.length === s.transcribed && !s.failure)
+  }
   get canRestore() {
     const p = this.phase
     return ['idle', 'discarded', 'clipboard', 'notCleaned'].includes(p.kind) || (p.kind === 'failed' && p.canRestore === true)
@@ -334,6 +340,36 @@ export class Session {
   }
 
   // MARK: - Clicks in the text
+
+  editText(generation: number, before: string, text: string, caret: number): boolean {
+    if (!this.canEdit || generation !== this.generation || before !== this.doc.plain() ||
+        typeof text !== 'string' || !Number.isSafeInteger(caret) || caret < 0 || caret > text.length) return false
+    if (before === text) {
+      // The editor omits placeholders. A caret-only click must still use
+      // Doc's offsets, and keep the recording's context when it is unchanged.
+      let plain = 0, physical = 0
+      for (const run of this.doc.runs()) {
+        if (!run.mark && caret <= plain + run.text.length) {
+          this.caret = physical + caret - plain
+          this.changed()
+          return true
+        }
+        if (!run.mark) plain += run.text.length
+        physical += run.text.length
+      }
+      this.caret = physical
+      this.changed()
+      return true
+    }
+    // All recorded audio has arrived. Keep the correction as plain text, so
+    // resuming cannot replace it with a fresh decode of the earlier recording.
+    for (const id of this.segments.keys()) this.freeze(id)
+    this.doc.replace({ location: 0, length: this.doc.length }, text)
+    this.activeID = null
+    this.caret = caret
+    this.changed()
+    return true
+  }
 
   /** A click while listening moves where speech goes; any click counts for after a pause. */
   userMovedCaret(location: number) {

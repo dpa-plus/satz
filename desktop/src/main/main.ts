@@ -264,11 +264,14 @@ async function start() {
   local.onArrived = id => speedTests.arrived(id)
 
   let pushQueued = false
+  let editAcknowledged = 0
   const pushState = () => {
     if (pushQueued) return
     pushQueued = true
     setTimeout(() => {
       pushQueued = false
+      const canEdit = session.canEdit && store.prefs.showsText
+      card.allowEditing(canEdit)
       card.send('card:state', {
         phase: session.phase,
         runs: session.doc.runs(),
@@ -277,6 +280,9 @@ async function start() {
         hasRealText: session.hasRealText,
         bright: session.breathBright,
         language: store.prefs.language,
+        canEdit,
+        editingSession: session.editingSession,
+        editAcknowledged,
       })
     }, 16)
   }
@@ -300,7 +306,14 @@ async function start() {
   windows.prepare()
   session.onClose = () => { card.hide(); refreshTray(); mediaPause.dictationEnded() }
 
-  ipcMain.on('card:ready', pushState)
+  ipcMain.on('card:ready', () => { editAcknowledged = 0; pushState() })
+  ipcMain.on('card:edit', (event, edit: { session: number; sequence: number; before: string; text: string; caret: number }) => {
+    if (event.sender !== card.window.webContents || !edit || !Number.isSafeInteger(edit.sequence) || edit.sequence <= editAcknowledged ||
+        typeof edit.before !== 'string' || typeof edit.text !== 'string') return
+    session.editText(edit.session, edit.before, edit.text, edit.caret)
+    editAcknowledged = edit.sequence
+    pushState()
+  })
   ipcMain.on('card:button', (_e, button: string) => {
     switch (button) {
       case 'mic': session.toggleMicrophone(); break

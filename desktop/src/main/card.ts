@@ -4,8 +4,8 @@ import path from 'node:path'
 /**
  * The floating card's window. Like the Mac app's: it never changes size (the
  * card animates inside it), it is see-through around the card and lets clicks
- * there through, it never takes the keyboard from the app the user is typing
- * in, and the card stops at the edge of the screen when dragged.
+ * there through, it accepts the keyboard only to edit a paused transcript,
+ * and the card stops at the edge of the screen when dragged.
  */
 export const MARGIN = 18
 export const CARD_WIDTH = 380
@@ -23,6 +23,7 @@ export class CardWindow {
   private cardRect = { x: 0, y: 0, width: 0, height: 0 }
   private clickable = false
   private watcher: ReturnType<typeof setInterval> | null = null
+  private editing = false
 
   constructor(private spot: () => { x: number; y: number } | null, private saveSpot: (spot: { x: number; y: number }) => void) {
     this.window = new BrowserWindow({
@@ -83,9 +84,17 @@ export class CardWindow {
   }
 
   hide() {
+    this.allowEditing(false)
     this.window.hide()
     if (this.watcher) clearInterval(this.watcher)
     this.watcher = null
+  }
+
+  allowEditing(allow: boolean) {
+    if (allow === this.editing || this.window.isDestroyed()) return
+    this.editing = allow
+    if (!allow && this.window.isFocused()) this.window.blur()
+    this.window.setFocusable(allow)
   }
 
   /**
