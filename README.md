@@ -36,14 +36,14 @@ Die meisten Diktier-Apps wollen erst etwas von dir: ein Konto, ein Abo oder eine
 
 ## Herunterladen
 
-| System | Datei | Größe | |
-|---|---|---|---|
-| **macOS 14 oder neuer** (Apple-Chip und Intel) | [satz-mac.zip](https://cdn.prozesshub.eu/assets/clients/dpa/downloads/satz/latest/satz-mac.zip) | 26 MB | Entpacken, satz in „Programme“ ziehen |
-| **Windows** (Intel und AMD) | [satz-windows-x64.zip](https://cdn.prozesshub.eu/assets/clients/dpa/downloads/satz/latest/satz-windows-x64.zip) | 192 MB | Irgendwo entpacken, `satz.exe` starten |
-| **Windows 11 auf ARM** | [satz-windows-arm64.zip](https://cdn.prozesshub.eu/assets/clients/dpa/downloads/satz/latest/satz-windows-arm64.zip) | 183 MB | Irgendwo entpacken, `satz.exe` starten |
-| **Ubuntu, Debian** (x64) | [satz-linux-amd64.deb](https://cdn.prozesshub.eu/assets/clients/dpa/downloads/satz/latest/satz-linux-amd64.deb) | 124 MB | `sudo apt install ./satz-linux-amd64.deb` |
-| **Ubuntu, Debian** (ARM) | [satz-linux-arm64.deb](https://cdn.prozesshub.eu/assets/clients/dpa/downloads/satz/latest/satz-linux-arm64.deb) | 114 MB | `sudo apt install ./satz-linux-arm64.deb` |
-| **Anderes Linux** | [x64](https://cdn.prozesshub.eu/assets/clients/dpa/downloads/satz/latest/satz-linux-x64.tar.gz) · [ARM](https://cdn.prozesshub.eu/assets/clients/dpa/downloads/satz/latest/satz-linux-arm64.tar.gz) | 149 MB · 145 MB | Entpacken, `./satz` starten |
+| System | Datei | |
+|---|---|---|
+| **macOS 14 oder neuer** (Apple-Chip und Intel) | [satz-mac.zip](https://cdn.prozesshub.eu/assets/clients/dpa/downloads/satz/latest/satz-mac.zip) | Entpacken, satz in „Programme“ ziehen |
+| **Windows** (Intel und AMD) | [satz-windows-x64.zip](https://cdn.prozesshub.eu/assets/clients/dpa/downloads/satz/latest/satz-windows-x64.zip) | Irgendwo entpacken, `satz.exe` starten |
+| **Windows 11 auf ARM** | [satz-windows-arm64.zip](https://cdn.prozesshub.eu/assets/clients/dpa/downloads/satz/latest/satz-windows-arm64.zip) | Irgendwo entpacken, `satz.exe` starten |
+| **Ubuntu, Debian** (x64) | [satz-linux-amd64.deb](https://cdn.prozesshub.eu/assets/clients/dpa/downloads/satz/latest/satz-linux-amd64.deb) | `sudo apt install ./satz-linux-amd64.deb` |
+| **Ubuntu, Debian** (ARM) | [satz-linux-arm64.deb](https://cdn.prozesshub.eu/assets/clients/dpa/downloads/satz/latest/satz-linux-arm64.deb) | `sudo apt install ./satz-linux-arm64.deb` |
+| **Anderes Linux** | [x64](https://cdn.prozesshub.eu/assets/clients/dpa/downloads/satz/latest/satz-linux-x64.tar.gz) · [ARM](https://cdn.prozesshub.eu/assets/clients/dpa/downloads/satz/latest/satz-linux-arm64.tar.gz) | Entpacken, `./satz` starten |
 
 Ältere Versionen und den Quellcode findest du auf der [Releases-Seite](https://github.com/dpa-plus/satz/releases/latest) auf GitHub. Die SHA-256-Prüfsummen aller Dateien stehen in [SHA256SUMS.txt](https://cdn.prozesshub.eu/assets/clients/dpa/downloads/satz/latest/SHA256SUMS.txt).
 
@@ -288,4 +288,4 @@ Live-Tests sprechen mit einem echten Endpunkt und werden ohne Schlüssel übersp
 
 Der Quellcode von satz selbst steht unter MIT. Siehe [LICENSE](LICENSE). Gemacht von [DPA Plus](https://dpa.plus).
 
-Mitgelieferte Abhängigkeiten behalten ihre eigenen Lizenzen. Die Pakete für Windows x64 und Linux enthalten eine native Bibliothek unter GPL-3.0-or-later. Die Lizenzen, den Quellcode und die Bauanleitung findest du in den [Hinweisen zur mitgelieferten Software](Resources/Licenses/README.md) und im [zugehörigen Quellcode-Download](https://github.com/dpa-plus/satz/releases/download/v0.4.6/satz-0.4.6-source.tar.gz).
+Mitgelieferte Abhängigkeiten behalten ihre eigenen Lizenzen. Die Pakete für Windows x64 und Linux enthalten eine native Bibliothek unter GPL-3.0-or-later. Die Lizenzen, den Quellcode und die Bauanleitung findest du in den [Hinweisen zur mitgelieferten Software](Resources/Licenses/README.md) und im [zugehörigen Quellcode-Download](https://github.com/dpa-plus/satz/releases/download/v0.4.7/satz-0.4.7-source.tar.gz).
