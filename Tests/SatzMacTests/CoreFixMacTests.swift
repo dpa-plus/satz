@@ -530,6 +530,26 @@ struct SessionTests {
         #expect(d.failureCanRetry == false)
     }
 
+    @Test func shortcutStartsFreshAfterSpeechWasNotUnderstood() async {
+        let d = Dictation(clips: [clip("not-understood", seconds: 2), clip("fresh", seconds: 2)],
+                          script: [(0, 200, #"{"text":""}"#), (0, 200, #"{"text":"Fresh text"}"#)])
+        await d.dictate()
+        #expect(await eventually { d.isFailed })
+        #expect(d.failureCanRetry == true)
+        #expect(SessionStub.requests == 1)
+
+        d.session.press()
+        #expect(await eventually { d.session.phase == .listening })
+        #expect(SessionStub.requests == 1)
+        #expect(d.delivered.isEmpty)
+        #expect(d.discarded.last?.segments.values.contains { !$0.audio.isEmpty } == true)
+
+        try? await Task.sleep(for: .seconds(1))
+        d.session.press()
+        #expect(await eventually { d.delivered == ["Fresh text"] })
+        #expect(SessionStub.requests == 2)
+    }
+
     @Test func speechIsUploadedAndDelivered() async {
         let d = Dictation(clips: [clip("speech", seconds: 2)], script: [(0, 200, #"{"text":"Hallo Welt."}"#)])
         await d.dictate()

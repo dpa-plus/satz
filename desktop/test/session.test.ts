@@ -311,6 +311,35 @@ test('an empty answer for real speech offers Retry instead of "Nothing heard"', 
   session.dispose()
 })
 
+test('the shortcut starts fresh after speech was not understood and keeps the prior audio', async t => {
+  const sent: string[] = []
+  const { session, sources, delivered } = setup(['Earlier speech', 'Fresh text'], {
+    transcribe: async samples => {
+      const text = decode(samples)
+      sent.push(text)
+      return sent.length === 1 ? '' : text
+    },
+  })
+  t.after(() => session.dispose())
+  session.press(); await settle()
+  sources[0].say()
+  session.press(); await settle()
+  assert.deepEqual(session.phase, { kind: 'failed', message: 'Not understood', canRetry: true })
+
+  session.press(); await settle()
+  assert.equal(session.phase.kind, 'listening')
+  assert.deepEqual(sent, ['Earlier speech'])
+  assert.deepEqual(delivered, [])
+  assert.ok(session.discarded)
+  const previous = [...session.discarded.segments.values()].map(segment => decode(segment.audio))
+  assert.ok(previous.includes('Earlier speech'))
+
+  sources[1].say()
+  session.press(); await settle()
+  assert.deepEqual(sent, ['Earlier speech', 'Fresh text'])
+  assert.deepEqual(delivered, ['Fresh text'])
+})
+
 test('a line break said at the end is pasted with it', async () => {
   const { session, sources, delivered } = setup(['Erster Punkt'], { transcribe: async samples => `${decode(samples)}\n` })
   session.press(); await settle()

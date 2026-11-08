@@ -154,6 +154,7 @@ export class Session {
   private finishWhenOpen = false
   /** The shortcut was pressed while the last dictation was being written. */
   private startWhenDone = false
+  private transcriptionFailed = false
   /** The shortcut is down now (hold to talk): a queued start waits for it. */
   private keyHeld = false
   private closeTimer: ReturnType<typeof setTimeout> | null = null
@@ -199,6 +200,12 @@ export class Session {
     // headset): kept, and done once it is open. Ignored, it ran on.
     if (mode === 'tap' && p.kind === 'starting') { this.finishWhenOpen = true; return }
     if (p.kind === 'failed') {
+      // Retry sends the same audio. The shortcut saves it for recovery and
+      // starts a fresh recording.
+      if (p.canRetry && this.transcriptionFailed) {
+        this.discard()
+        return this.begin()
+      }
       // Nothing kept to send ("Kein Schlüssel", "Nichts gehört"): start over.
       // Text on the card counts: starting over wiped it after a microphone
       // failed on resume.
@@ -506,6 +513,7 @@ export class Session {
     const p = this.phase.kind
     if (p !== 'listening' && p !== 'paused' && p !== 'failed') return
     this.phase = { kind: 'finishing' }
+    this.transcriptionFailed = false
     this.changed()
     const source = this.source, id = this.activeID, start = this.liveStart, pending = this.tails, token = this.sessionToken
     this.source = null
@@ -528,6 +536,7 @@ export class Session {
       }
       const failed = [...this.segments.values()].find(s => s.failure)
       if (failed) {
+        this.transcriptionFailed = true
         this.phase = { kind: 'failed', message: failed.failure!, canRetry: !failed.futile }
         this.changed()
         return
@@ -850,6 +859,7 @@ export class Session {
 
   private reset() {
     this.startWhenDone = false
+    this.transcriptionFailed = false
     this.doc.clear()
     this.segments.clear()
     this.activeID = null

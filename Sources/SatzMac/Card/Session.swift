@@ -174,6 +174,7 @@ final class Session {
     }
     /// The shortcut was pressed while the last dictation was being written.
     @ObservationIgnored private var startWhenDone = false
+    @ObservationIgnored private var transcriptionFailed = false
     /// A delivery interrupted by a newer clipboard copy can be tried again
     /// without asking either model to rewrite the same words again.
     private struct PendingDelivery {
@@ -207,6 +208,14 @@ final class Session {
         // Ignored, the dictation ran on until the next press.
         case (.tap, .starting): finishWhenOpen = true
         case (_, .failed(_, let canRetry)):
+            // Retry sends the same audio. The shortcut starts fresh, with
+            // the failed recording still available under Restore discarded.
+            if canRetry && transcriptionFailed {
+                guard canBegin() else { return }
+                discard()
+                begin()
+                return
+            }
             // Nothing kept to send ("Kein Schlüssel", "Nichts gehört"): the
             // shortcut starts over instead of failing the same way again.
             // Text on the card counts: starting over wiped it, hand
@@ -556,6 +565,7 @@ final class Session {
         default: return
         }
         phase = .finishing
+        transcriptionFailed = false
         microphoneLost = false
         releaseEscape()
         if let pendingDelivery {
@@ -590,6 +600,7 @@ final class Session {
             if let failure = segments.values.compactMap(\.failure).first {
                 // "Nochmal" only where the same audio can get through: a
                 // recording over the provider's limit never does.
+                transcriptionFailed = true
                 phase = .failed(failure, canRetry: !segments.values.contains { $0.failure != nil && !$0.retryHelps })
                 return
             }
@@ -801,7 +812,6 @@ final class Session {
                 }
             case .failure(let error):
                 Log.note("transcription failed: \(error.localizedDescription)")
-                // Kept: the final send at the shortcut tries it again.
                 // Said as precisely as it is known: a bare "Fehler" left the
                 // user retrying something that could not work.
                 segments[id]?.failure = (error as? Transcriber.Failure)?.short ?? (error as? LocalModels.Failure)?.short
@@ -1074,6 +1084,7 @@ final class Session {
     private func reset() {
         pendingDelivery = nil
         startWhenDone = false
+        transcriptionFailed = false
         microphoneLost = false
         edit { text.setAttributedString(NSAttributedString()) }
         segments = [:]
