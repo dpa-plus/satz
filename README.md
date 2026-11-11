@@ -87,7 +87,7 @@ Speak, tap twice again, and the text is inserted. satz starts on its own when yo
 - **Replacements:** Say "open bracket" and you get `(`, say "new line" for a line break. You can add your own trigger words.
 - **Spoken in:** German or English, separate from the app's language.
 - **Shortcut:** Tap to start and stop, or hold while you speak. On the Mac also a custom key combination or a mouse button.
-- **Clean up text** (off until you turn it on): A language model removes the "ums" or rewrites your text before it is inserted, as much as you choose. See [Cleaning up the text](#cleaning-up-the-text).
+- **Clean up the text** (off until you turn it on): A language model removes the "ums" or rewrites your text before it is inserted, as much as you choose. See [Cleaning up the text](#cleaning-up-the-text).
 - **Keep text on the clipboard:** Off by default, so whatever you had copied comes back after pasting. When it is on, the dictated text stays there and you can paste it again.
 - **Color** (Mac): four colors, light and dark, Liquid Glass from macOS 26.
 
@@ -180,7 +180,7 @@ Whisper detects on its own whether you speak German or English. The first time a
 
 ## Cleaning up the text
 
-Off until you turn it on. With *Clean up text* in the settings, a language model revises what you said before satz inserts it. You choose how much (*Strength*):
+Off until you turn it on. With *Clean up the text* in the settings, a language model revises what you said before satz inserts it. You choose how much (*How much*):
 
 | | What changes |
 |---|---|
@@ -188,7 +188,7 @@ Off until you turn it on. With *Clean up text* in the settings, a language model
 | **Light** (the default) | Plus no "ums", no stuttering and no words you took back: "Monday, no, Tuesday" becomes "Tuesday". |
 | **Smooth** | Plus grammar and clumsy sentences. |
 | **Polished** | Rewritten as if you had typed it, with paragraphs and lists. |
-| **Custom prompt** | Your own instruction, for example "translate into English" or "write as a bulleted list". |
+| **Own prompt** | Your own instruction, for example "translate into English" or "write as a bulleted list". |
 
 The instructions of the chosen level are always visible. The entry *View full prompt for "…"* shows the whole prompt. Your vocabulary goes along so names stay spelled the way you want. English words in German sentences stay English.
 
@@ -222,7 +222,7 @@ The times were measured in October 2026 from Germany via OpenRouter; the prices 
 
 - Your audio goes directly from your computer to the provider you chose. There is no satz server. With *Local* it never leaves your computer.
 - The key is stored only on your computer: on the Mac in `~/Library/Application Support/satz/keys`, readable only by your user. satz never shows it to you again after saving.
-- If *Clean up text* is on, the text (never the audio) also goes, with your vocabulary, to the model you chose for it; with Apple's model it stays on your Mac.
+- If *Clean up the text* is on, the text (never the audio) also goes, with your vocabulary, to the model you chose for it; with Apple's model it stays on your Mac.
 - The history keeps the latest dictations in a file only you can read. *Clear* in the settings deletes it.
 
 ## Questions
